@@ -20,6 +20,8 @@
     <string name="model_setup_onboarding_note">只有主模型必须选，另外两个可以以后再说。</string>
     <string name="model_kind">接口</string>
     <string name="model_base_url">接口地址</string>
+    <string name="model_provider_name">名称</string>
+    <string name="model_provider_name_hint">可不填，默认用地址的主机名</string>
     <string name="model_key_hint">粘贴服务商给的 Key</string>
     <string name="model_key_optional">本地服务可不填</string>
     <string name="model_test_save">测试并保存</string>

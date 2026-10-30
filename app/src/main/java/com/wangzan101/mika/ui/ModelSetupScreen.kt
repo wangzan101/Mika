@@ -137,7 +137,7 @@ fun ModelSetupScreen(store: ProviderStore, onboarding: Boolean, onBack: () -> Un
         ui, onboarding,
         ModelSetupActions(
             selectPreset = vm::selectPreset, setKind = vm::setKind, setBaseUrl = vm::setBaseUrl, setApiKey = vm::setApiKey,
-            setModel = vm::setModel,
+            setModel = vm::setModel, setName = vm::setName,
             testAndSave = vm::testAndSave, openForm = vm::openForm, closeForm = vm::closeForm,
             openProvider = { openProvider = it; allModels = false }, pickRole = { picking = it }, next = onDone,
             signInWithChatGpt = vm::signInWithChatGpt, cancelChatGpt = vm::cancelChatGptSignIn,
@@ -153,6 +153,7 @@ class ModelSetupActions(
     val setBaseUrl: (String) -> Unit = {},
     val setApiKey: (String) -> Unit = {},
     val setModel: (String) -> Unit = {},
+    val setName: (String) -> Unit = {},
     val testAndSave: () -> Unit = {},
     val openForm: () -> Unit = {},
     val closeForm: () -> Unit = {},
@@ -280,6 +281,14 @@ private fun AddProviderForm(ui: ModelSetupUi, actions: ModelSetupActions) {
             InputRow(
                 ModelSetupCopy.BASE_URL, f.baseUrl, actions.setBaseUrl, "https://…", first = !f.isCustom,
                 keyboard = KeyboardType.Uri, modifier = Modifier.testTag("setup-base-url"),
+            )
+        }
+        if (f.isCustom) {
+            // 可不填:提示里直接写出不填时用的名字(地址的主机名)
+            InputRow(
+                ModelSetupCopy.NAME, f.name, actions.setName,
+                if (f.urlProblem == null) f.defaultName else ModelSetupCopy.NAME_HINT,
+                modifier = Modifier.testTag("setup-name"),
             )
         }
         InputRow(
@@ -443,6 +452,8 @@ object ModelSetupCopy {
     val CANCEL: String get() = tr(R.string.cancel)
     val KIND: String get() = tr(R.string.model_kind)
     val BASE_URL: String get() = tr(R.string.model_base_url)
+    val NAME: String get() = tr(R.string.model_provider_name)
+    val NAME_HINT: String get() = tr(R.string.model_provider_name_hint)
     const val API_KEY = "API Key"
     val KEY_HINT: String get() = tr(R.string.model_key_hint)
     val KEY_OPTIONAL: String get() = tr(R.string.model_key_optional)

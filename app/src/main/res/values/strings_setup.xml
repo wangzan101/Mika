@@ -20,6 +20,8 @@
     <string name="model_setup_onboarding_note">Only the main model is required; the other two can wait.</string>
     <string name="model_kind">API type</string>
     <string name="model_base_url">Base URL</string>
+    <string name="model_provider_name">Name</string>
+    <string name="model_provider_name_hint">Optional, defaults to the host</string>
     <string name="model_key_hint">Paste the key from your provider</string>
     <string name="model_key_optional">Optional for local services</string>
     <string name="model_test_save">Test and save</string>

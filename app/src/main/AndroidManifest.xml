@@ -28,8 +28,7 @@
         tools:ignore="ProtectedPermissions" />
 
     <!-- 对话页附件可以拍照(走系统相机),声明用到相机、但不是必需:没有相机的设备照常安装。
-         高通平台按 APK 特征给应用分类(workloadclassifier),不声明时 Mika 会被判成游戏,
-         HyperOS 随后把它锁在 60Hz;声明了相机就判成普通应用,跟随系统刷新率 -->
+         有的系统按 APK 特征给应用分类,不声明时 Mika 可能被当成游戏、限制刷新率;这条声明要留着 -->
     <uses-feature
         android:name="android.hardware.camera"
         android:required="false" />

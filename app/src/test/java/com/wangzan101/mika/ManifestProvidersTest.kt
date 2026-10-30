@@ -86,7 +86,7 @@ class ManifestProvidersTest {
 
     /**
      * 拍照附件走系统相机:声明用到相机、但不是必需(没有相机的设备照常安装)。这条声明不能删:
-     * 没有它时高通平台的应用分类会把 Mika 判成游戏,HyperOS 随后把它锁在 60Hz(见 architecture §15「相机声明与刷新率」)。
+     * 有的系统按 APK 特征给应用分类,没有它时 Mika 可能被当成游戏、限制刷新率。
      */
     @Test
     fun cameraIsDeclaredAsOptionalFeature() {

@@ -271,7 +271,8 @@ private fun AddProviderForm(ui: ModelSetupUi, actions: ModelSetupActions) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(ModelSetupCopy.KIND, Modifier.padding(end = 12.dp), style = MikaType.Body, color = c.ink)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // 四种接口一行放不下时折到下一行
+                FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ProviderConfig.Kind.withApiKey.forEach { k -> SelectChip(ModelsCopy.kindLabel(k), f.kind == k, { actions.setKind(k) }, small = true) }
                 }
             }

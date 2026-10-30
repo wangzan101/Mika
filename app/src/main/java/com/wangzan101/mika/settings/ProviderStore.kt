@@ -72,7 +72,7 @@ data class ProviderConfig(
     val providerId: String = "",
 ) {
     /**
-     * 接口类型。[OpenAiResponses] 用在模型列表给某个模型写明 Responses 协议时,和预设「OpenAI」(添加自定义服务商时不选它);
+     * 接口类型。[OpenAiResponses] 用在模型列表给某个模型写明 Responses 协议时、预设「OpenAI」,以及添加自定义服务商时选了它;
      * [ChatGpt] 是用 ChatGPT 账号登录、用套餐额度调用的那一家:凭据是登录(见 [ChatGptSession]),不是 API Key。
      */
     enum class Kind {
@@ -87,8 +87,8 @@ data class ProviderConfig(
                 ModelProtocol.Responses -> OpenAiResponses
             }
 
-            /** 添加自定义服务商时可选的接口类型(填地址和 API Key 的)。 */
-            val withApiKey: List<Kind> = listOf(OpenAiCompat, Anthropic, Gemini)
+            /** 添加自定义服务商时可选的接口类型(填地址和 API Key 的)。Responses 排最后,和 README 里的次序一致。 */
+            val withApiKey: List<Kind> = listOf(OpenAiCompat, Anthropic, Gemini, OpenAiResponses)
         }
     }
 }

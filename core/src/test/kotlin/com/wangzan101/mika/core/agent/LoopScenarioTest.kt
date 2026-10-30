@@ -391,9 +391,9 @@ class LoopScenarioTest {
     // 回答里讲的就是这种格式,但没提到这次的任何工具:正常交出
     @Test fun answerAboutToolCallMarkupIsDelivered() = runTest {
         val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "设置", 80)))))
-        val explanation = "Qwen 写工具调用时用 <tool_call> 包起来,里面是 <function=工具名> 和若干 <parameter=参数名>。"
+        val explanation = "有的模型写工具调用时用 <tool_call> 包起来,里面是 <function=工具名> 和若干 <parameter=参数名>。"
         val main = fakeModel("main") { answer(explanation) }
-        val end = loop(main, toolDispatcher(screen)).run("Qwen 的工具调用格式是什么样的?")
+        val end = loop(main, toolDispatcher(screen)).run("模型的工具调用格式是什么样的?")
         assertEquals(explanation, (end as TaskState.Succeeded).answer)
         assertEquals(1, main.requests.size)
     }

@@ -8,25 +8,25 @@ class LeakedToolCallTest {
     // 和真实工具列表一样,把 wait、find 这种也是常用词的工具名排在前面
     private val tools = listOf("wait", "find", "ask_user", "web_read_page", "phone_observe")
 
-    /** 真机上出现过的样子:Qwen 的 XML 写法,服务端没解析,原样成了正文。 */
-    @Test fun qwenXmlCallIsFound() {
+    /** XML 写法的调用,服务端没解析,原样成了正文。 */
+    @Test fun xmlStyleCallIsFound() {
         val text = "<tool_call>\n<function=ask_user>\n<parameter=question>\n想先确认一下:是要开户,还是了解集合竞价?\n</parameter>\n</function>\n</tool_call>"
         assertEquals("ask_user", LeakedToolCall.find(text, tools))
     }
 
-    @Test fun hermesJsonCallIsFound() {
+    @Test fun jsonStyleCallIsFound() {
         val text = "<tool_call>\n{\"name\": \"web_read_page\", \"arguments\": {}}\n</tool_call>"
         assertEquals("web_read_page", LeakedToolCall.find(text, tools))
     }
 
-    @Test fun otherModelsMarkersAreFound() {
+    @Test fun otherMarkersAreFound() {
         assertEquals("phone_observe", LeakedToolCall.find("[TOOL_CALLS][{\"name\": \"phone_observe\", \"arguments\": {}}]", tools))
         assertEquals("phone_observe", LeakedToolCall.find("<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>phone_observe", tools))
     }
 
     /** 用户问的就是这些格式:回答里提到标记,但没提到这次的任何工具,是正常回答。 */
     @Test fun markupWithoutAKnownToolIsNotALeak() {
-        assertNull(LeakedToolCall.find("Qwen 写工具调用时用 `<tool_call>` 包起来,里面是 `<function=名字>`。", tools))
+        assertNull(LeakedToolCall.find("有的模型写工具调用时用 `<tool_call>` 包起来,里面是 `<function=名字>`。", tools))
     }
 
     /** 回答里提到工具名(例如说明做过什么),没有调用标记,也不算。 */

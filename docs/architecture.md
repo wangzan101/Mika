@@ -103,7 +103,7 @@
 
 - **没有「完成」工具**:模型不带任何工具调用的回复就是回答;带工具调用时附带的文字当作过程说明显示。
 - **`end_not_done`**(`core/general/OutcomeTools.kt`):做不成或只能做一部分时用它结束,`message` 写清已确认做了什么、卡在哪、现在界面上是什么;`subtype` 是 `blocked`、`login_incomplete`、`captcha_incomplete`、`route_failed`、`device_unavailable`、`interaction_failed` 之一。
-- **交回答之前**:空回复或被截断提醒一次;回复里没有调用、正文里却漏出了工具调用(服务端没把模型的调用解析出来,原样成了文字;`LeakedToolCall`(`core/agent/LeakedToolCall.kt`)认常见开源模型的调用标记,而且正文里要出现某个工具名,只讲这些格式的回答不算)不是回答:退回一次让模型经工具接口重新调用,运行记录里记 `tool_call_as_text`;紧接着又漏就以模型出错结束(`StopRules.toolCallAsText`),不把原样的标记交给用户,正常调过工具后重新算;用户刚回答了什么而 Agent 什么也没做,提醒一次;最后一次改变界面的动作没读回结果,提醒一次。回答的正文明显不是用户最近那句话的语言(`ReplyLanguage` 按字母所属的文字数,汉字按字、其余按词,引号括号里的原文和只列名字的行不算),退回一次让模型整段改写成用户的语言,改写后还不对照样交出。
+- **交回答之前**:空回复或被截断提醒一次;有的推理服务偶尔没把模型的工具调用解析出来,调用原样成了正文(`LeakedToolCall`,`core/agent/LeakedToolCall.kt`:常见的调用标记后面跟着 Mika 的工具名),这不是回答:退回一次让模型经工具接口重新调用,运行记录里记 `tool_call_as_text`;紧接着又漏就以模型出错结束(`StopRules.toolCallAsText`),不把原样的标记交给用户,正常调过工具后重新算;用户刚回答了什么而 Agent 什么也没做,提醒一次;最后一次改变界面的动作没读回结果,提醒一次。回答的正文明显不是用户最近那句话的语言(`ReplyLanguage` 按字母所属的文字数,汉字按字、其余按词,引号括号里的原文和只列名字的行不算),退回一次让模型整段改写成用户的语言,改写后还不对照样交出。
 - **来源由系统生成**:`AnswerSources`(`core/verify/AnswerSources.kt`)从证据账本 `EvidenceLedger` 里挑出支持回答的观察(最多 6 条),作为回答下面的「来源」;不由模型自己写。
 - **后台结果分类**:回答送达后,`TaskRun.settleOutcome` 在后台用 `OutcomeJudge`(`core/agent/OutcomeJudge.kt`,优先用轻量模型,30 秒超时)把这次运行分成 `RunOutcome` 的 Done / Partial / NotPossible / Unknown。它不改回答,结果写进运行记录和对话记录;定时任务据此标记这一次是否失败。学习与回放只认 Done(见 §9)。
 - **独立核查**:`Grounding`(回答里的数字、编号、引文在读过的内容里有没有,算式对不对)和 `Verifier`(独立的核查模型)都在 `core/verify/`,由 `reviewFinalAnswer` 开关控制。产品目前关着(`TaskRun` 里 `reviewFinalAnswer = false`),所以回答都记为「未核实」,见 roadmap「已知问题」。

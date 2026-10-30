@@ -344,7 +344,63 @@ class LoopScenarioTest {
         assertEquals(3, main.requests.size)
     }
 
+    // (o) 工具调用漏成了文字(服务端没解析成调用):不当回答,退回一次;模型经工具接口重新调用后照常做完
+    @Test fun toolCallLeakedAsTextIsNudgedOnce() = runTest {
+        val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "关于手机", 80), label("@e2", "Android 版本 14", 300)))))
+        val main = fakeModel("main") {
+            answer(LEAKED_OBSERVE)
+            call("phone_observe")
+            answer(ANDROID_14)
+        }
+        val end = loop(main, toolDispatcher(screen)).run("这台手机是安卓几?")
+        assertEquals(ANDROID_14, (end as TaskState.Succeeded).answer)
+        val notice = main.requests[1].messages.withoutRuntime().last()
+        assertEquals(ContextKind.Notice, ContextBuilder.kindOf(notice))
+        assertTrue("`phone_observe`" in (notice.parts.single() as Part.Text).text)
+        snapshot("o_tool_call_as_text_nudge", end, "main" to main)
+    }
+
+    // 退回后又漏成文字:结束,不把原样的标记交给用户
+    @Test fun toolCallLeakedTwiceEndsTheTask() = runTest {
+        val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "关于手机", 80)))))
+        val main = fakeModel("main") {
+            answer(LEAKED_OBSERVE)
+            answer(LEAKED_OBSERVE)
+        }
+        val end = loop(main, toolDispatcher(screen)).run("这台手机是安卓几?")
+        end as TaskState.Failed
+        assertEquals(FailKind.Model, end.kind)
+        assertFalse(end.reason, "<tool_call>" in end.reason)
+        assertEquals(2, main.requests.size)
+    }
+
+    // 正常调过工具之后又漏一次:每次都还能退回一次(偶发的服务端问题,长任务里不止出一次)
+    @Test fun toolCallLeakAfterARealCallIsNudgedAgain() = runTest {
+        val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "关于手机", 80), label("@e2", "Android 版本 14", 300)))))
+        val main = fakeModel("main") {
+            answer(LEAKED_OBSERVE)
+            call("phone_observe")
+            answer(LEAKED_OBSERVE)
+            answer(ANDROID_14)
+        }
+        val end = loop(main, toolDispatcher(screen)).run("这台手机是安卓几?")
+        assertEquals(ANDROID_14, (end as TaskState.Succeeded).answer)
+        assertEquals(0, main.remaining)
+    }
+
+    // 回答里讲的就是这种格式,但没提到这次的任何工具:正常交出
+    @Test fun answerAboutToolCallMarkupIsDelivered() = runTest {
+        val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "设置", 80)))))
+        val explanation = "Qwen 写工具调用时用 <tool_call> 包起来,里面是 <function=工具名> 和若干 <parameter=参数名>。"
+        val main = fakeModel("main") { answer(explanation) }
+        val end = loop(main, toolDispatcher(screen)).run("Qwen 的工具调用格式是什么样的?")
+        assertEquals(explanation, (end as TaskState.Succeeded).answer)
+        assertEquals(1, main.requests.size)
+    }
+
     private companion object {
+        const val LEAKED_OBSERVE = "<tool_call>\n<function=phone_observe>\n</function>\n</tool_call>"
+        const val ANDROID_14 = "这台手机的安卓版本是 14,是在关于手机页面上看到的。"
         const val CHINESE_ANSWER = "我打开了关于手机页面看过了：这台手机的安卓版本是 14，存储已使用 250.53 GB，总共 512 GB，两个数字都是页面上显示的。"
         const val CLOCK = 1_761_300_000_000L
         const val SETTINGS = "com.android.settings"

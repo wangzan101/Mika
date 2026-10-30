@@ -367,6 +367,8 @@ class AgentLoop(
         var followUpNudged = false
         var resultReadNudged = false
         var languageNudged = false
+        // 工具调用漏成文字的回复刚退回过一次(见 [LeakedToolCall]);正常调了工具就重新算
+        var leakNudged = false
         fun facts() = ReviewFacts(acted, paymentHandedOver || recorder.outwardActs > 0, recorder.lastChangeMark?.let { !tools.readSince(it) } == true)
         media.clear()
         gapsNudged = false
@@ -492,6 +494,16 @@ class AgentLoop(
                     continue
                 }
                 emptyNudged = false
+                // 工具调用原样漏成了文字(服务端没解析成调用):不是回答。退回一次,经工具接口重新调用;
+                // 紧接着又漏就结束,不把原样的标记交给用户
+                val leaked = LeakedToolCall.find(text, everything.map { it.name })
+                if (leaked != null) {
+                    if (leakNudged) return StopRules.toolCallAsText()
+                    leakNudged = true
+                    emit(RunEvent.State(now(), "tool_call_as_text", RunEvent.clip(leaked)))
+                    TurnPolicy.leakedToolCall(leaked).let { history += ctx.notice(it.source, it.text) }
+                    continue
+                }
                 // 用户刚同意或回答了什么、之后却什么也没做:先提醒一次照做或说明为什么不做;之后照常核对
                 val owed = owedFollowUp(answered).takeIf { !followUpNudged }
                 if (owed != null) {
@@ -529,6 +541,7 @@ class AgentLoop(
                 continue
             }
             emptyNudged = false
+            leakNudged = false
             acted = true
             // 回答之后又做了别的:那个回答算有了下文
             answered = null

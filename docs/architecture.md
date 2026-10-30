@@ -87,7 +87,7 @@
 | `ModelCaller` | 组请求、调模型、流式输出;压缩与补回、临时错误重试、上下文超长重试、大小模型分流 |
 | `RetryPolicy` | 429、5xx、断网有限重试(最多 3 次,指数退避,每个任务总等待有上限) |
 | `ToolDispatcher` | 按名找工具、持有证据账本、拼各能力的提示词段落 |
-| `TurnPolicy` | 进度检查(仅有步数上限时)、空回复或被截断时提醒一次、该跟进时提醒一次、回答换了语言时退回一次、最后一轮只给 `end_not_done`(仅有步数上限时) |
+| `TurnPolicy` | 进度检查(仅有步数上限时)、空回复或被截断时提醒一次、工具调用漏成文字时退回一次、该跟进时提醒一次、回答换了语言时退回一次、最后一轮只给 `end_not_done`(仅有步数上限时) |
 | `StopRules` | 什么时候结束:放弃、守卫叫停(重复同一动作、没有进展、反复读、失败太多、沙箱打转)、模型失败、步数用完(仅有步数上限时) |
 | `BatchRunner` | `do_steps`:一次给 1–20 个已知动作,逐个执行、逐个核对;一步可带等待条件(`expect` 出现、`expect_gone` 消失、`expect_app` 前台 App 或页面地址、`wait_stable: true` 界面稳定,`timeout_s` 默认 8 秒、最多 20 秒),做完由代码读屏等到成立再做下一步,不再为「还在加载」问模型;弹框、别的包的窗口盖上来、换了 App 时提前停,结果里写 `wait`(`met`、`stopped`、`waited_ms`)。等待本身在 `core/uistate/UntilWait.kt`,手机、网页共用,经端口的 `awaitChange`(无障碍事件 / 页面变动)醒来;等的时间在运行小结里算等待,不算操作 |
 | `IntentGate` | 对话界面发起的任务第一次要用非查阅类工具时,判断用户是在聊天、要查信息还是要办事;判为聊天就不带工具重答。判断不出(调用失败,或回复不是三个词之一)时照主模型原来的决定执行;每次运行只判断一次(`AgentLoop.assessIntent`) |
@@ -103,7 +103,7 @@
 
 - **没有「完成」工具**:模型不带任何工具调用的回复就是回答;带工具调用时附带的文字当作过程说明显示。
 - **`end_not_done`**(`core/general/OutcomeTools.kt`):做不成或只能做一部分时用它结束,`message` 写清已确认做了什么、卡在哪、现在界面上是什么;`subtype` 是 `blocked`、`login_incomplete`、`captcha_incomplete`、`route_failed`、`device_unavailable`、`interaction_failed` 之一。
-- **交回答之前**:空回复或被截断提醒一次;用户刚回答了什么而 Agent 什么也没做,提醒一次;最后一次改变界面的动作没读回结果,提醒一次。回答的正文明显不是用户最近那句话的语言(`ReplyLanguage` 按字母所属的文字数,汉字按字、其余按词,引号括号里的原文和只列名字的行不算),退回一次让模型整段改写成用户的语言,改写后还不对照样交出。
+- **交回答之前**:空回复或被截断提醒一次;回复里没有调用、正文里却漏出了工具调用(服务端没把模型的调用解析出来,原样成了文字;`LeakedToolCall`(`core/agent/LeakedToolCall.kt`)认常见开源模型的调用标记,而且正文里要出现某个工具名,只讲这些格式的回答不算)不是回答:退回一次让模型经工具接口重新调用,运行记录里记 `tool_call_as_text`;紧接着又漏就以模型出错结束(`StopRules.toolCallAsText`),不把原样的标记交给用户,正常调过工具后重新算;用户刚回答了什么而 Agent 什么也没做,提醒一次;最后一次改变界面的动作没读回结果,提醒一次。回答的正文明显不是用户最近那句话的语言(`ReplyLanguage` 按字母所属的文字数,汉字按字、其余按词,引号括号里的原文和只列名字的行不算),退回一次让模型整段改写成用户的语言,改写后还不对照样交出。
 - **来源由系统生成**:`AnswerSources`(`core/verify/AnswerSources.kt`)从证据账本 `EvidenceLedger` 里挑出支持回答的观察(最多 6 条),作为回答下面的「来源」;不由模型自己写。
 - **后台结果分类**:回答送达后,`TaskRun.settleOutcome` 在后台用 `OutcomeJudge`(`core/agent/OutcomeJudge.kt`,优先用轻量模型,30 秒超时)把这次运行分成 `RunOutcome` 的 Done / Partial / NotPossible / Unknown。它不改回答,结果写进运行记录和对话记录;定时任务据此标记这一次是否失败。学习与回放只认 Done(见 §9)。
 - **独立核查**:`Grounding`(回答里的数字、编号、引文在读过的内容里有没有,算式对不对)和 `Verifier`(独立的核查模型)都在 `core/verify/`,由 `reviewFinalAnswer` 开关控制。产品目前关着(`TaskRun` 里 `reviewFinalAnswer = false`),所以回答都记为「未核实」,见 roadmap「已知问题」。

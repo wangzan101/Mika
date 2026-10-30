@@ -14,6 +14,9 @@ Check this: read the place again if you can, then reply with your corrected fina
 ## language_nudge
 Before this answer goes to the user: it is written mostly in {{answer}}, but the user's latest message is in {{user}}. Rewrite the whole answer in the language of the user's latest message. Translate what you read; keep the original only for proper names, or for labels the user must find on the screen, written as "translation (original)". Do not change any value: numbers, dates, amounts, units and names stay exactly as read. This check happens once; your next answer goes to the user.
 
+## leaked_call_nudge
+Your last reply contained a call to the tool `{{tool}}` written out as plain text, so it was not run: a tool call only takes effect when it is made through tool calling. If you meant to call a tool, call it again now; otherwise reply with your final answer to the user in plain words. This check happens once.
+
 ## unconfirmed_gaps
 These items in your answer do not appear in anything you read during this task:
 {{items}}
@@ -76,6 +79,9 @@ answer check
 
 ## language_source
 answer language
+
+## leaked_call_source
+tool call as text
 
 ## progress_source
 step check

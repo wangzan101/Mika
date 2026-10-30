@@ -56,6 +56,10 @@ internal object TurnPolicy {
     fun language(m: ReplyLanguage.Mismatch): Notice =
         Notice(Feedback["language_source"], Feedback.format("language_nudge", "answer" to m.answer.display, "user" to m.user.display))
 
+    /** 回复正文里漏出了对 [tool] 的调用(见 [LeakedToolCall]):退回一次,经工具接口重新调用,或用文字回答。 */
+    fun leakedToolCall(tool: String): Notice =
+        Notice(Feedback["leaked_call_source"], Feedback.format("leaked_call_nudge", "tool" to tool))
+
     /** 用户同意了、或回答了([what]),之后却什么也没做就要交回答:提醒一次照做,或说清为什么不做。 */
     fun followUp(what: String): Notice = Notice(Feedback["followup_source"], Feedback.format("followup_nudge", "what" to what))
 

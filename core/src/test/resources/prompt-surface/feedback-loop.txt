@@ -10,6 +10,8 @@ These items in your answer do not appear in anything you read during this task:
 Check this: read the place again if you can, then reply with your corrected final answer. Anything you still cannot confirm, say plainly in the answer that you could not confirm it instead of stating it as fact. This check happens once; your next answer goes to the user.
 ### language_nudge
 Before this answer goes to the user: it is written mostly in Chinese, but the user's latest message is in Latin script. Rewrite the whole answer in the language of the user's latest message. Translate what you read; keep the original only for proper names, or for labels the user must find on the screen, written as "translation (original)". Do not change any value: numbers, dates, amounts, units and names stay exactly as read. This check happens once; your next answer goes to the user.
+### leaked_call_nudge
+Your last reply contained a call to the tool `ask_user` written out as plain text, so it was not run: a tool call only takes effect when it is made through tool calling. If you meant to call a tool, call it again now; otherwise reply with your final answer to the user in plain words. This check happens once.
 ### answer_or_failure
 If the result the task asks for needs a feature, menu, setting, page, item or value that is not there, call end_not_done listing what you checked. Only a yes/no question about whether something exists is answered by its absence: if the app's own search gave a definitive none, reply that it does not exist, quoting the text it showed.
 ### give_up_advice
@@ -37,6 +39,8 @@ no answer given
 answer check
 ### language_source
 answer language
+### leaked_call_source
+tool call as text
 ### progress_source
 step check
 ### final_source

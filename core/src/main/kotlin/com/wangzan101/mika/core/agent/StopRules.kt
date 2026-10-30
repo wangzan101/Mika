@@ -26,6 +26,9 @@ internal object StopRules {
     /** 提醒过一次,模型仍然回了空话(或又被输出上限截断)。 */
     fun noAnswer() = TaskState.Failed("模型停止了操作,没有给出回答。", FailKind.Model)
 
+    /** 退回过一次,模型的工具调用又以文字形式回来了(见 [LeakedToolCall]):不把原样的标记当回答交出。 */
+    fun toolCallAsText() = TaskState.Failed("模型的工具调用没有被服务端识别,原样作为文字返回了,没能执行。", FailKind.Model)
+
     /** 模型调用失败(重试过仍不行,或重试也没用)。 */
     fun modelFailed(e: Throwable): TaskState.Failed =
         if (e is ModelError) TaskState.Failed(userReason(e), FailKind.Model)

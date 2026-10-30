@@ -84,6 +84,21 @@ class ManifestProvidersTest {
         }
     }
 
+    /**
+     * 拍照附件走系统相机:声明用到相机、但不是必需(没有相机的设备照常安装)。这条声明不能删:
+     * 没有它时高通平台的应用分类会把 Mika 判成游戏,HyperOS 随后把它锁在 60Hz(见 architecture §15「相机声明与刷新率」)。
+     */
+    @Test
+    fun cameraIsDeclaredAsOptionalFeature() {
+        val doc = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(File("src/main/AndroidManifest.xml"))
+        val features = doc.getElementsByTagName("uses-feature")
+        val camera = (0 until features.length).map { features.item(it) as Element }
+            .singleOrNull { it.getAttributeNS(androidNs, "name") == "android.hardware.camera" }
+        assertTrue("uses-feature android.hardware.camera is missing", camera != null)
+        assertEquals("false", camera!!.getAttributeNS(androidNs, "required"))
+    }
+
     /** 内置助手进程按这个全名启动。 */
     @Test
     fun helperEntryClassExists() {

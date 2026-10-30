@@ -38,6 +38,11 @@ enum class BuiltinShellFailure(val defaultFix: BuiltinShellFix, val duringPairin
     AuthorizationRevoked(BuiltinShellFix.RePair, duringPairing = false),
     /** 连上了,助手却没能启动或交接。 */
     HelperStartFailed(BuiltinShellFix.Retry, duringPairing = false),
+    /**
+     * 电脑经 USB 起的助手停了(多半是手机重启过),又没配对过无线调试,Mika 自己起不来:
+     * 再在电脑上跑一次命令,或去配对无线调试(之后就能自动恢复)。
+     */
+    UsbHelperStopped(BuiltinShellFix.RePair, duringPairing = false),
     Unknown(BuiltinShellFix.Retry, duringPairing = false),
 }
 
@@ -66,6 +71,9 @@ sealed interface PairingDiscovery {
 interface BuiltinShellControl {
     val status: StateFlow<BuiltinShellStatus>
     val pairingDiscovery: StateFlow<PairingDiscovery>
+
+    /** 配对过无线调试(Mika 能自己经它起助手、跑命令)。助手也可能是电脑经 USB 起的,所以在运行不等于配对过。 */
+    val paired: Boolean get() = status.value != BuiltinShellStatus.NotPaired
 
     /** 开始找配对端口(用户正在去打开配对窗口)。重复调用无害。 */
     fun startDiscovery()

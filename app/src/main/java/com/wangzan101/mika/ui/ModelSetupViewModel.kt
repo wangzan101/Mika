@@ -63,6 +63,7 @@ interface ChatGptBrowser {
 
 /**
  * 「添加服务商」表单。[noList] 为真时上次测试没列出模型:要先填 [model](手填的模型名),再测试就用它试调用。
+ * [name] 是自定义服务商的名字(只有自定义才填,可不填,见 [providerName])。
  */
 data class AddForm(
     val preset: String,
@@ -72,6 +73,7 @@ data class AddForm(
     val test: ListState = ListState.Idle,
     val model: String = "",
     val noList: Boolean = false,
+    val name: String = "",
 ) {
     val isCustom: Boolean get() = preset == ProviderPresets.custom.label
 
@@ -108,8 +110,14 @@ data class AddForm(
     /** 举模型名的例子按哪一类接口:地址对得上某个预设的按那个预设,否则按选的接口类型。 */
     val exampleKind: ProviderConfig.Kind get() = suggestedPreset?.kind ?: kind
 
-    /** 存成服务商时用的名字:预设用预设名,自定义用地址的主机名。 */
-    val providerName: String get() = if (isCustom) ProviderConnection.nameForUrl(baseUrl) else preset
+    /** 自定义没起名字时用的名字:地址的主机名(地址是某家预设的就用预设名)。 */
+    val defaultName: String get() = ProviderConnection.nameForUrl(baseUrl)
+
+    /**
+     * 存成服务商时用的名字:预设用预设名,自定义用填的名字、没填用 [defaultName]。
+     * 服务商按接口类型、地址和名字归组,同一个地址起不同的名字就是两家(例如同一个中转站的两个 Key)。
+     */
+    val providerName: String get() = if (isCustom) name.trim().ifEmpty { defaultName } else preset
 
     /** 这家要放会话号的请求头名:选的预设声明了的用它;自定义的地址对得上某个预设也用那个预设的。 */
     val sessionHeader: String? get() = presetFor(preset).sessionHeader ?: ProviderPresets.forBaseUrl(baseUrl.trim())?.sessionHeader
@@ -259,6 +267,11 @@ class ModelSetupViewModel(
     fun setBaseUrl(url: String) = edit { it.copy(baseUrl = url, noList = false) }
     fun setApiKey(key: String) = edit { it.copy(apiKey = key) }
     fun setModel(model: String) = edit { it.copy(model = model) }
+    // 按字符(码点)截,不把 emoji 截成半个
+    fun setName(name: String) = edit {
+        val n = name.codePointCount(0, name.length)
+        it.copy(name = if (n <= MAX_NAME) name else name.substring(0, name.offsetByCodePoints(0, MAX_NAME)))
+    }
 
     /** 连接信息变了:进行中的测试和上次的失败原因作废。 */
     private fun edit(change: (AddForm) -> AddForm) {
@@ -661,5 +674,8 @@ class ModelSetupViewModel(
 
         /** 「测试并保存」有列表时至多试几个模型:先试的那个,加没通过时接着试的 2 个。 */
         const val PROBE_CANDIDATES = 3
+
+        /** 自定义服务商的名字最多几个字(服务商列表一行放得下)。 */
+        const val MAX_NAME = 32
     }
 }

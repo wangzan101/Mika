@@ -174,6 +174,21 @@ class PhoneSetupCopyTest {
         assertTrue(PhoneSetupCopy.statusLine(BuiltinShellStatus.Running, usbDebugging = false).contains("Wi-Fi 断开后会停止"))
     }
 
+    /** 电脑起的助手停了:设置页、横幅都直说停了,以及两条再起的路。 */
+    @Test
+    fun usbHelperStoppedSaysHowToStartItAgain() {
+        val stopped = BuiltinShellStatus.Failed(BuiltinShellFailure.UsbHelperStopped)
+        assertEquals("手机助手已停止", PhoneSetupCopy.failure(BuiltinShellFailure.UsbHelperStopped).title)
+        val line = PhoneSetupCopy.statusLine(stopped)
+        assertTrue(line, line.contains("USB 启动命令") && line.contains("配对无线调试"))
+        val banner = StatusCopy.banner(Problem.PhoneHelper(stopped))
+        assertEquals("手机助手已停止", banner.title)
+        assertEquals(line, banner.detail)
+        assertEquals("用电脑启动(USB 数据线)", PhoneSetupCopy.USB_TOGGLE)
+        assertTrue(PhoneSetupCopy.USB_BODY.contains("「USB 调试」"))
+        assertTrue(PhoneSetupCopy.USB_BODY.contains("重启后"))
+    }
+
     @Test
     fun noWifiSaysItRecoversByItself() {
         val noWifi = BuiltinShellStatus.Failed(BuiltinShellFailure.NoWifi)

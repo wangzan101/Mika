@@ -3,11 +3,12 @@ package com.wangzan101.mika.task
 import com.wangzan101.mika.R
 import com.wangzan101.mika.i18n.tr
 import com.wangzan101.mika.i18n.trPlural
-import com.wangzan101.mika.core.cap.web.IdleScroll
+import com.wangzan101.mika.core.uistate.IdleScroll
 import com.wangzan101.mika.core.cap.web.PagePacing
-import com.wangzan101.mika.core.cap.web.SitePace
+import com.wangzan101.mika.core.uistate.PlacePace
 import kotlin.random.Random
 import com.wangzan101.mika.core.action.OutwardPacing
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 import com.wangzan101.mika.core.usage.RunUsageTally
 import com.wangzan101.mika.core.shell.AccessibilityRepair
 import com.wangzan101.mika.ui.StatusCopy
@@ -411,6 +412,8 @@ class TaskRun(
                 KnowledgeStore(KnowledgeStore.loadBundled(), userNotes, learnedNotes) to GuideCatalog.loadBundled()
             }
             val metrics = mainScreenMetrics()
+            // 在 App 里操作的节奏(设置 › 干活时);评测、真机验收按钩子覆盖
+            val pace = env.evalHooks.operatingPace ?: FeatureFlags.get(service).operatingPace()
             // 助手是否连着;没接上手机之前当作连着(网页、沙箱的步骤不看它)
             val shellUp = MutableStateFlow(true)
             val states = DeviceStateWatcher(service) { id -> phone?.shell?.topTaskId(id) ?: -1 }.also { watcher = it }
@@ -458,6 +461,8 @@ class TaskRun(
                     reserve = { pkg -> service.reservePackage(pkg, key) { runCatching { shell.displayOfPackage(pkg) }.getOrDefault(-1) >= 0 } },
                     clipSaved = { original, ours -> recovery.saveClip(original, ours) },
                     handedOver = { handoverRef?.handedOver == true },
+                    // 打字一段一段出来;App 知识说限制浏览快慢的 App 打得更慢
+                    typing = { pkg -> pace.typing(PlacePace.of(pkg?.let(skills::appPace))) },
                 )
                 val audio = recovery.audioMute(shell, key).also { mute = it }
                 val side0 = PhoneSide(shell, a11y, screen, agentDisplay, audio)
@@ -547,8 +552,10 @@ class TaskRun(
             val childRunner = if (provenance.origin == RunOrigin.Ui && web != null) ChildAgentRunner(
                 create = { childSpec ->
                     val childTools = toolDispatcher(phoneScreen, model.capabilities.vision,
-                        web = web, webPacing = { PagePacing.human() }, webSitePace = { SitePace.of(catalog.sitePace(it)) },
-                        webIdleScroll = { IdleScroll(Random.Default) }, sandbox = sandbox, workspace = { conversationId }, runSpec = childSpec,
+                        web = web, webPacing = { PagePacing.human() }, webPlacePace = { PlacePace.of(catalog.sitePace(it)) },
+                        webIdleScroll = { IdleScroll(Random.Default) },
+                        appPacing = { pace.appPacing() }, appPace = { PlacePace.of(catalog.appPace(it)) }, appIdleScroll = { IdleScroll(Random.Default) },
+                        sandbox = sandbox, workspace = { conversationId }, runSpec = childSpec,
                         conversationId = conversationId, inlineScreen = speed.inlineScreen,
                         adaptiveVision = speed.adaptiveVision)
                     AgentLoop(model, childTools, SystemPrompt.identity(), maxSteps = childSpec.stepBudget ?: AgentLoop.UNLIMITED_STEPS,
@@ -569,6 +576,9 @@ class TaskRun(
                 webPacing = { PagePacing.human() },
                 // 停留时像人一样把页面轻轻滚几下
                 webIdleScroll = { IdleScroll(Random.Default) },
+                // 在 App 里一步一步操作:动作之间停一会儿,限制浏览快慢的 App 停得更久、屏数有上限(按设置里的操作节奏)
+                appPacing = { pace.appPacing() },
+                appIdleScroll = { IdleScroll(Random.Default) },
                 // 上传只认本对话工作区里的普通文件(与沙箱同一套路径规则);技能目录、工作区外一律越界
                 workspacePath = web?.let { { p: String -> sandbox.uploadCheck(conversationId, p) } },
                 // 工作区 = 对话:同一对话的追问接着用上一轮的文件,不同对话互不可见

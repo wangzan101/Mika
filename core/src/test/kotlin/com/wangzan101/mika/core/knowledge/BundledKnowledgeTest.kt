@@ -32,6 +32,18 @@ class BundledKnowledgeTest {
         assertEquals(null, catalog.sitePace("example.com"))
     }
 
+    // App 的 pace 按包名查 App 知识:限制浏览快慢的那几个内置 App 是 careful,别的没有说法
+    @Test fun appPaceFollowsTheAppKnowledgeByPackage() {
+        val careful = listOf("xiaohongshu", "wechat", "douyin", "kuaishou", "weibo", "boss-zhipin", "xianyu")
+        val apps = catalog.rows.filter { it.kind == KnowledgeIndex.APP }
+        for (name in careful) {
+            val row = apps.single { it.name == name }
+            row.packages.forEach { assertEquals(name, "careful", catalog.appPace(it)) }
+        }
+        apps.filter { it.name !in careful }.flatMap { it.packages }.forEach { assertEquals(it, null, catalog.appPace(it)) }
+        assertEquals(null, catalog.appPace("com.example.unknown"))
+    }
+
     @Test fun everyEntryHasABody() {
         assertEquals(41, bundled.size)
         assertTrue(bundled.all { !it.body.isNullOrBlank() && it.body!!.length <= KnowledgeIndex.BODY_LIMIT })

@@ -41,6 +41,7 @@ import com.wangzan101.mika.ui.components.ValueTone
 import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.theme.MikaTheme
 import com.wangzan101.mika.ui.theme.MikaType
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 
 // ---------- 手机操作 ----------
 
@@ -178,12 +179,16 @@ private fun ChannelRowItem(title: String, whenText: String, row: ChannelRow, fix
 /** 并行任务的设置:用户设的上限 [max](1–3),和设备此刻允许的 [limit]。 */
 data class ParallelSetting(val max: Int, val limit: ParallelLimit)
 
-/** 设置 › 干活时:屏幕常亮、被操作的 App 静音(默认都开,可以关);[parallel] 不为空(实验开关打开了)时多一行同时进行的任务数。 */
+/**
+ * 设置 › 干活时:屏幕常亮、被操作的 App 静音(默认都开,可以关);[parallel] 不为空(实验开关打开了)时多一行同时进行的任务数。
+ * 下面一组是操作节奏:快 / 标准(默认) / 像人,选了下一个任务起生效。
+ */
 @Composable
 fun DuringWorkScreen(
     keepScreenOn: Boolean, onKeepScreenOn: (Boolean) -> Unit,
     muteTarget: Boolean, onMuteTarget: (Boolean) -> Unit,
     parallel: ParallelSetting?, onParallelMax: (Int) -> Unit, onBack: () -> Unit,
+    operatingPace: OperatingPace = OperatingPace.DEFAULT, onOperatingPace: (OperatingPace) -> Unit = {},
 ) {
     PageScaffold(stringResource(R.string.settings_during_work), onBack) {
         GroupCard {
@@ -195,8 +200,33 @@ fun DuringWorkScreen(
             }
             parallel?.let { ParallelRow(it, onParallelMax) }
         }
+        GroupLabel(stringResource(R.string.settings_pace))
+        GroupCard {
+            OperatingPace.entries.forEachIndexed { i, p ->
+                RadioRow(paceLabel(p), selected = p == operatingPace, onClick = { onOperatingPace(p) }, subtitle = paceDetail(p), first = i == 0)
+            }
+        }
+        FooterNote(stringResource(R.string.settings_pace_foot))
     }
 }
+
+@Composable
+private fun paceLabel(p: OperatingPace): String = stringResource(
+    when (p) {
+        OperatingPace.FAST -> R.string.settings_pace_fast
+        OperatingPace.STANDARD -> R.string.settings_pace_standard
+        OperatingPace.HUMAN -> R.string.settings_pace_human
+    },
+)
+
+@Composable
+private fun paceDetail(p: OperatingPace): String = stringResource(
+    when (p) {
+        OperatingPace.FAST -> R.string.settings_pace_fast_detail
+        OperatingPace.STANDARD -> R.string.settings_pace_standard_detail
+        OperatingPace.HUMAN -> R.string.settings_pace_human_detail
+    },
+)
 
 /** 同时进行几个任务:设备不支持时灰掉、写明原因,上限固定为 1。 */
 @Composable

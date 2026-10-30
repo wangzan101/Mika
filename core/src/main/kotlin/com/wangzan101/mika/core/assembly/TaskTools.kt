@@ -2,6 +2,7 @@ package com.wangzan101.mika.core.assembly
 
 import com.wangzan101.mika.core.agent.CoreSections
 import com.wangzan101.mika.core.agent.DO_STEPS_TOOL
+import com.wangzan101.mika.core.cap.phone.AppPacing
 import com.wangzan101.mika.core.cap.phone.PHONE
 import com.wangzan101.mika.core.cap.phone.PhoneCapability
 import com.wangzan101.mika.core.cap.sandbox.SandboxCapability
@@ -12,9 +13,9 @@ import com.wangzan101.mika.core.cap.web.WEB
 import com.wangzan101.mika.core.cap.web.WebCapability
 import com.wangzan101.mika.core.cap.web.WebGroup
 import com.wangzan101.mika.core.cap.web.WebPort
-import com.wangzan101.mika.core.cap.web.IdleScroll
+import com.wangzan101.mika.core.uistate.IdleScroll
 import com.wangzan101.mika.core.cap.web.PagePacing
-import com.wangzan101.mika.core.cap.web.SitePace
+import com.wangzan101.mika.core.uistate.PlacePace
 import com.wangzan101.mika.core.cap.mcp.McpConnection
 import com.wangzan101.mika.core.general.GeneralGroup
 import com.wangzan101.mika.core.knowledge.GuideCatalog
@@ -58,9 +59,15 @@ fun toolDispatcher(
     /** 网页一页一页看的节奏(换页前补足停留,见 [PagePacing]);默认不等。 */
     webPacing: () -> PagePacing = { PagePacing.Off },
     /** 网站对浏览快慢的要求(按主机名);默认按 [skills] 里站点知识的 pace。 */
-    webSitePace: (String) -> SitePace = { host -> SitePace.of(skills?.sitePace(host)) },
+    webPlacePace: (String) -> PlacePace = { host -> PlacePace.of(skills?.sitePace(host)) },
     /** 网页停留时轻轻滚几下页面(见 [IdleScroll]);默认不滚。 */
     webIdleScroll: () -> IdleScroll? = { null },
+    /** 在 App 里一步一步操作的节奏(改动屏幕的动作之前补足停留,见 [AppPacing]);默认不等。 */
+    appPacing: () -> AppPacing = { AppPacing.Off },
+    /** App 对浏览快慢的要求(按包名);默认按 [skills] 里 App 知识的 pace。 */
+    appPace: (String) -> PlacePace = { pkg -> PlacePace.of(skills?.appPace(pkg)) },
+    /** App 里新的一屏上的停留时轻轻滚几下(见 [IdleScroll]);默认不滚。 */
+    appIdleScroll: () -> IdleScroll? = { null },
     /** 跨读屏的稳定编号:读屏给模型编号和 s<N>,动作前翻译回端口编号。 */
     stableRefs: Boolean = false,
     /** 写操作成功后等界面稳定再读一屏,把与上一屏的差异放进结果的 screen 字段;隐含 [stableRefs]。 */
@@ -105,11 +112,11 @@ fun toolDispatcher(
     val providers: List<CapabilityProvider> = listOf(
         object : CapabilityProvider {
             override val id = PHONE
-            override fun open(spec: RunSpec) = PhoneCapability(screen, deepLinks)
+            override fun open(spec: RunSpec) = PhoneCapability(screen, deepLinks, appPacing(), appPace, appIdleScroll())
         },
         object : CapabilityProvider {
             override val id = WEB
-            override fun open(spec: RunSpec) = WebCapability(web, workspacePath, webPacing(), webSitePace, webIdleScroll())
+            override fun open(spec: RunSpec) = WebCapability(web, workspacePath, webPacing(), webPlacePace, webIdleScroll())
         },
         object : CapabilityProvider {
             override val id = SANDBOX

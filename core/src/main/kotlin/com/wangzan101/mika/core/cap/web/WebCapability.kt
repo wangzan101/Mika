@@ -17,6 +17,9 @@ import com.wangzan101.mika.core.tool.ToolContext
 import com.wangzan101.mika.core.workspace.WorkspacePathCheck
 import kotlinx.coroutines.CancellationException
 import com.wangzan101.mika.core.uistate.sessions
+import com.wangzan101.mika.core.uistate.DwellStop
+import com.wangzan101.mika.core.uistate.IdleScroll
+import com.wangzan101.mika.core.uistate.PlacePace
 
 private const val EVIDENCE_PAGE_CHARS = 3000
 private val HOST_RE = Regex("^[a-z0-9-]+(\\.[a-z0-9-]+)+$")
@@ -31,7 +34,7 @@ internal class WebCapability(
     val port: WebPort?,
     val workspacePath: ((String) -> WorkspacePathCheck)?,
     pacing: PagePacing = PagePacing.Off,
-    sitePace: (String) -> SitePace = { SitePace.NORMAL },
+    sitePace: (String) -> PlacePace = { PlacePace.NORMAL },
     idle: IdleScroll? = null,
 ) : Capability {
     override val id = WEB

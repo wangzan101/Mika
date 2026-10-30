@@ -35,6 +35,7 @@ import org.junit.runner.RunWith
 import java.io.File
 import com.wangzan101.mika.task.testTasks
 import com.wangzan101.mika.task.TaskEnvironment
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 
 /**
  * 真机验收:用设置里配好的真实模型跑一个任务,只在显式传参时运行,平时整套测试里会被跳过。
@@ -43,8 +44,9 @@ import com.wangzan101.mika.task.TaskEnvironment
  *   `-e liveKey <key> -e liveBaseUrl <url> -e liveModel <model> [-e liveId <id>]`,运行 [configureProvider]。
  * - 切主模型:`-e liveMain <id>`,同样运行 [configureProvider]。
  * - 跑任务:`-e liveGoal <目标> -e liveRun <记录目录名> [-e liveTimeoutSec 600] [-e liveOnTakeover cancel|handback]
- *   [-e liveMoveAwayAtStep N] [-e liveCancelAtStep N]`,运行 [runGoal]。经由真实界面:在输入框里写目标、点发送。
+ *   [-e livePace fast|standard|human] [-e liveMoveAwayAtStep N] [-e liveCancelAtStep N]`,运行 [runGoal]。经由真实界面:在输入框里写目标、点发送。
  *   liveCancelAtStep:到第 N 步时像点停止键一样停掉任务,再等停止后的交代记进对话(写进 result.txt 的 summary)。
+ *   livePace:在 App 里操作的节奏 fast / standard / human(缺省 fast,跑得快;不改设置里的),比较快慢时传 standard。
  *   liveMoveAwayAtStep:到第 N 步时把虚拟屏上的 App 挪到主屏(模拟用户在主屏打开了同一个 App),
  *   记下暂停状态和通知,几秒后像点通知上的「继续」一样恢复。
  *
@@ -61,6 +63,7 @@ class LiveRunTest {
     @After
     fun tearDown() {
         testTasks.modelFactory = TaskEnvironment.defaultModelFactory
+        testTasks.evalHooks.operatingPace = null
     }
 
     @Test
@@ -109,6 +112,8 @@ class LiveRunTest {
         val onTakeover = args.getString("liveOnTakeover") ?: "cancel"
         val moveAwayAt = args.getString("liveMoveAwayAtStep")?.toInt() ?: -1
         val cancelAt = args.getString("liveCancelAtStep")?.toInt() ?: -1
+        val pace = OperatingPace.parse(args.getString("livePace")) ?: OperatingPace.FAST
+        testTasks.evalHooks.operatingPace = pace
         var cancelled = false
         val dir = File(context.getExternalFilesDir(null), "acceptance/$run").apply { deleteRecursively(); mkdirs() }
         val log = File(dir, "log.txt")
@@ -120,7 +125,7 @@ class LiveRunTest {
         val cfg = store.configFor(ModelRole.Main) ?: error("no main model configured")
         val recorder = Recorder(::note)
         testTasks.modelFactory = { ctx, s -> TaskEnvironment.defaultModelFactory(ctx, s)?.let { recorder.wrap(it) } }
-        note("model=${cfg.model} goal=$goal")
+        note("model=${cfg.model} pace=${pace.name.lowercase()} goal=$goal")
 
         compose.typeAndSend(goal!!)
         // 发出去就收起键盘:对话页下面的后台屏小画面才露得出来,和真人发完就收键盘一样

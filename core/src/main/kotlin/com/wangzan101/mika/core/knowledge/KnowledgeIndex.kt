@@ -23,7 +23,7 @@ data class IndexEntry(
     val sites: List<String> = emptyList(),
     val open: String? = null,
     val mode: String? = null,
-    /** 站点对浏览快慢的要求(`careful`:限制浏览快慢);不写为 null。 */
+    /** App 或站点对浏览快慢的要求(`careful`:限制浏览快慢);不写为 null。 */
     val pace: String? = null,
     val links: List<String> = emptyList(),
     val packageAliases: Map<String, String> = emptyMap(),
@@ -57,7 +57,7 @@ object KnowledgeIndex {
         "name", "display", "description", "packages", "domains", "aliases", "terms", "apps", "sites", "open", "mode", "pace",
         "links", "package_aliases", "assistant", "assistant_entries", "assistant_wait_ms",
     )
-    /** 站点头部 pace 能写的值。 */
+    /** App、站点头部 pace 能写的值。 */
     val PACES = setOf("careful")
     private val ENTRY_REF = Regex("\\b(app|site|skill):([a-z0-9](?:[a-z0-9.-]*[a-z0-9])?)")
 
@@ -132,7 +132,7 @@ object KnowledgeIndex {
             }
         }
         if ("pace" in m) {
-            if (kind != SITE) e("pace 只有网站能写")
+            if (kind == SKILL) e("pace 只有 App 和网站能写")
             else if (one("pace") !in PACES) e("pace 只能是 ${PACES.joinToString("/")}")
         }
         val links = many("links")

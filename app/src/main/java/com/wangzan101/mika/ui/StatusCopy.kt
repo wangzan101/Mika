@@ -122,6 +122,10 @@ object StatusCopy {
             BuiltinShellStatus.Connecting -> BannerCopy(tr(R.string.banner_connecting), tr(R.string.banner_connecting_detail), tr(R.string.view))
             is BuiltinShellStatus.Failed ->
                 if (st.reason == BuiltinShellFailure.NoWifi) BannerCopy(tr(R.string.banner_paused), PhoneSetupCopy.NO_WIFI_LINE, tr(R.string.view))
+                // 电脑起的助手停了:标题照实说,下面一句说怎么再起
+                else if (st.reason == BuiltinShellFailure.UsbHelperStopped) BannerCopy(
+                    PhoneSetupCopy.failure(st.reason).title, PhoneSetupCopy.failure(st.reason).body, tr(R.string.view),
+                )
                 else if (st.reason == BuiltinShellFailure.WifiNotAllowed) BannerCopy(
                     PhoneSetupCopy.failure(st.reason).title, PhoneSetupCopy.WIFI_NOT_ALLOWED_LINE, tr(R.string.heads_up_action),
                 )

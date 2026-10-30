@@ -127,7 +127,7 @@ fun RecoverySwitches() {
     var message by remember { mutableStateOf<Pair<RecoveryCapability, String>?>(null) }
     val notes = RecoveryCapability.entries.mapNotNull { cap ->
         val m = message
-        (if (m?.first == cap) m.second else RecoveryCopy.pending(cap, consent, shell != BuiltinShellStatus.NotPaired, autoFailed))
+        (if (m?.first == cap) m.second else RecoveryCopy.pending(cap, consent, shell == BuiltinShellStatus.Running || phone.shellControl.paired, autoFailed))
             ?.let { cap to it }
     }.toMap()
     RecoverySection(

@@ -5,6 +5,7 @@ packages: ["com.tencent.mm"]
 aliases: ["WeChat", "weixin", "微信", "wechat"]
 sites: []
 open: 微信
+pace: careful
 description: 聊天、公众号与社交
 ---
 ## 是什么

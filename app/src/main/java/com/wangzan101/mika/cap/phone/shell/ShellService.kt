@@ -709,12 +709,21 @@ class ShellService(
     override fun identity(): IntArray = intArrayOf(Process.myUid(), Process.myPid())
 
     override fun runSystemCommand(displayId: Int, command: String): Bundle {
-        fun result(code: Int, output: String) = Bundle().apply { putInt("exitCode", code); putString("output", output) }
-        if (!ownDisplay(displayId)) return result(-1, "No task display is active.")
+        if (!ownDisplay(displayId)) return commandResult(-1, "No task display is active.")
+        return exec(command, displayId)
+    }
+
+    override fun runCommand(command: String): Bundle = exec(command, null)
+
+    private fun commandResult(code: Int, output: String) = Bundle().apply { putInt("exitCode", code); putString("output", output) }
+
+    /** 以 shell 身份跑 `sh -c`,合并输出,限时限长;[displayId] 不为空时放进 MIKA_DISPLAY_ID。 */
+    private fun exec(command: String, displayId: Int?): Bundle {
+        fun result(code: Int, output: String) = commandResult(code, output)
         if (command.isBlank() || command.length > 4_000) return result(-1, "Invalid command length.")
         val process = try {
             ProcessBuilder("/system/bin/sh", "-c", command).redirectErrorStream(true)
-                .apply { environment()["MIKA_DISPLAY_ID"] = displayId.toString() }.start()
+                .apply { if (displayId != null) environment()["MIKA_DISPLAY_ID"] = displayId.toString() }.start()
         } catch (t: Throwable) {
             return result(-1, t.message ?: "Command could not start.")
         }

@@ -1,13 +1,13 @@
 package com.wangzan101.mika.core.cap.web
 
 import com.wangzan101.mika.core.net.UrlHost
-import com.wangzan101.mika.core.tool.FAILURE_MESSAGES
-import com.wangzan101.mika.core.tool.ToolExecution
-import com.wangzan101.mika.core.tool.fail
-import com.wangzan101.mika.core.run.SKIPPED_FOR_NEW_MESSAGE
 import com.wangzan101.mika.core.run.waitOrSteer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import com.wangzan101.mika.core.uistate.DwellInterrupted
+import com.wangzan101.mika.core.uistate.IdleScroll
+import com.wangzan101.mika.core.uistate.PageLimitReached
+import com.wangzan101.mika.core.uistate.PlacePace
 
 /**
  * 一个任务里按 [PagePacing] 停留:看着页面的地址([seen])认出来了新的一页,往下滚时页面自己又拉来一批内容([loadedMore])
@@ -22,7 +22,7 @@ import kotlinx.coroutines.delay
  */
 internal class PageDwell(
     private val pacing: PagePacing,
-    private val pace: (String) -> SitePace = { SitePace.NORMAL },
+    private val pace: (String) -> PlacePace = { PlacePace.NORMAL },
     private val idle: IdleScroll? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val sleep: suspend (Long) -> Unit = { delay(it) },
@@ -38,7 +38,7 @@ internal class PageDwell(
 
     private var lastUrl: String? = null
 
-    private val paces = HashMap<String, SitePace>()
+    private val paces = HashMap<String, PlacePace>()
 
     val paced: Boolean get() = pacing.paced
 
@@ -118,7 +118,7 @@ internal class PageDwell(
         scrolled()
     }
 
-    private fun paceOf(site: String): SitePace {
+    private fun paceOf(site: String): PlacePace {
         val host = hostOf(site)
         return synchronized(paces) { paces.getOrPut(host) { pace(host) } }
     }
@@ -155,26 +155,3 @@ internal class PageDwell(
         const val MORE_MIN_BYTES = 2_048L
     }
 }
-
-/** 换页之前的停留没让这个动作做:调用方不做它,按 [code] 报(见 [dwellStopped])。 */
-internal sealed class DwellStop(message: String) : Exception(message) {
-    abstract val code: String
-    /** 附在说明后面的细节;没有为 null。 */
-    open val detail: String? get() = null
-}
-
-/** 本任务里这个网站来的页到了上限([PagePacing.Limits.pageCap]):不再换页,先回答或问用户。 */
-internal class PageLimitReached(val site: String, val pages: Int, val cap: Int) :
-    DwellStop("Pages opened on $site in this task: $pages (limit $cap).") {
-    override val code get() = PAGE_LIMIT
-    override val detail get() = message
-}
-
-/** 停留中用户插了话:这次不做,先读那句话。 */
-internal class DwellInterrupted : DwellStop("The pause before this action was cut short by a new message from the user.") {
-    override val code get() = SKIPPED_FOR_NEW_MESSAGE
-}
-
-/** 不做这个动作的工具结果:说明为什么停、接下来怎么办(到上限时附上这个网站看了几页)。 */
-internal fun dwellStopped(e: DwellStop): ToolExecution =
-    fail(e.code, listOfNotNull(FAILURE_MESSAGES.getValue(e.code), e.detail).joinToString(" "))

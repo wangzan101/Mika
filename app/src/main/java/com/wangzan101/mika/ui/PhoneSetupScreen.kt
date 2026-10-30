@@ -6,6 +6,9 @@ import com.wangzan101.mika.ui.components.keepsKeyboard
 import com.wangzan101.mika.about.Diagnostics
 import com.wangzan101.mika.about.DiagnosticsCollector
 import com.wangzan101.mika.about.setupInputs
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -135,6 +139,9 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
         }
     }
     LaunchedEffect(view.phase) { if (view.phase == SetupPhase.Success) phone.setupPrompt.clear() }
+    // 打开引导页时把「用电脑启动」的脚本备好(助手不在时带新口令)
+    LaunchedEffect(Unit) { phone.shellManager.usbScript.refresh() }
+    val usbCommand = remember { phone.shellManager.usbScript.command() }
 
     val close = { pairing.cancelRepair(); onClose() }
     BackHandler(onBack = close)
@@ -177,6 +184,11 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
                 phone.shellManager.connectWithPort(port)
             }
         },
+        usbCommand = usbCommand,
+        onCopyUsbCommand = {
+            context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText(PhoneSetupCopy.USB_TOGGLE, usbCommand))
+            Toast.makeText(context, PhoneSetupCopy.USB_COPIED, Toast.LENGTH_SHORT).show()
+        },
     )
     // 卡在哪一步都能把诊断信息发给作者:用的是引导页此刻的输入,用户确认过的步骤也在里面
     if (diagnosticsOpen) {
@@ -192,6 +204,7 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
  * [onDiagnostics] 不为空时底部总有「复制诊断信息」,失败时出错的那一步里也有一个。
  * 除了成功,哪个阶段底部都有「稍后再说」,返回也总能离开:不把用户困在这一页。
  * [scanning] 为真时连接一步说明正在本机找端口;连不上时 [onConnectPort] 收用户填的无线调试端口(已校验 1–65535)。
+ * [usbCommand] 不为空时,没成功前清单下面有一条收起的另一条路「用电脑启动」,展开是命令和复制按钮([onCopyUsbCommand])。
  */
 @Composable
 fun PhoneSetupContent(
@@ -212,6 +225,8 @@ fun PhoneSetupContent(
     onDiagnostics: (() -> Unit)? = null,
     scanning: Boolean = false,
     onConnectPort: ((Int) -> Unit)? = null,
+    usbCommand: String? = null,
+    onCopyUsbCommand: () -> Unit = {},
 ) {
     val canRevisit = view.phase == SetupPhase.Guide || view.phase == SetupPhase.Failed
     fun revisitable(step: SetupStep) = canRevisit && step != view.current && step in PhoneSetupFlow.REVISITABLE &&
@@ -246,6 +261,7 @@ fun PhoneSetupContent(
                         }
                     }
                 }
+                if (usbCommand != null && view.phase != SetupPhase.Success) UsbStartOption(usbCommand, onCopyUsbCommand)
                 if (SetupStep.entries.any(::revisitable)) FooterNote(PhoneSetupCopy.REVISIT_NOTE)
                 if (view.phase != SetupPhase.Success) FooterNote(PhoneSetupCopy.SKIP_NOTE)
             }
@@ -274,6 +290,32 @@ fun PhoneSetupContent(
                         kind = ButtonKind.Text, size = ButtonSize.Small,
                     )
                 }
+            }
+        }
+    }
+}
+
+/** 另一条路:用电脑经 USB 数据线起助手。默认收起,只占一行;展开是一句说明、命令和复制按钮。 */
+@Composable
+private fun UsbStartOption(command: String, onCopy: () -> Unit) {
+    val c = MikaTheme.colors
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp)) {
+        MikaButton(
+            PhoneSetupCopy.USB_TOGGLE, { open = !open }, Modifier.testTag("setup-usb-toggle"),
+            kind = ButtonKind.Text, size = ButtonSize.Small,
+        )
+        if (open) {
+            Column(Modifier.fillMaxWidth().cardSurface(c, MikaShapes.Card).padding(16.dp).testTag("setup-usb")) {
+                Text(PhoneSetupCopy.USB_BODY, style = MikaType.Caption, color = c.ink2)
+                Text(
+                    command, Modifier.padding(top = 10.dp).fillMaxWidth().background(c.fill, RoundedCornerShape(10.dp)).padding(10.dp).testTag("setup-usb-command"),
+                    fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 17.sp, color = c.ink,
+                )
+                MikaButton(
+                    PhoneSetupCopy.USB_COPY, onCopy, Modifier.padding(top = 10.dp).testTag("setup-usb-copy"),
+                    kind = ButtonKind.Tonal, size = ButtonSize.Small,
+                )
             }
         }
     }

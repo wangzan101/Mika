@@ -200,6 +200,13 @@ interface ScreenPort {
         tapXY(x, y).let { if (it is ActionResult.Ok) clearText(null, null) else it }
     suspend fun scroll(ref: String?, snapshotId: String?, down: Boolean): ActionResult
     suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long = DEFAULT_SWIPE_MS): ActionResult
+
+    /**
+     * 停留时顺手轻轻滚一下([fraction] 个屏幕或视口高度,正为往下),不点任何东西。网页走和往下滚一样的原生输入、不移动指针;
+     * 手机在占了大半屏的那块可滚动内容上慢慢划一小段。这会儿不便滚(有弹框、输入法开着、输入框拿着焦点、看不到可滚的内容)时不滚,
+     * 返回 false;滚了为 true。默认不滚。
+     */
+    suspend fun idleScroll(fraction: Double): Boolean = false
     /** 多点手势；每条路径是按时间先后排列的像素点，所有手指同时移动。 */
     suspend fun gesture(paths: List<List<Pair<Int, Int>>>, durationMs: Long): ActionResult = ActionResult.Failed("unsupported")
     suspend fun back(): ActionResult

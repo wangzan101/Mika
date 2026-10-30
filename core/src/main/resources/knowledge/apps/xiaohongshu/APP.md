@@ -5,6 +5,7 @@ packages: ["com.xingin.xhs"]
 aliases: ["Xiaohongshu", "REDnote", "Red Note", "小红书", "XHS", "xiaohongshu", "xhs"]
 sites: ["xiaohongshu.com"]
 open: 小红书
+pace: careful
 description: 笔记、搜索与社区
 ---
 ## 是什么

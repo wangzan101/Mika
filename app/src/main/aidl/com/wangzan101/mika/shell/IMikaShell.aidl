@@ -78,6 +78,9 @@ interface IMikaShell {
     // 先以 shell 身份启动;接手的页面要求 Mika 有的权限(如设闹钟)而 shell 没有时,改为发出 Mika 做好的 asMika(以 Mika 的身份启动、
     // 屏仍是这块)。返回值同 startView:5=没有页面接,6=不在放行之列;接手的 App 在主屏有任务时不启动、返回 1
     int startSystemAction(int displayId, in Intent intent, in PendingIntent asMika) = 35;
+    // 以 shell 身份跑一条设置用的命令(授权、无障碍列表等;和经已配对的无线调试跑一样),不限于某块屏;返回 exitCode 和 output。
+    // 助手是电脑经 USB 起的、没配对过无线调试时,Mika 的这类命令只能经这里
+    Bundle runCommand(String command) = 36;
 
     // 沿用早先定下的销毁事务号;AIDL 要求要么全部方法编号要么都不编号
     void destroy() = 16777114;

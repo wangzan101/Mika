@@ -223,7 +223,7 @@ There is no open page dialog on this tab. Observe to see the page as it is now.
 The page has a dialog open and is paused, so nothing was done. Read it (it is in the screen read as dialog) and answer it with web_interact action dialog first.
 
 ## failure.page_limit
-Not done: this task has already opened as many pages on this site as Mika allows in one go (sites limit how much one visitor browses). Do not look for another way to open more pages here. Reading what is already open still works. Answer with what you have read so far and say what is still left; if the user wants you to go on, ask them with ask_user, and once they agree you can open more pages.
+Not done: this task has already opened as many pages on this site, or screens in this app, as Mika allows in one go (some sites and apps limit how much one visitor browses). Do not look for another way to open more pages here. Reading what is already open still works. Answer with what you have read so far and say what is still left; if the user wants you to go on, ask them with ask_user, and once they agree you can open more pages.
 
 ## failure.skipped_for_new_message
 Not done: the user sent a new message before this call finished, so it stopped and nothing was done on the screen (it was only waiting, pausing before a page change or before another send or submit on the same site, or asking the vision model). Read the new message first. If this call is still needed, call it again; any pause still owed is kept first.

@@ -15,6 +15,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.wangzan101.mika.core.cap.phone.GesturePacing
+import com.wangzan101.mika.core.cap.phone.TypingPacing
 import com.wangzan101.mika.core.uistate.ActionResult
 import com.wangzan101.mika.core.uistate.AppProfiles
 import com.wangzan101.mika.core.uistate.LaunchChoice
@@ -93,6 +94,8 @@ class AndroidScreen(
     private val handedOver: () -> Boolean = { false },
     /** 手势的节奏:落指前的停顿、按住时长、落点偏差、滑动的弧线和快慢(见 [GesturePacing])。 */
     private val pacing: GesturePacing = GesturePacing.human(),
+    /** 在这个包名的 App 里打字的节奏(见 [TypingPacing]);默认一次写入全文。 */
+    private val typing: (String?) -> TypingPacing = { TypingPacing.Instant },
 ) : ScreenPort {
     /** 屏还没建时为 -1;只在确认屏已建好之后用。 */
     private val displayId get() = display.current?.displayId ?: -1
@@ -381,6 +384,26 @@ class AndroidScreen(
         verified(relocatedTo = relocatedTo) { node.performAction(action) }
     }
 
+    /**
+     * 停留时顺手轻轻滚一下:在占了大半屏的那块可滚动内容(信息流、正文)正中慢慢划 [fraction] 个屏高,停稳再抬手、不甩。
+     * 弹着输入法、输入框拿着焦点、上面盖着别的窗口(弹框、浮层)、没有够大的可滚动内容时不滚。
+     */
+    override suspend fun idleScroll(fraction: Double): Boolean = withContext(Dispatchers.IO) {
+        if (!opened || imeBox() != null || focusedEditable() != null) return@withContext false
+        if (ScreenReader.contentWindows(windows()).count { it.type == AccessibilityWindowInfo.TYPE_APPLICATION } > 1) return@withContext false
+        val area = read().entries.filter { it.element.scrollable }
+            .map { e -> android.graphics.Rect().also { e.node.getBoundsInScreen(it) } }
+            .maxByOrNull { it.width().toLong() * it.height() } ?: return@withContext false
+        if (area.width().toLong() * area.height() < display.width.toLong() * display.height * IDLE_MIN_AREA) return@withContext false
+        val dist = (display.height * kotlin.math.abs(fraction)).roundToInt().coerceAtMost(area.height() / 2)
+        if (dist < IDLE_MIN_PX) return@withContext false
+        val cx = area.centerX()
+        val mid = area.centerY()
+        // 往下看(fraction 为正)手指往上划
+        val (from, to) = if (fraction > 0) mid + dist / 2 to mid - dist / 2 else mid - dist / 2 to mid + dist / 2
+        drag(listOf(cx to from, cx to to), IDLE_SCROLL_MS, bow = true)
+    }
+
     override suspend fun back(): ActionResult = withContext(Dispatchers.IO) {
         if (!opened) return@withContext NO_APP_OPEN
         verified { shell.injectKey(displayId, KeyEvent.KEYCODE_BACK) }
@@ -427,6 +450,9 @@ class AndroidScreen(
             }
         }
         val textsBefore = read().texts.toSet()
+        // 像人一样一段一段打出来(见 TypingPacing);密码框、要粘贴才收得到的网页框照旧一次写入。
+        // 写不进、框不接受半截字时停下,下面照旧整段写入并读回核对
+        typing(field.packageName?.toString()).forField(web, field.isPassword).leadIn(io, text)
         var frozen = false
         val verification = typeAndVerify(
             io, text, TYPE_ATTEMPTS,
@@ -1499,6 +1525,15 @@ class AndroidScreen(
         val IN_USE_BY_OTHER = ActionResult.Failed("app_in_use_by_other_task")
 
         const val QUIET_MS = 500L
+
+        /** 停留里轻轻滚的那块可滚动内容至少占屏幕这么大。 */
+        const val IDLE_MIN_AREA = 0.5
+
+        /** 停留里轻轻滚一下至少这么多像素(再少看不出)。 */
+        const val IDLE_MIN_PX = 8
+
+        /** 停留里轻轻滚一下的时长:够慢,当慢拖,停稳再抬手。 */
+        const val IDLE_SCROLL_MS = 900L
         const val CHECK_CAP_MS = 1_500L
         const val SECOND_LOOK_QUIET_MS = 300L
         const val SECOND_LOOK_CAP_MS = 800L

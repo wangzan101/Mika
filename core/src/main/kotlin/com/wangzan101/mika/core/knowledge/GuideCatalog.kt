@@ -207,6 +207,10 @@ class GuideCatalog private constructor(
     fun sitePace(host: String): String? =
         SiteMatch.best(host, rows.filter { it.kind == KnowledgeIndex.SITE }) { it.domains }.firstOrNull()?.pace
 
+    /** 包名 [packageName] 所属 App 知识写的 pace(包名在它的 packages 里);没有为 null。 */
+    fun appPace(packageName: String): String? =
+        rows.firstOrNull { it.kind == KnowledgeIndex.APP && packageName in it.packages }?.pace
+
     private fun resource(rel: String): ByteArray? = loader.getResourceAsStream(rel)?.use { it.readBytes() }
 
     /** [body] 为 null:SKILL.md 头部缺失、名字对不上或正文为空。 */

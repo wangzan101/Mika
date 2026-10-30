@@ -17,8 +17,8 @@ import com.wangzan101.mika.core.cap.web.WaitOutcome
 import com.wangzan101.mika.core.cap.web.ExternalLink
 import com.wangzan101.mika.core.cap.web.FakeWebPort
 import com.wangzan101.mika.core.cap.web.PagePacing
-import com.wangzan101.mika.core.cap.web.IdleScroll
-import com.wangzan101.mika.core.cap.web.SitePace
+import com.wangzan101.mika.core.uistate.IdleScroll
+import com.wangzan101.mika.core.uistate.PlacePace
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -690,7 +690,7 @@ class ToolDispatcherWebTest {
         val web = FakeWebPort()
         val t = toolDispatcher(FakeScreen(), web = web, workspacePath = { WorkspacePathCheck.Ok },
             webPacing = { PagePacing.human(kotlin.random.Random(1)) },
-            webSitePace = { if (it == "jobs.example.com") SitePace.CAREFUL else SitePace.NORMAL },
+            webPlacePace = { if (it == "jobs.example.com") PlacePace.CAREFUL else PlacePace.NORMAL },
             webIdleScroll = { IdleScroll(kotlin.random.Random(2)) })
         t.go("https://jobs.example.com/list")
         t.go("https://jobs.example.com/list?page=2")

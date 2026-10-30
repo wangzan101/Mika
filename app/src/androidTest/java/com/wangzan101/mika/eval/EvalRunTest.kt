@@ -48,6 +48,7 @@ import java.io.File
 import java.util.UUID
 import com.wangzan101.mika.core.assembly.recordedTools
 import com.wangzan101.mika.task.testTasks
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 
 /**
  * 真机评测:经 [TaskService] 的真实路径一题一题地跑任务集,打分并写汇总。只在显式传参时运行。
@@ -63,6 +64,7 @@ import com.wangzan101.mika.task.testTasks
  * 结果写到 App 外部文件目录 eval/<evalRun>/:summary.md、scores.jsonl、<题 id>/run/(该题完整运行记录)。
  *
  * evalFlags(缺省 none)经 [FeatureFlags.setSpeed] 生效,跑完恢复原值;开关组合写进汇总。
+ * evalPace(fast / standard / human,缺省 fast)是这次评测在 App 里操作的节奏,不改设置里的;缺省时评测照旧跑得快。
  *
  * `-e evalVariants on`(回放评测,串行):只跑带变体的题;每题先跑原题(办成了就记下路线),再依次跑它的各个变体。
  * 汇总的指标只算变体,原题单列一节;变体的运行记录在 <原题 id>_v<n>/ 下。
@@ -102,6 +104,7 @@ class EvalRunTest {
         testTasks.evalHooks.learnSkills = args.getString("learnSkills") == "on"
         testTasks.evalHooks.rememberMemory = args.getString("memory") == "on"
         testTasks.evalHooks.autoApproveSkillDrafts = args.getString("autoApproveSkills") == "true"
+        testTasks.evalHooks.operatingPace = OperatingPace.parse(args.getString("evalPace")) ?: OperatingPace.FAST
         val allowIrreversible = args.getString("evalAllowIrreversible") == "true"
         val prices = prices()
         val flags = SpeedFlags.parse(args.getString("evalFlags") ?: "none")

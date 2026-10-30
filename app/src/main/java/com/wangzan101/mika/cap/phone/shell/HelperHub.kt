@@ -41,10 +41,13 @@ class HelperHub(context: Context) {
 
     /** 交给助手的本进程令牌:Mika 进程一死,助手就从它的死亡通知得知,撤掉 Mika 留下的改动。 */
     private val token = Binder()
-    private val nonces: HandoffNonces by lazy { HandoffNonces(PrefsNonceStore(app), SystemClock::elapsedRealtime) }
+    private val nonces: HandoffNonces by lazy { HandoffNonces(PrefsNonceStore(app), SystemClock::elapsedRealtime, System::currentTimeMillis) }
 
     /** 经 adbd 起新助手前调:这个一次性口令经 exec 流的标准输入交给助手。 */
     fun issueLaunchNonce(): String = nonces.issueLaunch()
+
+    /** 写进「用电脑启动」脚本的一次性口令(见 [HandoffNonces.usbNonce]);交接走的是同一个 [offer]。 */
+    fun usbNonce(): String = nonces.usbNonce()
 
     /** 解除配对:口令全部作废(还活着的助手下次交接会被拒绝并退出),手里的接口也放掉。 */
     fun forget() {
@@ -107,10 +110,14 @@ class HelperHub(context: Context) {
 
     private class PrefsNonceStore(context: Context) : NonceStore {
         private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        override fun load() = NonceSlots(prefs.getString("resume", null), prefs.getString("launch", null), prefs.getLong("launchAt", 0))
+        override fun load() = NonceSlots(
+            prefs.getString("resume", null), prefs.getString("launch", null), prefs.getLong("launchAt", 0),
+            prefs.getString("usb", null), prefs.getLong("usbAt", 0),
+        )
         // 同步写:助手拿到新口令后 Mika 可能马上被杀,新进程要认得它
         override fun save(slots: NonceSlots) {
-            prefs.edit().putString("resume", slots.resume).putString("launch", slots.launch).putLong("launchAt", slots.launchAt).commit()
+            prefs.edit().putString("resume", slots.resume).putString("launch", slots.launch).putLong("launchAt", slots.launchAt)
+                .putString("usb", slots.usb).putLong("usbAt", slots.usbAt).commit()
         }
     }
 }

@@ -27,6 +27,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import com.wangzan101.mika.core.uistate.session
+import com.wangzan101.mika.core.uistate.DwellStop
+import com.wangzan101.mika.core.uistate.dwellStopped
 
 /** 打开网页。跳 App 的链接(含应用商店的网页链接)不在内置浏览器里打开。 */
 internal object Navigate : WebTool {

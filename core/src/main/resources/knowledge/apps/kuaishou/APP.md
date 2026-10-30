@@ -5,6 +5,7 @@ packages: ["com.smile.gifmaker"]
 aliases: ["快手", "Kuaishou", "kuaishou", "kwai"]
 sites: []
 open: 快手
+pace: careful
 description: 短视频、直播、私信和快手小店
 ---
 ## 是什么

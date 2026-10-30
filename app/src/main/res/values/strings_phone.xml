@@ -120,4 +120,10 @@
     <string name="phone_connect_port_label">Enter the Wireless debugging port</string>
     <string name="phone_connect_port_hint">On the “Wireless debugging” page, the number after the colon in “IP address &amp; port”, e.g. 41235</string>
     <string name="phone_connect_port_submit">Connect</string>
+    <string name="fail_usb_stopped">Phone helper stopped</string>
+    <string name="fail_usb_stopped_body">It was started from a computer and stops when the phone restarts. Run the USB command on the computer again, or pair Wireless debugging so it restarts by itself.</string>
+    <string name="phone_usb_toggle">Use a computer instead (USB)</string>
+    <string name="phone_usb_body">Plug in a USB cable, turn on “USB debugging”, and run this command on the computer. After a phone restart, run it again, or pair Wireless debugging to make it automatic.</string>
+    <string name="phone_usb_copy">Copy</string>
+    <string name="phone_usb_copied">Command copied</string>
 </resources>

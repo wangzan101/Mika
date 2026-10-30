@@ -1,4 +1,4 @@
-package com.wangzan101.mika.core.cap.web
+package com.wangzan101.mika.core.uistate
 
 import kotlin.math.abs
 import kotlin.random.Random

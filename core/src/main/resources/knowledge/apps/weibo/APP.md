@@ -5,6 +5,7 @@ packages: ["com.sina.weibo"]
 aliases: ["微博", "Weibo", "weibo"]
 sites: ["weibo.com"]
 open: 微博
+pace: careful
 description: 微博:热点与原帖
 ---
 ## 是什么

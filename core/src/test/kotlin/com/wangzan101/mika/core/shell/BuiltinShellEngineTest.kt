@@ -45,6 +45,9 @@ class BuiltinShellEngineTest {
         }
         override fun stopHelper() { calls += "stop"; helper.value = null }
         override fun forget() { calls += "forget" }
+        var usb = false
+        override fun usbStarted() = usb
+        override fun setUsbStarted(on: Boolean) { usb = on }
     }
 
     private val platform = FakePlatform()
@@ -385,6 +388,89 @@ class BuiltinShellEngineTest {
         assertTrue(platform.calls.containsAll(listOf("stop", "forget", "paired=false")))
         assertEquals(BuiltinShellStatus.NotPaired, e.status.value)
         assertEquals(0, launches())
+    }
+
+    /** 电脑经 USB 起的助手没配对也收下:状态是运行中,并记下「是电脑起的」;手机操作和配对过的一样可用。 */
+    @Test
+    fun usbStartedHelperRunsWithoutPairing() = runTest {
+        val e = engine()
+        e.start()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.NotPaired, e.status.value)
+        helper.value = "usb"
+        runCurrent()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertTrue(platform.usb)
+        assertEquals(false, e.paired)
+        assertEquals(0, launches())
+    }
+
+    /** 没配对时电脑起的助手停了:不当作从没设置过,说它停了;Mika 自己不去起(起不来)。 */
+    @Test
+    fun usbHelperStoppingSaysSoAndDoesNotLaunch() = runTest {
+        val e = engine()
+        e.start()
+        helper.value = "usb"
+        runCurrent()
+        helper.value = null
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.UsbHelperStopped), e.status.value)
+        e.need()
+        e.retry()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.UsbHelperStopped), e.status.value)
+        assertEquals(0, launches())
+        assertEquals(BuiltinShellFix.RePair, (e.status.value as BuiltinShellStatus.Failed).fix)
+    }
+
+    /** 重启后(新进程)助手没来交接:先等一会儿(还活着的会自己来),等不到才说它停了。 */
+    @Test
+    fun afterRestartUsbHelperGetsAGraceThenStopped() = runTest {
+        platform.usb = true
+        val e = engine()
+        assertEquals(BuiltinShellStatus.Connecting, e.status.value)
+        e.start()
+        advanceTimeBy(2_000)
+        assertEquals(BuiltinShellStatus.Connecting, e.status.value)
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.UsbHelperStopped), e.status.value)
+        assertEquals(0, launches())
+    }
+
+    @Test
+    fun usbHelperComingBackWithinGraceIsRunning() = runTest {
+        platform.usb = true
+        val e = engine()
+        e.start()
+        advanceTimeBy(1_000)
+        helper.value = "usb"
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+    }
+
+    /** 配对过就照旧由看门狗经无线调试重起,不提示跑命令。 */
+    @Test
+    fun pairedUsbHelperIsRestartedWireless() = runTest {
+        platform.usb = true
+        platform.pairedFlag = true
+        val e = engine()
+        e.start()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertEquals(1, launches())
+    }
+
+    /** 解除配对把「电脑起过」也忘掉:之后是没设置,不是「停了」。 */
+    @Test
+    fun unpairForgetsUsbStart() = runTest {
+        val e = engine()
+        e.start()
+        helper.value = "usb"
+        runCurrent()
+        e.unpair()
+        advanceUntilIdle()
+        assertEquals(false, platform.usb)
+        assertEquals(BuiltinShellStatus.NotPaired, e.status.value)
     }
 
     @Test

@@ -136,11 +136,6 @@ interface WebPort : ScreenPort {
     /** 等 [kind] 成立,至多 [timeoutMs]。要看网络的条件在没有 DevTools 时抛 [DevtoolsUnavailable]。 */
     suspend fun waitFor(kind: WaitKind, value: String?, timeoutMs: Long): WaitOutcome = throw DevtoolsUnavailable()
 
-    /**
-     * 停留时顺手轻轻滚一下整页([fraction] 个视口高度,正为往下),走和往下滚一样的原生输入,不移动指针、不点。
-     * 页面这会儿不便滚(有页面弹框、输入法开着、输入框拿着焦点、标签不在显示)时不滚,返回 false;滚了为 true。
-     */
-    suspend fun idleScroll(fraction: Double): Boolean = false
 }
 
 /** web_interact 的落点:读屏编号,或 view 像素坐标。 */
@@ -153,8 +148,6 @@ const val DEVTOOLS_UNAVAILABLE = "devtools_unavailable"
 const val NO_DIALOG = "no_dialog"
 /** 页面有弹框在等回话:别的动作都不做,先回话。 */
 const val DIALOG_OPEN = "dialog_open"
-/** 这个网站本任务里看的页到了上限:不再换页(见 [PageLimitReached])。 */
-const val PAGE_LIMIT = "page_limit"
 
 /** 当前标签正交给用户处理(接管中);返回非 ActionResult 的方法用它报,工具结果是 handed_over。 */
 class WebTabHandedOver(val tabId: String) : Exception("tab $tabId is with the user")

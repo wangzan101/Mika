@@ -120,4 +120,10 @@
     <string name="phone_connect_port_label">填无线调试的端口</string>
     <string name="phone_connect_port_hint">在「无线调试」页面上，「IP 地址和端口」冒号后面的数字，比如 41235</string>
     <string name="phone_connect_port_submit">连接</string>
+    <string name="fail_usb_stopped">手机助手已停止</string>
+    <string name="fail_usb_stopped_body">它是用电脑启动的,手机重启后就会停。在电脑上再运行一次 USB 启动命令,或配对无线调试让它自动恢复。</string>
+    <string name="phone_usb_toggle">用电脑启动(USB 数据线)</string>
+    <string name="phone_usb_body">插上 USB 数据线、打开「USB 调试」,在电脑上运行下面这条命令。手机重启后要再运行一次,或配对无线调试让它自动恢复。</string>
+    <string name="phone_usb_copy">复制</string>
+    <string name="phone_usb_copied">命令已复制</string>
 </resources>

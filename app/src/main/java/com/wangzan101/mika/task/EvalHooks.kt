@@ -2,6 +2,7 @@ package com.wangzan101.mika.task
 
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.gate.ConfirmationRequest
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 
 /**
  * 评测跑器用的钩子。只在测试里设置;产品代码里全是默认值,行为不变。
@@ -32,7 +33,11 @@ class EvalHooks {
     /** 覆盖「自动记住我说过的事」开关;null 用设置里的。评测默认关,只有记忆题集打开。 */
     @Volatile var rememberMemory: Boolean? = null
 
+    /** 覆盖设置里的操作节奏;null 用设置里的。评测和真机验收默认用「快」,按参数才换成别的。 */
+    @Volatile var operatingPace: OperatingPace? = null
+
     fun reset() {
+        operatingPace = null
         autoApproveSkillDrafts = false
         learnSkills = null
         rememberMemory = null

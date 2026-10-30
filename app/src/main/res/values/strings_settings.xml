@@ -10,7 +10,7 @@
     <string name="settings_not_set">Not set</string>
     <string name="settings_phone_ops">Phone control</string>
     <string name="settings_during_work">While working</string>
-    <string name="settings_during_work_sub">Screen stays on, the app being used is muted</string>
+    <string name="settings_during_work_sub">Operating pace, screen stays on, the app being used is muted</string>
     <string name="settings_notif_sub">When they pop up, change in system settings</string>
     <string name="settings_privacy">Privacy &amp; data</string>
     <string name="settings_memory_sub">What Mika remembers and the skills it learned</string>
@@ -51,6 +51,14 @@
     <string name="settings_keep_on_sub">The screen stays on while a task runs, then goes back to normal</string>
     <string name="settings_mute">Mute the app being used</string>
     <string name="settings_mute_sub">Apps Mika is using stay silent; sound returns when you take over</string>
+    <string name="settings_pace">Operating pace</string>
+    <string name="settings_pace_fast">Fast</string>
+    <string name="settings_pace_fast_detail">No pauses between steps; text is filled in at once</string>
+    <string name="settings_pace_standard">Standard (default)</string>
+    <string name="settings_pace_standard_detail">Types like a person and pauses briefly between steps; slower in apps that block fast use</string>
+    <string name="settings_pace_human">Human-like</string>
+    <string name="settings_pace_human_detail">Slow in every app, reading each screen before going on</string>
+    <string name="settings_pace_foot">Some apps log you out or ask for verification when they are used too fast. The slower the pace, the longer a task takes.</string>
     <string name="settings_parallel">Tasks at once</string>
     <string name="settings_parallel_sub">Tasks from different chats each get their own virtual screen</string>
     <plurals name="settings_count_tasks">

@@ -2,6 +2,7 @@ package com.wangzan101.mika.core.cap.web
 
 import com.wangzan101.mika.core.net.UrlHost
 import kotlin.random.Random
+import com.wangzan101.mika.core.uistate.PlacePace
 
 /**
  * 网页上一页一页往下看的节奏(纯逻辑,不碰时钟和页面):人打开一页总要看一会儿才翻下一页、点开下一条。
@@ -13,7 +14,7 @@ import kotlin.random.Random
  *   都不超过 [Limits.maxDwellMs];
  * - 停留从那一页来的时刻算起,模型自己想、读页面花掉的时间都算在内,只补不够的部分;
  * - 网站按可注册域名认(www.example.com 和 m.example.com 是同一个);去另一个网站不等,那边从第一页算起。
- * - 站点知识说这个网站限制浏览快慢([SitePace.CAREFUL])时,这个网站的页按 [careful] 的范围停留(更久)。
+ * - 站点知识说这个网站限制浏览快慢([PlacePace.CAREFUL])时,这个网站的页按 [careful] 的范围停留(更久)。
  * - 一个任务里同一个网站来的页数有上限([Limits.pageCap]),到了之后 [capReached] 为真,调用方不再换页;
  *   用户答过话([userAnswered])后重新计数。上限只管浏览:本任务在这个网站上做过对外动作([outwardDone],发送、提交一类)之后,
  *   这个网站在本任务余下的时间里不再设上限(成批联系、投递要能做到网站自己的上限),停留照旧。
@@ -58,7 +59,7 @@ class PagePacing(private val random: Random?, val limits: Limits = Limits(), val
      * [pace] 是站点知识对这个网站浏览快慢的说法。
      */
     @Synchronized
-    fun noteLoad(site: String, nowMs: Long, pace: SitePace = SitePace.NORMAL): Long {
+    fun noteLoad(site: String, nowMs: Long, pace: PlacePace = PlacePace.NORMAL): Long {
         if (random == null) return 0
         val key = key(site) ?: return 0
         prune(nowMs)
@@ -75,11 +76,11 @@ class PagePacing(private val random: Random?, val limits: Limits = Limits(), val
     fun pagesOn(site: String): Int = key(site)?.let { pages[it] } ?: 0
 
     /** 按 [pace] 的页数上限。 */
-    fun capFor(pace: SitePace): Int = limitsFor(pace).pageCap
+    fun capFor(pace: PlacePace): Int = limitsFor(pace).pageCap
 
     /** [site] 上来的页已到上限:再换页之前要先停下(用户答应了再看)。做过对外动作的网站([outwardDone])、[Off] 恒为 false。 */
     @Synchronized
-    fun capReached(site: String, pace: SitePace = SitePace.NORMAL): Boolean =
+    fun capReached(site: String, pace: PlacePace = PlacePace.NORMAL): Boolean =
         random != null && key(site)?.let { it in outward } != true && pagesOn(site) >= capFor(pace)
 
     /** 本任务在 [site] 上做了一次对外动作(发送、提交):这个网站余下的时间里不再设页数上限。 */
@@ -112,7 +113,7 @@ class PagePacing(private val random: Random?, val limits: Limits = Limits(), val
         loads.lastOrNull()?.takeIf { it.site == key }?.dwellMs = 0
     }
 
-    private fun limitsFor(pace: SitePace) = if (pace == SitePace.CAREFUL) careful else limits
+    private fun limitsFor(pace: PlacePace) = if (pace == PlacePace.CAREFUL) careful else limits
 
     /** 第 [n] 页(n ≥ 2)按 [l] 的停留时长。 */
     private fun dwellFor(n: Int, l: Limits): Long {
@@ -139,18 +140,5 @@ class PagePacing(private val random: Random?, val limits: Limits = Limits(), val
         /** 像人看网页的节奏;[random] 可换成固定种子(测试)。 */
         fun human(random: Random = Random.Default, limits: Limits = Limits(), careful: Limits = Limits.CAREFUL) =
             PagePacing(random, limits, careful)
-    }
-}
-
-/** 站点知识里 `pace` 说的这个网站对浏览快慢的要求。 */
-enum class SitePace {
-    /** 没有特别说法。 */
-    NORMAL,
-    /** 这个网站限制浏览快慢(看得太快、太多会被拦):每页停得更久、一个任务里看的页更少。 */
-    CAREFUL;
-
-    companion object {
-        /** 站点知识头部的值(`careful`;不写为 null)。 */
-        fun of(value: String?): SitePace = if (value == "careful") CAREFUL else NORMAL
     }
 }

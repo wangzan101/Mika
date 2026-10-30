@@ -2,6 +2,7 @@ package com.wangzan101.mika.core.model
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -71,6 +72,34 @@ class AnthropicModelTest {
         assertFalse(t[0].jsonObject.containsKey("cache_control"))
         assertEquals("ephemeral", t[1].jsonObject["cache_control"]!!.jsonObject.str("type"))
         assertEquals("object", t[0].jsonObject["input_schema"]!!.jsonObject.str("type"))
+    }
+
+    // 对话只在最后一条 user 消息的最后一块上标缓存;前面的消息原样,两次请求的开头逐字相同
+    @Test fun marksCacheOnLastUserMessage() = runTest {
+        val first = listOf(
+            Message(Role.User, listOf(Part.Text("goal")), Author.User),
+            Message(Role.Assistant, listOf(Part.ToolCall("t1", "a", "{}")), Author.Mika),
+            Message(Role.User, listOf(Part.ToolResult("t1", "r1", false), Part.Text("state 1")), Author.Mika),
+        )
+        val second = first + listOf(
+            Message(Role.Assistant, listOf(Part.ToolCall("t2", "a", "{}")), Author.Mika),
+            Message(Role.User, listOf(Part.ToolResult("t2", "r2", false), Part.Text("state 2")), Author.Mika),
+        )
+        repeat(2) { server.enqueue(ok("""{"content":[],"stop_reason":"end_turn"}""")) }
+        model().complete("SYS", first, emptyList())
+        val a = sentBody().arr("messages")
+        model().complete("SYS", second, emptyList())
+        val b = sentBody().arr("messages")
+
+        fun marked(ms: JsonArray) = ms.flatMapIndexed { i, m ->
+            m.jsonObject.arr("content").mapIndexedNotNull { j, c -> if ("cache_control" in c.jsonObject) i to j else null }
+        }
+        assertEquals(listOf(2 to 1), marked(a))
+        assertEquals(listOf(4 to 1), marked(b))
+        assertEquals("ephemeral", b[4].jsonObject.arr("content")[1].jsonObject["cache_control"]!!.jsonObject.str("type"))
+        // 上一次标记的那块在下一次请求里不带标记,其余逐字相同
+        assertEquals(a[0], b[0]); assertEquals(a[1], b[1])
+        assertEquals(a[2].jsonObject.arr("content")[0], b[2].jsonObject.arr("content")[0])
     }
 
     @Test fun toolResultIsUserMessageAndRolesAlternate() = runTest {

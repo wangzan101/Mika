@@ -6,6 +6,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
+import com.wangzan101.mika.core.uistate.IdleScroll
+import com.wangzan101.mika.core.uistate.PageLimitReached
+import com.wangzan101.mika.core.uistate.PlacePace
 
 /** 一页一页看的节奏:第一页不等、停够了不等、换网站不等,停留有上下限且随看过的页数变长。 */
 class PagePacingTest {
@@ -117,7 +120,7 @@ class PagePacingTest {
             val p = PagePacing.human(Random(seed))
             var t = 0L
             for (n in 1..20) {
-                val d = p.noteLoad("https://jobs.example.com/p$n", t, SitePace.CAREFUL)
+                val d = p.noteLoad("https://jobs.example.com/p$n", t, PlacePace.CAREFUL)
                 if (n == 2) assertTrue("$d", d in c.firstDwellMs)
                 if (n >= 2) assertTrue("page $n: $d", d in c.firstDwellMs.first..c.maxDwellMs)
                 t += 40_000
@@ -144,8 +147,8 @@ class PagePacingTest {
         p.userAnswered()
         assertFalse(p.capReached("shop.example.com"))
         // 限制浏览快慢的网站上限更低
-        repeat(PagePacing.Limits.CAREFUL.pageCap) { p.noteLoad("https://jobs.example.com/p$it", it.toLong(), SitePace.CAREFUL) }
-        assertTrue(p.capReached("jobs.example.com", SitePace.CAREFUL))
+        repeat(PagePacing.Limits.CAREFUL.pageCap) { p.noteLoad("https://jobs.example.com/p$it", it.toLong(), PlacePace.CAREFUL) }
+        assertTrue(p.capReached("jobs.example.com", PlacePace.CAREFUL))
         // 不设节奏时也不设上限
         repeat(50) { PagePacing.Off.noteLoad("https://shop.example.com/p$it", 0) }
         assertFalse(PagePacing.Off.capReached("shop.example.com"))
@@ -209,7 +212,7 @@ class PagePacingTest {
     fun `site pace comes from the lookup by host`() = runBlocking {
         var now = 0L
         val asked = mutableListOf<String>()
-        val d = PageDwell(PagePacing.human(Random(6)), pace = { asked += it; if (it.endsWith("jobs.example.com")) SitePace.CAREFUL else SitePace.NORMAL },
+        val d = PageDwell(PagePacing.human(Random(6)), pace = { asked += it; if (it.endsWith("jobs.example.com")) PlacePace.CAREFUL else PlacePace.NORMAL },
             clock = { now }, sleep = { now += it })
         d.seen("https://www.jobs.example.com/a")
         d.seen("https://www.jobs.example.com/b")

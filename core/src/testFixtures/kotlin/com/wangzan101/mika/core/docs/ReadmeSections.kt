@@ -34,11 +34,11 @@ object ReadmeSections {
     fun presets(source: String): List<Preset> =
         PRESET.findAll(source).map { Preset(it.groupValues[1], it.groupValues[2], it.groupValues[3]) }.toList()
 
-    private fun kindName(kind: String) = when (kind) { "OpenAiCompat" -> "OpenAI 兼容"; else -> kind }
-    private fun kindNameEn(kind: String) = when (kind) { "OpenAiCompat" -> "OpenAI-compatible"; else -> kind }
+    private fun kindName(kind: String) = when (kind) { "OpenAiCompat" -> "OpenAI 兼容"; "OpenAiResponses" -> "OpenAI Responses"; else -> kind }
+    private fun kindNameEn(kind: String) = when (kind) { "OpenAiCompat" -> "OpenAI-compatible"; "OpenAiResponses" -> "OpenAI Responses"; else -> kind }
 
-    /** 「自定义」能选的接口类型:预设里出现过的,除了 Responses(只给 OpenAI 预设和模型列表写明的模型用,自定义里不选)。 */
-    private fun customKinds(presets: List<Preset>) = presets.map { it.kind }.filter { it != "OpenAiResponses" }.distinct()
+    /** 「自定义」能选的接口类型:预设里出现过的;Responses 排最后,和界面上的次序(`ProviderConfig.Kind.withApiKey`)一致。 */
+    private fun customKinds(presets: List<Preset>) = presets.map { it.kind }.distinct().sortedBy { it == "OpenAiResponses" }
 
     /** 「a、b、c」的英文写法:a, b or c。 */
     private fun orList(items: List<String>) =

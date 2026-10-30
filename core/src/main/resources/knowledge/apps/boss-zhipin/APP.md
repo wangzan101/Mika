@@ -5,6 +5,7 @@ packages: ["com.hpbr.bosszhipin"]
 aliases: ["BOSS直聘", "Boss直聘", "boss直聘", "BOSS", "直聘", "bosszhipin"]
 sites: ["zhipin.com"]
 open: BOSS直聘
+pace: careful
 description: 招聘求职 App
 ---
 ## 是什么

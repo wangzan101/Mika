@@ -34,6 +34,9 @@ interface BuiltinShellPlatform {
     fun stopHelper()
     /** 删掉配对钥匙和交接口令。 */
     fun forget()
+    /** 没配对时收下过助手(是电脑经 USB 起的):它停了要告诉用户怎么再起,而不是当作从没设置过。持久化。 */
+    fun usbStarted(): Boolean
+    fun setUsbStarted(on: Boolean)
 }
 
 /** 看门狗重起助手的间隔:第 n 次失败后等 base·2^(n-1),封顶 [maxMs];连续失败 [maxAttempts] 次后停下等人或等开关变化。 */
@@ -96,11 +99,18 @@ class BuiltinShellEngine(
     private var discoveryJob: Job? = null
     private var started = false
 
+    override val paired: Boolean get() = platform.paired()
+
     private fun initialStatus(): BuiltinShellStatus = when {
         helper.value != null -> BuiltinShellStatus.Running
-        !platform.paired() -> BuiltinShellStatus.NotPaired
+        // 电脑起过的助手可能还活着,等它来交接
+        !platform.paired() -> if (platform.usbStarted()) BuiltinShellStatus.Connecting else BuiltinShellStatus.NotPaired
         else -> BuiltinShellStatus.Connecting
     }
+
+    /** 没配对、手里也没有助手时的状态:电脑起过的助手停了就照实说,否则就是还没设置。 */
+    private fun unpairedStatus(): BuiltinShellStatus =
+        if (platform.usbStarted()) BuiltinShellStatus.Failed(BuiltinShellFailure.UsbHelperStopped) else BuiltinShellStatus.NotPaired
 
     /** 开始看着助手:掉线就重起。只在功能打开时调。 */
     @Synchronized
@@ -113,9 +123,17 @@ class BuiltinShellEngine(
                 if (h != null) {
                     synchronized(this@BuiltinShellEngine) { failures = 0; retryJob?.cancel() }
                     autoOn?.reset()
+                    // 没配对就来了:是电脑经 USB 起的。记下来,它停了才知道该怎么提示
+                    if (!platform.paired()) platform.setUsbStarted(true)
                     _status.value = BuiltinShellStatus.Running
                 } else if (!platform.paired()) {
-                    _status.value = BuiltinShellStatus.NotPaired
+                    // App 刚起来时还活着的助手会自己来交接:先等一会儿,再说它停了
+                    if (first && platform.usbStarted()) {
+                        _status.value = BuiltinShellStatus.Connecting
+                        schedule(graceMs)
+                    } else {
+                        _status.value = unpairedStatus()
+                    }
                 } else {
                     if (_status.value == BuiltinShellStatus.Running) _status.value = BuiltinShellStatus.Connecting
                     schedule(if (first) graceMs else backoff.baseMs)
@@ -200,7 +218,7 @@ class BuiltinShellEngine(
     private suspend fun launchOnce(): Unit = launchLock.withLock {
         if (helper.value != null) return@withLock
         if (!platform.paired()) {
-            _status.value = BuiltinShellStatus.NotPaired
+            _status.value = unpairedStatus()
             return@withLock
         }
         if (platform.wirelessDebugging() == false && !turnOnWirelessDebugging()) return@withLock
@@ -309,6 +327,8 @@ class BuiltinShellEngine(
         synchronized(this) { retryJob?.cancel() }
         launchLock.withLock {
             withContext(io) {
+                // 先忘掉「电脑起过」:助手停下时状态就是没设置,不提示再跑命令
+                platform.setUsbStarted(false)
                 runCatching { platform.stopHelper() }
                 platform.forget()
             }

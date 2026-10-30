@@ -35,7 +35,7 @@ class PhoneServices(context: Context) {
     val recovery: BuiltinShellRecovery by lazy { BuiltinShellRecovery(app, shellManager.commandRunner, recoverySettings, shellControl) }
 
     /** 任务与启动恢复共用的那条 shell 连接。 */
-    val sharedShell = SharedShell { BuiltinShellConnection(hub) { shellManager.engine.need() } }
+    val sharedShell = SharedShell { BuiltinShellConnection(hub) { shellManager.need() } }
 
     /** 一次配对的全过程。 */
     val pairing: PairingCoordinator by lazy { PairingCoordinator(app, shellControl) }

@@ -25,6 +25,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.wangzan101.mika.core.visual.Shots
 import com.wangzan101.mika.core.capability.Capability
+import com.wangzan101.mika.core.capability.Paced
 import com.wangzan101.mika.core.capability.PromptEnv
 import com.wangzan101.mika.core.capability.PromptSections
 import com.wangzan101.mika.core.guard.OffScreenGuard
@@ -382,6 +383,15 @@ class ToolDispatcher internal constructor(
     /** 对外动作做完([done]:做成了)。 */
     fun outwardEnd(site: String, done: Boolean) {
         capabilities.firstOrNull { it.id == surface }?.onOutwardEnd(ctx, site, done)
+    }
+
+    /** 此刻这块屏上要做一个改动屏幕的动作了:按这块屏的能力的节奏先停一会儿([Capability.beforeWrite])。 */
+    internal suspend fun beforeWrite(tool: String, outward: Boolean): Paced =
+        capabilities.firstOrNull { it.id == surface }?.beforeWrite(ctx, verb(tool), outward) ?: Paced.NONE
+
+    /** 那个动作做完了:交给这块屏的能力([Capability.afterWrite])。 */
+    internal fun afterWrite(tool: String, result: JsonObject) {
+        capabilities.firstOrNull { it.id == surface }?.afterWrite(ctx, verb(tool), result)
     }
 
     /** 接管的结局交回后才知道,由循环补记进动作清单(核查器据此知道接管有没有真的发生)。 */

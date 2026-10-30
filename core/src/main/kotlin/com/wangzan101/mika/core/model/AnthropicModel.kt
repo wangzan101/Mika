@@ -115,9 +115,12 @@ class AnthropicModel(
             if (blocks.isEmpty()) continue
             if (merged.lastOrNull()?.first == role) merged.last().second += blocks else merged += role to blocks.toMutableList()
         }
+        // 对话缓存到最后一条 user 消息为止,下一步的开头与它相同就从缓存取;助手消息可能以思考块结尾,不标
+        val lastUser = merged.indexOfLast { it.first == "user" }
         return buildJsonArray {
-            merged.forEach { (role, blocks) ->
-                add(buildJsonObject { put("role", role); put("content", JsonArray(blocks)) })
+            merged.forEachIndexed { i, (role, blocks) ->
+                val content = if (i == lastUser) blocks.dropLast(1) + JsonObject(blocks.last() + ("cache_control" to ephemeral)) else blocks
+                add(buildJsonObject { put("role", role); put("content", JsonArray(content)) })
             }
         }
     }

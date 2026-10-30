@@ -5,6 +5,7 @@ packages: ["com.taobao.idlefish"]
 aliases: ["闲鱼", "Goofish", "xianyu"]
 sites: []
 open: 闲鱼
+pace: careful
 description: 二手商品、个人出租转租与私信
 ---
 ## 是什么

@@ -584,4 +584,43 @@ class ModelSetupViewModelTest {
         assertEquals(listOf("工具调用" to true, "64K" to false), ModelSetupCopy.tags(o[1]))
         assertEquals(listOf("不支持工具调用" to false), ModelSetupCopy.tags(o[2]))
     }
+
+    /** 自定义服务商可以起名字(去掉首尾空白);不填用地址的主机名。同一个地址起不同的名字是两家。 */
+    @Test fun customProviderUsesTheGivenNameOrFallsBackToTheHost() = runTest {
+        val url = "https://relay.example.com/v1"
+        listing[url] = ModelListResult.Ok(listOf(ListedModel("m1")))
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("k1")
+        assertEquals("relay.example.com", vm.state.value.form.defaultName)
+        vm.setName("  我的中转  ")
+        vm.testAndSave(); runCurrent()
+        assertEquals(listOf("我的中转"), store.providers.value.map { it.name })
+        assertEquals("", vm.state.value.form.name)
+
+        vm.openForm()
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("k2"); vm.setName("   ")
+        vm.testAndSave(); runCurrent()
+        val names = store.providers.value.map { it.name }
+        assertEquals(listOf("我的中转", "relay.example.com"), names)
+        assertEquals(listOf("k1", "k2"), store.providers.value.map { store.providerKey(it.id) })
+    }
+
+    /** 名字有长度上限;换成预设时清掉;地址是某家预设的,默认名就是预设名;预设的名字不受表单里的名字影响。 */
+    @Test fun customNameIsCappedAndOnlyAppliesToCustom() = runTest {
+        val vm = vm()
+        vm.selectPreset(ProviderPresets.custom.label)
+        vm.setName("名".repeat(ModelSetupViewModel.MAX_NAME + 8))
+        assertEquals(ModelSetupViewModel.MAX_NAME, vm.state.value.form.name.length)
+        // 按字符截:emoji 不被截成半个
+        vm.setName("😀".repeat(ModelSetupViewModel.MAX_NAME + 3))
+        val capped = vm.state.value.form.name
+        assertEquals(ModelSetupViewModel.MAX_NAME, capped.codePointCount(0, capped.length))
+        assertEquals("😀".repeat(ModelSetupViewModel.MAX_NAME), capped)
+        vm.setBaseUrl(deepseekUrl)
+        assertEquals("DeepSeek", vm.state.value.form.defaultName)
+        vm.selectPreset("DeepSeek")
+        assertEquals("", vm.state.value.form.name)
+        assertEquals("DeepSeek", vm.state.value.form.copy(name = "别的名字").providerName)
+    }
 }

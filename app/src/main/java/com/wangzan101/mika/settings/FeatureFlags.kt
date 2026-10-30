@@ -7,6 +7,7 @@ import com.wangzan101.mika.capsule.CardDocking
 import com.wangzan101.mika.capsule.CapsuleMode
 import com.wangzan101.mika.capsule.DockSide
 import com.wangzan101.mika.core.agent.SpeedFlags
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 import com.wangzan101.mika.task.ParallelCapability
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +48,13 @@ class FeatureFlags(private val prefs: SharedPreferences) {
 
     fun setMuteTarget(on: Boolean) {
         prefs.edit().putBoolean(MUTE_TARGET, on).commit()
+    }
+
+    /** 在 App 里操作的节奏:快、标准(默认)、像人(见 [OperatingPace])。 */
+    fun operatingPace(): OperatingPace = OperatingPace.parse(prefs.getString(OPERATING_PACE, null)) ?: OperatingPace.DEFAULT
+
+    fun setOperatingPace(pace: OperatingPace) {
+        prefs.edit().putString(OPERATING_PACE, pace.name).commit()
     }
 
     /** 悬浮胶囊:关闭、有任务时显示(默认)、一直显示。 */
@@ -94,6 +102,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val PARALLEL_MAX = "parallel_max"
         private const val KEEP_SCREEN_ON = "keep_screen_on"
         private const val MUTE_TARGET = "mute_target"
+        private const val OPERATING_PACE = "operating_pace"
         private const val CAPSULE_MODE = "capsule_mode"
         private const val CAPSULE_SIDE = "capsule_side"
         private const val CAPSULE_HEIGHT = "capsule_height"

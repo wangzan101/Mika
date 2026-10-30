@@ -25,6 +25,8 @@ import com.wangzan101.mika.core.uistate.lastOrSnapshot
 import com.wangzan101.mika.core.uistate.lastSnapshot
 import com.wangzan101.mika.core.uistate.session
 import com.wangzan101.mika.core.uistate.withPortRef
+import com.wangzan101.mika.core.uistate.DwellStop
+import com.wangzan101.mika.core.uistate.dwellStopped
 
 /** 复制、剪切、粘贴。 */
 private val CLIPBOARD_KEYS = setOf("KeyC", "KeyX", "KeyV")

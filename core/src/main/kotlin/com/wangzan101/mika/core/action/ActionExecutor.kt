@@ -39,6 +39,7 @@ import com.wangzan101.mika.core.run.RunProvenance
 import com.wangzan101.mika.core.run.SKIPPED_FOR_NEW_MESSAGE
 import com.wangzan101.mika.core.run.waitOrSteer
 import com.wangzan101.mika.core.tool.failCode
+import com.wangzan101.mika.core.capability.Paced
 
 /**
  * 所有改变外部世界的动作唯一的执行入口:[ToolDispatcher.execute] 要一张 [ActionPass],只有这里有。
@@ -132,18 +133,26 @@ class ActionExecutor(
         if (paced > 0 && waitOrSteer { delay(paced) } == null) {
             return ran(Step(call, args, origin, before, writing = false, offScreen, verb, null, followUp, reads, preset = failCode(SKIPPED_FOR_NEW_MESSAGE)))
         }
+        // 改动屏幕的动作:按这块屏的能力的节奏先停一会儿(App 里见 AppDwell),单步、一批里的每一步都在这里停;
+        // 组合动作(脚本)本身不停,里面的每一步经这里各自停。到了屏数上限、停留中用户插了话就不做
+        val screenPaced = writing && !offScreen && !tools.composite(call.name)
+        val dwelt = if (screenPaced) tools.beforeWrite(call.name, outward = site != null) else Paced.NONE
+        dwelt.stop?.let { stop ->
+            return ran(Step(call, args, origin, before, writing = false, offScreen, verb, null, followUp, reads, preset = stop, pacedMs = paced + dwelt.waitMs))
+        }
         if (writing) {
             guards.noteAction()
             decision.noteWrite(call.name)
         }
-        val step = Step(call, args, origin, before, writing, offScreen, verb, (d as? Decision.Traced)?.detail, followUp, reads, note = note, pacedMs = paced,
-            outward = site != null)
+        val step = Step(call, args, origin, before, writing, offScreen, verb, (d as? Decision.Traced)?.detail, followUp, reads, note = note,
+            pacedMs = paced + dwelt.waitMs, idleScrolls = dwelt.idleScrolls, outward = site != null)
         // 动作一旦开始就做完并记下:脚本超时、任务取消都不能把它掐在半中间、漏掉记录
         // 对外动作告诉这块屏的能力(网页的页数上限只管浏览,见 PageDwell)
         site?.let(tools::outwardStart)
         var done = false
         try {
             val outcome = if (policy.actionCapMs == null) ran(step) else withContext(NonCancellable) { ran(step) }
+            if (screenPaced && outcome is ActionOutcome.Ran) tools.afterWrite(call.name, outcome.exec.content)
             if (site != null && outcome is ActionOutcome.Ran && outcome.exec.content["ok"] != JsonPrimitive(false)) {
                 done = true
                 pacing.noteDone(site, recorder.now())
@@ -161,8 +170,10 @@ class ActionExecutor(
         val preset: ToolExecution? = null,
         /** 附进结果的说明(按描述对上的是谁)。 */
         val note: JsonObject? = null,
-        /** 执行前为对外动作的间隔等了多久;算进这次调用的等待。 */
+        /** 执行前为对外动作的间隔、这块屏的节奏等了多久;算进这次调用的等待。 */
         val pacedMs: Long = 0,
+        /** 执行前的停留里轻轻滚了几下;只进运行记录。 */
+        val idleScrolls: Int = 0,
         /** 不可逆判定认出是对外动作(发送、提交);记进这次的活动。 */
         val outward: Boolean = false,
     )
@@ -190,6 +201,7 @@ class ActionExecutor(
         val raw = (s.preset ?: offScreen?.exhausted(call.name)?.let { ToolExecution(it) } ?: execute(s, sub))
             .let { r -> s.note?.let { r.with(content = JsonObject(r.content + it)) } ?: r }
             .let { r -> if (s.pacedMs > 0) r.with(waitMs = r.waitMs + s.pacedMs) else r }
+            .let { r -> if (s.idleScrolls > 0) r.with(record = JsonObject(r.record + ("idleScrolls" to JsonPrimitive(s.idleScrolls)))) else r }
         // 报了失败、也没说界面变了的动作什么也没改成:回答前不用为它再读一遍
         val failed = raw.content["ok"] == JsonPrimitive(false) && raw.changed != true
         if (changes && s.preset == null && !failed) recorder.noteChange(mark)

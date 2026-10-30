@@ -46,9 +46,11 @@ class KnowledgeIndexTest {
         assertError("description 超过", appMd("a", listOf("p.a")).let { (p, t) -> p to t.replace("description: a 的说明", "description: " + "长".repeat(61)) })
         assertError("超过 2500", appMd("a", listOf("p.a"), body = "字".repeat(2501)))
         assertError("mode 只能是", siteMd("a.com").let { (p, t) -> p to t.replace("mode: desktop\n", "") })
-        // pace:只有网站能写,只认 careful
+        // pace:App 和网站能写,只认 careful;技能不能写
         assertError("pace 只能是", siteMd("a.com").let { (p, t) -> p to t.replace("mode: desktop\n", "mode: desktop\npace: slow\n") })
-        assertError("pace 只有网站能写", appMd("a", listOf("p.a"), extra = "pace: careful\n"))
+        assertError("pace 只能是", appMd("a", listOf("p.a"), extra = "pace: slow\n"))
+        assertError("pace 只有 App 和网站能写", skillMd("s", extra = "pace: careful\n"))
+        assertTrue(errors(appMd("a", listOf("p.a"), extra = "pace: careful\n")).isEmpty())
         val careful = siteMd("a.com").let { (p, t) -> p to t.replace("mode: desktop\n", "mode: desktop\npace: careful\n") }
         assertTrue(errors(careful).isEmpty())
         assertError("要在 domains 里", siteMd("a.com", domains = listOf("b.com")))

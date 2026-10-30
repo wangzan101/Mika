@@ -8,7 +8,7 @@ import com.wangzan101.mika.core.action.OutwardPacing
 import com.wangzan101.mika.core.agent.AgentLoop
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.assembly.toolDispatcher
-import com.wangzan101.mika.core.cap.web.DwellInterrupted
+import com.wangzan101.mika.core.uistate.DwellInterrupted
 import com.wangzan101.mika.core.cap.web.PageDwell
 import com.wangzan101.mika.core.cap.web.PagePacing
 import com.wangzan101.mika.core.guard.OperationGuards

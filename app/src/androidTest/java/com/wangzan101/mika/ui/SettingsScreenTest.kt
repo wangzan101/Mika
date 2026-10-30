@@ -29,6 +29,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import com.wangzan101.mika.core.cap.phone.OperatingPace
 
 @RunWith(AndroidJUnit4::class)
 class SettingsScreenTest {
@@ -276,6 +277,21 @@ class SettingsScreenTest {
         compose.onNodeWithTag("work-keep-screen-on").performClick()
         compose.onNodeWithTag("work-mute-target").performClick()
         assertEquals(listOf("screen:false", "mute:false"), changes)
+    }
+
+    /** 干活时 › 操作节奏:快、标准(默认)、像人三选一,点了回调新值。 */
+    @Test
+    fun operatingPaceIsOneChoiceOfThree() {
+        val picked = mutableListOf<OperatingPace>()
+        compose.setContent {
+            DuringWorkScreen(true, {}, true, {}, parallel = null, onParallelMax = {}, onBack = {}, onOperatingPace = { picked += it })
+        }
+        compose.onNodeWithText("操作节奏").assertIsDisplayed()
+        compose.onNodeWithText("快").assertIsDisplayed()
+        compose.onNodeWithText("标准（默认）").assertIsDisplayed()
+        compose.onNodeWithText("像人").performClick()
+        compose.onNodeWithText("快").performClick()
+        assertEquals(listOf(OperatingPace.HUMAN, OperatingPace.FAST), picked)
     }
 
     /** 首页「悬浮胶囊」一行写着当前的选择。 */

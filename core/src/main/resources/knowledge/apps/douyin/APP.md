@@ -5,6 +5,7 @@ packages: ["com.ss.android.ugc.aweme"]
 aliases: ["抖音", "抖音商城", "抖音电商", "douyin", "douyinshop"]
 sites: ["douyin.com"]
 open: 抖音
+pace: careful
 description: 短视频、直播和商城 App
 ---
 ## 是什么

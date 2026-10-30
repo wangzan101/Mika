@@ -83,9 +83,24 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         )
     }
 
-    /** 恢复和授权开关用:每条命令单独连一次已配对的 adbd,跑完就断。 */
+    /**
+     * 恢复和授权开关用:助手在就经它跑(电脑经 USB 起的助手没有配对的连接也能用);
+     * 不在才每条命令单独连一次已配对的 adbd,跑完就断。
+     */
     val commandRunner = ShellCommandRunner { command ->
-        withContext(Dispatchers.IO) { platform.connect().use { it.exec(command).readText() } }
+        withContext(Dispatchers.IO) {
+            hub.shell.value?.let { it.runCommand(command)?.getString("output").orEmpty() }
+                ?: platform.connect().use { it.exec(command).readText() }
+        }
+    }
+
+    /** 「用电脑启动」的脚本:跟着助手在不在重写。 */
+    val usbScript = UsbStartScript(app, hub)
+
+    /** 有人要用助手却没有:看门狗起一个(配对过才行),脚本也备好给电脑用。 */
+    fun need() {
+        engine.need()
+        usbScript.refresh()
     }
 
     /** 用户在引导页填了无线调试的端口:下一次连接带上它(只用这一次,连上了就记作缓存),然后重试。 */
@@ -98,6 +113,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
     fun start() {
         if (started || Build.VERSION.SDK_INT < MIN_SDK) return
         started = true
+        usbScript.start()
         val e = engine
         // 无线调试一打开就试着连回去;关掉时状态马上变成「无线调试已关」
         app.contentResolver.registerContentObserver(
@@ -141,6 +157,12 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
             prefs.edit().putBoolean("paired", paired).apply()
         }
 
+        override fun usbStarted() = prefs.getBoolean("usbStarted", false)
+
+        override fun setUsbStarted(on: Boolean) {
+            prefs.edit().putBoolean("usbStarted", on).apply()
+        }
+
         // 这一项没写过时读出 null:看不清就不拦着
         override fun wirelessDebugging(): Boolean? =
             Settings.Global.getString(app.contentResolver, DeveloperSettings.ADB_WIFI_ENABLED)?.let { it == "1" }
@@ -159,11 +181,8 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
 
         override suspend fun launchHelper() {
             val tls = AndroidAdb.tls(AndroidAdb.identity(app))
-            // 助手每次交接前都核对 Mika 的签名,指纹取自本 App 自己的安装信息
-            val signers = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                .signingInfo?.apkContentsSigners?.map { it.toByteArray() }
-            val pin = HelperHandoff.certPin(signers) ?: error("cannot read own signing certificate")
-            val command = HelperHandoff.command(app.applicationInfo.sourceDir, app.packageName, Process.myUid(), pin)
+            // 助手每次交接前都核对 Mika 的签名
+            val command = HelperHandoff.command(app.applicationInfo.sourceDir, app.packageName, Process.myUid(), ownCertPin(app))
             val connection = connect(tls)
             // 流开着 sh 就一直等;交接到了(或超时)再关,交接结果仍由引擎从 HelperHub 判断
             val before = hub.shell.value

@@ -214,4 +214,18 @@ class GeminiModelTest {
         assertTrue(props.containsKey("additionalProperties")); assertTrue(props.containsKey("\$id"))
         assertFalse(props.obj("additionalProperties").containsKey("additionalProperties"))
     }
+
+    // 插话打断后:半截回复是只有一段文字的 model 回合(没有 thought);插话和运行时状态并进下一个 user 回合,角色交替
+    @Test fun interruptedReplyIsATextOnlyModelTurnBeforeTheSteer() = runTest {
+        server.enqueue(ok(cand("""[{"text":"好"}]""")))
+        model().complete("s", InterruptedHistory.messages, emptyList())
+        val contents = sentBody().arr("contents").map { it.jsonObject }
+        assertEquals(listOf("user", "model", "user"), contents.map { it.str("role") })
+        val modelParts = contents[1].arr("parts").map { it.jsonObject }
+        assertEquals(1, modelParts.size)
+        assertEquals(setOf("text"), modelParts[0].keys)
+        assertEquals(InterruptedHistory.PARTIAL, modelParts[0].str("text"))
+        val texts = contents[2].arr("parts").map { it.jsonObject.str("text") }
+        assertEquals(listOf(InterruptedHistory.STEER, InterruptedHistory.RUNTIME), texts)
+    }
 }

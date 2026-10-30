@@ -186,4 +186,17 @@ class AnthropicModelTest {
         model().complete("", user, emptyList())
         assertFalse(sentBody().containsKey("system"))
     }
+
+    // 插话打断后:半截回复是只有一个文字块的 assistant 消息(没有思考块);插话和运行时状态并进下一条 user 消息,角色交替
+    @Test fun interruptedReplyIsATextOnlyAssistantTurnBeforeTheSteer() = runTest {
+        server.enqueue(ok("""{"content":[],"stop_reason":"end_turn"}"""))
+        model().complete("s", InterruptedHistory.messages, emptyList())
+        val msgs = sentBody().arr("messages").map { it.jsonObject }
+        assertEquals(listOf("user", "assistant", "user"), msgs.map { it.str("role") })
+        val asst = msgs[1].arr("content").map { it.jsonObject }
+        assertEquals(listOf("text"), asst.map { it.str("type") })
+        assertEquals(InterruptedHistory.PARTIAL, asst[0].str("text"))
+        val texts = msgs[2].arr("content").map { it.jsonObject.str("text") }
+        assertEquals(listOf(InterruptedHistory.STEER, InterruptedHistory.RUNTIME), texts)
+    }
 }

@@ -36,6 +36,30 @@ class ConversationStoreTest {
         assertFalse("groups" in java.io.File(dir, "$id.json").readText().substringAfter("谢谢"))
     }
 
+    /** 插话打断的那段回复和插话一一对应存下;没打断过的轮次不写这个字段,旧文件读出来是空的。 */
+    @Test fun persistsInterruptedReplies() {
+        val dir = tmp.newFolder("c")
+        val a = ConversationStore(dir)
+        val id = a.newConversation()
+        a.append(id, Turn("查天气", "明天多云", "succeeded", steers = listOf("改成查明天", "顺便看看后天"), interruptedReplies = listOf("今天晴", "")))
+        a.append(id, Turn("谢谢", "不客气", "succeeded", steers = listOf("好")))
+        val read = ConversationStore(dir).turns(id)
+        assertEquals(listOf(listOf("今天晴", ""), emptyList()), read.map { it.interruptedReplies })
+        assertEquals(listOf("改成查明天", "顺便看看后天"), read.first().steers)
+        assertFalse("interruptedReplies" in java.io.File(dir, "$id.json").readText().substringAfter("谢谢"))
+    }
+
+    /** 插话之前已经说完的回复同样一一对应存下;没有时不写这个字段。 */
+    @Test fun persistsFinishedReplies() {
+        val dir = tmp.newFolder("c")
+        val a = ConversationStore(dir)
+        val id = a.newConversation()
+        a.append(id, Turn("查天气", "明天多云", "succeeded", steers = listOf("改成查明天"), finishedReplies = listOf("今天晴,最高 25 度。")))
+        a.append(id, Turn("谢谢", "不客气", "succeeded", steers = listOf("好")))
+        assertEquals(listOf(listOf("今天晴,最高 25 度。"), emptyList()), ConversationStore(dir).turns(id).map { it.finishedReplies })
+        assertFalse("finishedReplies" in java.io.File(dir, "$id.json").readText().substringAfter("谢谢"))
+    }
+
     /** 删对话:对话文件、标题、挪到一边的损坏文件、临时文件都删掉,列表里没有了,别的对话不动;删完发一次改动。 */
     @Test fun deleteRemovesTheConversationAndItsSidecars() = kotlinx.coroutines.runBlocking {
         val dir = tmp.newFolder("c")

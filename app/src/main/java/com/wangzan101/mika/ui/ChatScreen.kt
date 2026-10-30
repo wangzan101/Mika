@@ -106,7 +106,9 @@ import com.wangzan101.mika.chat.SharedFile
 import com.wangzan101.mika.confirm.ConfirmationCopy
 import com.wangzan101.mika.settings.Prerequisites
 import com.wangzan101.mika.takeover.Takeover
+import com.wangzan101.mika.task.SteerNote
 import com.wangzan101.mika.task.TaskService
+import com.wangzan101.mika.task.unconsumed
 import com.wangzan101.mika.ui.components.BarIconButton
 import com.wangzan101.mika.ui.components.ButtonKind
 import com.wangzan101.mika.ui.components.ButtonSize
@@ -393,12 +395,30 @@ private fun LazyListScope.exchange(
     } else if (ex.steps.isNotEmpty() || ex.runId != null) {
         item("s$index") { DoneLine(ex, reduceMotion, openRun) }
     }
-    // 任务进行中插的话:用户的原话,下面一行小字说它的去向
-    ex.steers.forEach { n -> item("m$index-${n.id}") { UserBubble(n.text, conversationId, steerLabel(n.state)) } }
-    item("r$index") { StatusCard(ex.status, stage, vm, ex.runId, loadSource, openSource) }
+    // 任务进行中插的话:用户的原话,下面一行小字说它的去向。
+    // 插话之前已经说完的回复照常显示;插话打断的那段留在原处(淡色、标「被你的新消息打断」);接着才是插话。
+    // 还没交给模型的插话排在正在长出来的回答后面:那段回答是它到之前就在写的,不是对它的回复。
+    fun steer(n: SteerNote) {
+        n.finished?.takeIf(String::isNotBlank)?.let { done -> item("a$index-${n.id}") { FinishedReply(done) } }
+        n.interrupted?.takeIf(String::isNotBlank)?.let { cut -> item("i$index-${n.id}") { InterruptedReply(cut) } }
+        item("m$index-${n.id}") { UserBubble(n.text, conversationId, steerLabel(n.state)) }
+    }
+    val (joined, waiting) = steersAroundDraft(ex.steers)
+    joined.forEach(::steer)
     ex.draft?.takeIf(String::isNotBlank)?.let { draft -> item("d$index") { DraftText(draft, ex.waitingForModel) } }
+    waiting.forEach(::steer)
+    item("r$index") { StatusCard(ex.status, stage, vm, ex.runId, loadSource, openSource) }
     if (ex.files.isNotEmpty()) item("f$index") { FileCards(ex.files) }
     learningNotes(index, ex, vm)
+}
+
+/**
+ * 插话分成两段:第一句还没交给模型的([SteerState.unconsumed])之前的,和它连同之后的。
+ * 正在长出来的回答排在两段中间。
+ */
+internal fun steersAroundDraft(steers: List<SteerNote>): Pair<List<SteerNote>, List<SteerNote>> {
+    val first = steers.indexOfFirst { it.state.unconsumed }.let { if (it < 0) steers.size else it }
+    return steers.take(first) to steers.drop(first)
 }
 
 private fun ExchangeStatus.isActive() =
@@ -454,6 +474,23 @@ private fun DraftText(text: String, generating: Boolean) {
         text, AnswerText.copy(color = MikaTheme.colors.ink),
         Modifier.fillMaxWidth().padding(bottom = 12.dp).answerSurface(), streaming = generating,
     )
+}
+
+/** 插话交给模型之前已经说完的回复:和回答一样的底和字,可以选中复制。 */
+@Composable
+private fun FinishedReply(text: String) {
+    SelectionContainer {
+        MarkdownText(text, AnswerText.copy(color = MikaTheme.colors.ink), Modifier.fillMaxWidth().padding(bottom = 4.dp).answerSurface(), streaming = false)
+    }
+}
+
+/** 被插话打断的那段回复:和回答同样的底,字用次要色,下面一行小字「已中断」。 */
+@Composable
+private fun InterruptedReply(text: String) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        MarkdownText(text, AnswerText.copy(color = MikaTheme.colors.ink2), Modifier.fillMaxWidth().answerSurface(), streaming = false)
+        Text(stringResource(R.string.steer_interrupted_reply), Modifier.padding(top = 3.dp, start = 4.dp), style = MikaType.Hint, color = MikaTheme.colors.ink3)
+    }
 }
 
 /** Mika 回答的底:很淡的灰,左下尾角。 */

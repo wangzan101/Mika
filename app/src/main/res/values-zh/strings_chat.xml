@@ -73,6 +73,7 @@
     <string name="chat_wait_approval">等你同意</string>
     <string name="steer_received">已收到，下一步处理</string>
     <string name="steer_joined">已加入当前任务</string>
+    <string name="steer_interrupted_reply">被你的新消息打断</string>
     <string name="steer_next">将作为下一件事</string>
     <string name="steer_cancelled">已取消</string>
     <plurals name="chat_steps_done">

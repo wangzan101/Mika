@@ -437,7 +437,7 @@ class ChatViewModel(
             val added = list.filter { it.id !in shown }
             ui.copy(exchanges = ui.exchanges.mapIndexed { i, ex ->
                 val updated = if (ex.steers.none { it.id in byId }) ex
-                    else ex.copy(steers = ex.steers.map { n -> byId[n.id]?.let { n.copy(state = it.state) } ?: n })
+                    else ex.copy(steers = ex.steers.map { n -> byId[n.id]?.let { n.copy(state = it.state, interrupted = it.interrupted ?: n.interrupted, finished = it.finished ?: n.finished) } ?: n })
                 if (i == liveIndex && added.isNotEmpty() && ex.status.active()) updated.copy(steers = updated.steers + added) else updated
             })
         }
@@ -1107,7 +1107,10 @@ class ChatViewModel(
             }
             return Exchange(t.userText, emptyList(), status, live = false, runId = t.runId,
                 memoryNotes = t.memoryNotes, usedMemory = t.usedMemory, skillNotes = t.skillNotes,
-                steers = t.steers.mapIndexed { i, text -> SteerNote("turn-$i", text, SteerState.Joined) })
+                steers = t.steers.mapIndexed { i, text ->
+                    SteerNote("turn-$i", text, SteerState.Joined, t.interruptedReplies.getOrNull(i)?.takeIf(String::isNotEmpty),
+                        t.finishedReplies.getOrNull(i)?.takeIf(String::isNotEmpty))
+                })
         }
 
 

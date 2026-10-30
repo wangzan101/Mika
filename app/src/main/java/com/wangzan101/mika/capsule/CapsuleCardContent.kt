@@ -640,7 +640,13 @@ private fun ThreadList(thread: ChatThread, conversationId: String?, actions: Car
                     color = if (item.kind.needsYou) c.warn else c.ink3, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
                 // 表格、代码块在自己那块里左右滑,不撑宽卡片;链接另开任务打开,浮层里也能点
-                is ThreadItem.Answer -> MarkdownText(item.text, Body.copy(color = c.ink), Modifier.fillMaxWidth().padding(bottom = 8.dp), streaming = item.streaming)
+                is ThreadItem.Answer -> if (!item.cut) {
+                    MarkdownText(item.text, Body.copy(color = c.ink), Modifier.fillMaxWidth().padding(bottom = 8.dp), streaming = item.streaming)
+                } else Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    // 被插话打断的那段:淡色,下面一行小字(和对话页同一句话)
+                    MarkdownText(item.text, Body.copy(color = c.ink2), Modifier.fillMaxWidth(), streaming = false)
+                    Text(tr(R.string.steer_interrupted_reply), Modifier.padding(top = 2.dp), style = Sub, color = c.ink3)
+                }
             }
         }
     }

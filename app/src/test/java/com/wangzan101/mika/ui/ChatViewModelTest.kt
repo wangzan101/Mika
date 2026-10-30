@@ -1183,6 +1183,24 @@ class ChatViewModelTest {
         assertEquals(1, vm.ui.value.exchanges.size)
     }
 
+    // 插话打断了正在写的回复:那段字随插话的去向一起报回来,挂在插话上;之后状态再变也不丢
+    @Test fun interruptedReplyStaysWithItsSteer() = runTest {
+        val vm = vm()
+        vm.send("查今天的天气", ok)
+        emit(TaskState.Running(1, "", preview = "今天晴,最高"))
+        assertTrue(vm.send("改成查明天", ok))
+
+        steerFlow.value = listOf(SteerNote(steerIds.single(), "改成查明天", SteerState.Joined, interrupted = "今天晴,最高"))
+        emit(TaskState.Running(2, ""))
+        val note = vm.ui.value.exchanges.single().steers.single()
+        assertEquals("今天晴,最高", note.interrupted)
+        assertEquals(SteerState.Joined, note.state)
+
+        steerFlow.value = listOf(SteerNote(steerIds.single(), "改成查明天", SteerState.Joined))
+        runCurrent()
+        assertEquals("今天晴,最高", vm.ui.value.exchanges.single().steers.single().interrupted)
+    }
+
     // 任务的收件箱一收下就有回音「已收到，下一步处理」;任务就此收尾时它和还没发到的一样作为下一件事
     @Test fun receivedSteerIsShownAtOnceAndBecomesNextIfTheRunEnds() = runTest {
         val vm = vm()
@@ -1294,6 +1312,38 @@ class ChatViewModelTest {
         val ex = vm.ui.value.exchanges.single()
         assertEquals(listOf("要大一点的"), ex.steers.map { it.text })
         assertEquals("已加入当前任务", steerLabel(ex.steers.single().state))
+    }
+
+    // 插话打断的那段回复也随那一轮存下,重开时还挂在那句插话上;没打断的那句没有
+    @Test fun interruptedRepliesSurviveReopening() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val id = store.newConversation()
+        store.append(id, Turn("查天气", "明天多云", "succeeded", steers = listOf("改成查明天", "顺便看看后天"), interruptedReplies = listOf("今天晴", "")))
+        val vm = vm(store)
+        vm.openConversation(id)
+        assertEquals(listOf("今天晴", null), vm.ui.value.exchanges.single().steers.map { it.interrupted })
+    }
+
+    // 插话之前已经说完的回复:随插话的去向报回来,之后状态再变也不丢;存下后重开照样挂在那句插话上
+    @Test fun finishedReplyStaysWithItsSteer() = runTest {
+        val vm = vm()
+        vm.send("查今天的天气", ok)
+        emit(TaskState.Running(1, "", preview = "今天晴,最高 25 度。"))
+        assertTrue(vm.send("改成查明天", ok))
+        steerFlow.value = listOf(SteerNote(steerIds.single(), "改成查明天", SteerState.Joined, finished = "今天晴,最高 25 度。"))
+        emit(TaskState.Running(2, ""))
+        steerFlow.value = listOf(SteerNote(steerIds.single(), "改成查明天", SteerState.Joined))
+        runCurrent()
+        assertEquals("今天晴,最高 25 度。", vm.ui.value.exchanges.single().steers.single().finished)
+    }
+
+    @Test fun finishedRepliesSurviveReopening() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val id = store.newConversation()
+        store.append(id, Turn("查天气", "明天多云", "succeeded", steers = listOf("改成查明天", "顺便看看后天"), finishedReplies = listOf("今天晴", "")))
+        val vm = vm(store)
+        vm.openConversation(id)
+        assertEquals(listOf("今天晴", null), vm.ui.value.exchanges.single().steers.map { it.finished })
     }
 
     // ---- 别处(悬浮胶囊、定时任务)开始的任务和存下的轮次 ----
@@ -1514,5 +1564,15 @@ class ChatViewModelTest {
             serve("n", TaskState.Succeeded("好了"))
             active.value = emptyList(); goals.clear(); calls.clear()
         }
+    }
+
+    // 正在长出来的回答排在已交给模型的插话后面、还没交给模型的插话前面
+    @Test fun draftSitsBetweenJoinedAndWaitingSteers() {
+        val joined = SteerNote("a", "改成明天", SteerState.Joined)
+        val received = SteerNote("b", "简短点", SteerState.Received)
+        val pending = SteerNote("c", "再简单点", SteerState.Pending)
+        assertEquals(listOf(joined) to listOf(received, pending), steersAroundDraft(listOf(joined, received, pending)))
+        assertEquals(listOf(joined) to emptyList<SteerNote>(), steersAroundDraft(listOf(joined)))
+        assertEquals(emptyList<SteerNote>() to listOf(received), steersAroundDraft(listOf(received)))
     }
 }

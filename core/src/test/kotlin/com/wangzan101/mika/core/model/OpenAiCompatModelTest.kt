@@ -284,4 +284,16 @@ class OpenAiCompatModelTest {
         model().complete("SYS", user, emptyList())
         assertFalse(body().toString().contains("cache_control"))
     }
+
+    // 插话打断后:半截回复是一条只有文字的 assistant 消息,不带调用和思考字段;后面两条 user 消息各自原样发出
+    @Test fun interruptedReplyIsAPlainAssistantMessageBeforeTheSteer() = runTest {
+        server.enqueue(ok("""{"choices":[{"finish_reason":"stop","message":{"content":"好"}}]}"""))
+        model().complete("s", InterruptedHistory.messages, emptyList())
+        val msgs = body()["messages"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("system", "user", "assistant", "user", "user"), msgs.map { it["role"]!!.jsonPrimitive.content })
+        assertEquals(setOf("role", "content"), msgs[2].keys)
+        assertEquals(InterruptedHistory.PARTIAL, msgs[2]["content"]!!.jsonPrimitive.content)
+        assertEquals(InterruptedHistory.STEER, msgs[3]["content"]!!.jsonPrimitive.content)
+        assertEquals(InterruptedHistory.RUNTIME, msgs[4]["content"]!!.jsonPrimitive.content)
+    }
 }

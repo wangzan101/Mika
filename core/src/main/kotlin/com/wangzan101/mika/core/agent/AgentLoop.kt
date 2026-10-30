@@ -197,6 +197,8 @@ class AgentLoop(
     /** 锁屏/被拿走关卡等完之后恢复的界面状态(当前这一步、批或回放)。 */
     @Volatile private var gateState: TaskState = TaskState.Idle
     @Volatile private var cancelRequested = false
+    /** 被插话撤掉请求的那一步;之后迟到的流式文字不再显示。 */
+    @Volatile private var interruptedStep = 0
     /** 本对话之前几轮用户说的话,只给核查器理解追问;不含干活模型的任何东西。 */
     private var earlierGoals: List<String> = emptyList()
     /** 最后一次核查结论;路线计数要和回放结果一起看。 */
@@ -370,6 +372,7 @@ class AgentLoop(
         fun facts() = ReviewFacts(acted, paymentHandedOver || recorder.outwardActs > 0, recorder.lastChangeMark?.let { !tools.readSince(it) } == true)
         media.clear()
         gapsNudged = false
+        interruptedStep = 0
         var note = ""
         // 除用户原话以外的上下文都经它生成:统一外壳、统一预算
         ctx = ContextBuilder(zone = zone)
@@ -440,7 +443,7 @@ class AgentLoop(
                 return StopRules.modelFailed(e)
             }
             if (routed == null) {
-                appendSteers(history, inbox)
+                keepInterrupted(history, inbox, step)
                 continue
             }
             var (reply, used) = routed
@@ -483,7 +486,7 @@ class AgentLoop(
                 track.after(null, ok = false, guard = false, changed = null, recovery = false, app = null)
                 recordReply(null)
                 // 模型给出最终回答时,先收下在途的用户插话,再决定是否交出回答。
-                if (appendSteers(history, inbox)) continue
+                if (keepFinished(history, inbox)) continue
                 // 空回复、被输出上限截断的半截话不是回答:提醒一次,再这样就结束
                 if (text.isEmpty() || reply.stopReason == StopReason.MaxTokens) {
                     val n = TurnPolicy.afterEmpty(emptyNudged, truncated = text.isNotEmpty()) ?: return StopRules.noAnswer()
@@ -523,7 +526,7 @@ class AgentLoop(
                 val result = conclude(task, text, step, currentFacts, history)
                 if (result != null) {
                     // 交出之前还有插话(核对、整理来源时到的):不收尾,带着它接着做;没有就关上收件箱,之后的话才是下一件事
-                    if (inbox?.closeUnlessSteered() == false) { appendSteers(history, inbox); continue }
+                    if (inbox?.closeUnlessSteered() == false) { keepFinished(history, inbox); continue }
                     return result
                 }
                 continue
@@ -719,8 +722,10 @@ class AgentLoop(
      * 插话是独立的真实用户行;只在两步之间追加,绝不改写已经发给模型的消息。
      * 插话带着用户此刻的屏幕时和开局原话一样换好:那句话连同截图,后面跟着屏幕的详情。
      */
-    private suspend fun appendSteers(history: MutableList<Message>, inbox: RunInbox?): Boolean {
-        val updates = inbox?.takeSteers().orEmpty()
+    private suspend fun appendSteers(history: MutableList<Message>, inbox: RunInbox?): Boolean =
+        appendSteers(history, inbox?.takeSteers().orEmpty())
+
+    private suspend fun appendSteers(history: MutableList<Message>, updates: List<RunInbox.UserSteer>): Boolean {
         updates.forEach { update ->
             val shown = screens?.render(update.text)
             history += Message(Role.User, listOf(Part.Text("$STEER_MARKER\n${shown?.said ?: update.text}")) + shown?.images.orEmpty(), Author.User)
@@ -729,6 +734,23 @@ class AgentLoop(
             emit(RunEvent.State(now(), "steer_received", RunEvent.clip(Redactor.text(update.messageId))))
         }
         return updates.isNotEmpty()
+    }
+
+    /**
+     * 不带调用的回复已经记进历史、也显示出来了,这时有插话:接上插话接着做(返回 true)。
+     * 屏幕上那段回复要留着:下一步一开始界面上的实时文字就清掉了,所以发 `reply_finished_before_steer` 把它挂到插话上方。
+     * 没有插话返回 false,什么也不动。
+     */
+    private suspend fun keepFinished(history: MutableList<Message>, inbox: RunInbox?): Boolean {
+        val steers = inbox?.takeSteers().orEmpty()
+        if (steers.isEmpty()) return false
+        val current = _state.value as? TaskState.Running
+        val shown = current?.preview?.trim()
+        if (current?.preview != null) _state.value = current.copy(preview = null)
+        // 不截短:这是一段完整的回答,界面要和没插话时一样显示全文(长度本来就受模型输出上限约束)
+        if (!shown.isNullOrEmpty()) emit(RunEvent.State(now(), "reply_finished_before_steer", Redactor.text(shown)))
+        appendSteers(history, steers)
+        return true
     }
 
     /** 插话只取消正在等待的模型请求(本步不写进历史,下一步带着插话重问);工具调用进入执行入口后由它自己做完。 */
@@ -749,9 +771,28 @@ class AgentLoop(
         }
     }
 
+    /**
+     * 插话撤掉了第 [step] 步的请求:用户已经看到的那段字(界面上的 preview)作为一条只有文字的回复记进历史,
+     * 接着才是插话,模型下一次看到的和用户看到的一样。没看到字、或没有插话时什么也不记。
+     * 思考内容和半截工具调用本来就不在 preview 里。界面上的那段字在这里清掉,改由 `reply_interrupted` 事件挂到插话上方。
+     */
+    private suspend fun keepInterrupted(history: MutableList<Message>, inbox: RunInbox?, step: Int) {
+        val steers = inbox?.takeSteers().orEmpty()
+        interruptedStep = step
+        val current = _state.value as? TaskState.Running
+        val partial = current?.takeIf { it.step == step }?.preview?.trim()
+        if (current?.preview != null) _state.value = current.copy(preview = null)
+        if (!partial.isNullOrEmpty() && steers.isNotEmpty()) {
+            history += Message(Role.Assistant, listOf(Part.Text(partial)), Author.Mika)
+            emit(RunEvent.State(now(), "reply_interrupted", RunEvent.clip(Redactor.text(partial))))
+        }
+        appendSteers(history, steers)
+    }
+
     private fun previewFor(step: Int): ((String) -> Unit)? = if (!streamReplies) null else { preview ->
         val current = _state.value as? TaskState.Running
-        if (current?.step == step) _state.value = current.copy(preview = preview.takeIf(String::isNotEmpty))
+        // 撤掉之后网络线程可能还送来一段:不再显示,免得屏幕上比历史里多
+        if (current?.step == step && interruptedStep != step) _state.value = current.copy(preview = preview.takeIf(String::isNotEmpty))
     }
 
     /**
@@ -889,7 +930,7 @@ class AgentLoop(
                 repliedAtMs = repliedAtMs,
             ))
             // 收尾模型也可能正在生成时收到插话。最多重答两次，其余交给下一任务。
-            if (attempt < 2 && appendSteers(history, inbox)) return@repeat
+            if (attempt < 2 && keepFinished(history, inbox)) return@repeat
             if (call == null) {
                 if (calls.isNotEmpty() || text.isEmpty() || reply.stopReason == StopReason.MaxTokens) return StopRules.stepLimit(maxSteps)
                 return conclude(task, text, step, facts, history = null)!!

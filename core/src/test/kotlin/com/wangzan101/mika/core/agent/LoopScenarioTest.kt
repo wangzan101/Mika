@@ -7,6 +7,11 @@ import com.wangzan101.mika.core.model.Role
 import com.wangzan101.mika.core.cap.sandbox.FakeSandbox
 import com.wangzan101.mika.core.uistate.ActionResult
 import com.wangzan101.mika.core.testing.FakeChatModel
+import com.wangzan101.mika.core.testing.InterruptibleStream
+import com.wangzan101.mika.core.run.RunId
+import com.wangzan101.mika.core.run.RunInbox
+import com.wangzan101.mika.core.run.RunInput
+import com.wangzan101.mika.core.run.RunSpec
 import com.wangzan101.mika.core.testing.LoopSnapshot
 import com.wangzan101.mika.core.testing.Screen
 import com.wangzan101.mika.core.testing.ScriptedScreen
@@ -342,6 +347,31 @@ class LoopScenarioTest {
         assertEquals(CHINESE_ANSWER, (end as TaskState.Succeeded).answer)
         assertEquals(0, main.remaining)
         assertEquals(3, main.requests.size)
+    }
+
+    // (p) 插话打断正在流式输出的回复:用户看到的那段字作为只有文字的回复记进历史,插话接在它后面,模型带着两者重问
+    @Test fun steerKeepsTheInterruptedReply() = runTest {
+        val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "蓝牙", 80), label("@e2", "已开启", 300)))))
+        val main = fakeModel("main") {
+            call("phone_observe")
+            answer("蓝牙已开启:蓝牙页显示「已开启」。")
+        }
+        val model = InterruptibleStream(main, listOf("我先看看", "我先看看 WLAN 开没开"))
+        val inbox = RunInbox()
+        val running = async {
+            AgentLoop(model, toolDispatcher(screen), SystemPrompt.identity(), clock = { CLOCK }, zone = ZoneOffset.UTC, streamReplies = true)
+                .run(RunSpec(RunId("r1"), "看看 WLAN 开没开", "thread-1"), inbox)
+        }
+        model.entered.await()
+        inbox.send(RunInput.Steer("m1", "不是 WLAN,是蓝牙"))
+        val end = running.await()
+        assertTrue(model.cancelled)
+        assertEquals("蓝牙已开启:蓝牙页显示「已开启」。", (end as TaskState.Succeeded).answer)
+        val seen = main.requests[0].messages
+        val kept = seen.indexOfFirst { it.role == Role.Assistant }
+        assertEquals(listOf(Part.Text("我先看看 WLAN 开没开")), seen[kept].parts)
+        assertTrue((seen[kept + 1].parts.first() as Part.Text).text.startsWith(AgentLoop.STEER_MARKER))
+        snapshot("p_steer_keeps_interrupted_reply", end, "main" to main)
     }
 
     private companion object {

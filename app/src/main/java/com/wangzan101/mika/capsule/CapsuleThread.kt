@@ -9,7 +9,9 @@ import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.core.tool.PACKAGE_NAME_RE
 import com.wangzan101.mika.ui.StatusCopy
 import com.wangzan101.mika.ui.answerParts
+import com.wangzan101.mika.task.SteerNote
 import com.wangzan101.mika.ui.steerLabel
+import com.wangzan101.mika.ui.steersAroundDraft
 
 /**
  * 对话卡片里的一条。[key] 在同一个对话里不变(有运行记录编号时按它,没有时按这一轮在对话里的位置):
@@ -24,8 +26,11 @@ sealed interface ThreadItem {
     /** 一行小字:操作过 App 或网页的那一轮收成的一行(「✓ 微信 · 办好了」),或纯聊天没办成、停了、还在想时那一行。 */
     data class Note(override val key: String, val text: String, val kind: CapsuleKind) : ThreadItem
 
-    /** Mika 的回答全文(原样的 Markdown,卡片里排版);[streaming] 时还在往下写。 */
-    data class Answer(override val key: String, val text: String, val streaming: Boolean = false) : ThreadItem
+    /**
+     * Mika 的回答全文(原样的 Markdown,卡片里排版);[streaming] 时还在往下写。
+     * [cut] 时是被插话打断的那段(和对话页一样淡色,下面一行「被你的新消息打断」)。
+     */
+    data class Answer(override val key: String, val text: String, val streaming: Boolean = false, val cut: Boolean = false) : ThreadItem
 }
 
 /** 对话卡片的来回,旧的在上、新的在下;[hasEarlier] 时往上还有更早的几轮没加载;[title] 是对话的标题(第一句话)。 */
@@ -86,8 +91,15 @@ object CapsuleThreads {
             CapsuleKind.Failed -> turn.outcome
             else -> Conversation.stopSummary(turn).orEmpty()
         }
-        val users = (listOf(turn.userText) + turn.steers).filter(String::isNotBlank)
-            .mapIndexed { i, text -> ThreadItem.User("$base-u$i", text) }
+        // 原话,再是插的话;插话之前已经说完的、被它打断的那段回复排在它前面(和对话页一样)
+        val users = listOfNotNull(turn.userText.takeIf(String::isNotBlank)?.let { ThreadItem.User("$base-u0", it) }) +
+            turn.steers.withIndex().filter { it.value.isNotBlank() }.flatMap { (i, text) ->
+                listOfNotNull(
+                    turn.finishedReplies.getOrNull(i)?.takeIf(String::isNotBlank)?.let { ThreadItem.Answer("$base-f${i + 1}", it) },
+                    turn.interruptedReplies.getOrNull(i)?.takeIf(String::isNotBlank)?.let { ThreadItem.Answer("$base-c${i + 1}", it, cut = true) },
+                    ThreadItem.User("$base-u${i + 1}", text),
+                )
+            }
         return users + ended(base, kind, t.places, answer, pending = kind == CapsuleKind.Cancelled && turn.runId in summarizing)
     }
 
@@ -95,9 +107,15 @@ object CapsuleThreads {
     fun liveItems(r: CardRun, places: List<String>, summarizing: Set<String> = emptySet()): List<ThreadItem> {
         val run = r.run
         val base = run.runId?.let { "r$it" } ?: "l${run.key}"
-        // 原话,再是进行中插的话(带着去向,和对话页同一套说法)
-        val user = listOfNotNull(run.goal.takeIf(String::isNotBlank)?.let { ThreadItem.User("$base-u0", it) }) +
-            run.steers.map { ThreadItem.User("$base-s${it.id}", it.text, steerLabel(it.state)) }
+        // 原话,再是进行中插的话(带着去向,和对话页同一套说法);插话之前已经说完的、被它打断的那段回复排在它前面。
+        // 还没交给模型的插话排在正在写的回答后面(和对话页一样,见 steersAroundDraft)
+        fun steer(n: SteerNote) = listOfNotNull(
+            n.finished?.takeIf(String::isNotBlank)?.let { ThreadItem.Answer("$base-f${n.id}", it) },
+            n.interrupted?.takeIf(String::isNotBlank)?.let { ThreadItem.Answer("$base-c${n.id}", it, cut = true) },
+            ThreadItem.User("$base-s${n.id}", n.text, steerLabel(n.state)),
+        )
+        val (joined, waiting) = steersAroundDraft(run.steers)
+        val user = listOfNotNull(run.goal.takeIf(String::isNotBlank)?.let { ThreadItem.User("$base-u0", it) }) + joined.flatMap(::steer)
         val rest = when (val s = run.state) {
             is TaskState.Succeeded -> ended(base, CapsuleKind.Done, places, s.answer)
             is TaskState.Failed -> ended(base, CapsuleKind.Failed, places, s.reason)
@@ -117,7 +135,7 @@ object CapsuleThreads {
                 listOfNotNull(note, answer)
             }
         }
-        return user + rest
+        return user + rest + waiting.flatMap(::steer)
     }
 
     /**

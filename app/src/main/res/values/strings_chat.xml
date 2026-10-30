@@ -75,6 +75,7 @@
     <string name="chat_wait_approval">Waiting for your OK</string>
     <string name="steer_received">Got it — next step</string>
     <string name="steer_joined">Added to the current task</string>
+    <string name="steer_interrupted_reply">Interrupted by your message</string>
     <string name="steer_next">Queued as the next task</string>
     <string name="steer_cancelled">Cancelled</string>
     <plurals name="chat_steps_done">

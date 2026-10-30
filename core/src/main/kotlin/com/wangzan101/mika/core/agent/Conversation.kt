@@ -23,6 +23,10 @@ data class Turn(
     val result: String? = null,
     /** 任务进行中用户插的、已交给这个任务的话(界面在那一轮下面显示)。 */
     val steers: List<String> = emptyList(),
+    /** 和 [steers] 一一对应:每句插话打断的那段回复里用户已经看到的字,没打断的是空串。只给界面显示,不进给模型的上文。 */
+    val interruptedReplies: List<String> = emptyList(),
+    /** 和 [steers] 一一对应:每句插话交给模型之前、已经说完显示出来的那段回复,没有的是空串。只给界面显示。 */
+    val finishedReplies: List<String> = emptyList(),
     /** 这一轮真的用过的能力组(手机、网页、沙箱……);下一轮开局预先展开,不进给模型的上文。 */
     val groups: List<String> = emptyList(),
 )

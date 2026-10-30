@@ -18,7 +18,35 @@ enum class SteerState { Pending, Received, Joined, Next, Cancelled }
 /** 还没交给模型的插话(任务就此收尾时作为下一件事,停止时作废)。 */
 val SteerState.unconsumed: Boolean get() = this == SteerState.Pending || this == SteerState.Received
 
-data class SteerNote(val id: String, val text: String, val state: SteerState)
+/**
+ * [interrupted] 是这句插话撤掉的那段回复里用户已经看到的字;[finished] 是这句插话交给模型之前、已经说完显示出来的回复。
+ * 两者都显示在插话上方;没有时为 null。
+ */
+data class SteerNote(
+    val id: String, val text: String, val state: SteerState, val interrupted: String? = null, val finished: String? = null,
+)
+
+/**
+ * 运行事件里插话交给模型的先后:`reply_interrupted`([interrupted])或 `reply_finished_before_steer`([finished])先到,
+ * 紧接着这一批插话逐句 `steer_received`,那段字只挂到其中第一句上([joined])。
+ */
+class SteerJoin {
+    @Volatile private var cut: String? = null
+    @Volatile private var done: String? = null
+
+    fun interrupted(text: String) { cut = text }
+
+    fun finished(text: String) { done = text }
+
+    /** [id] 这句已交给模型:标成 [SteerState.Joined],有刚记下的那段字就挂上(用过即清)。 */
+    fun joined(notes: List<SteerNote>, id: String): List<SteerNote> {
+        val c = cut.also { cut = null }
+        val d = done.also { done = null }
+        return notes.map {
+            if (it.id == id) it.copy(state = SteerState.Joined, interrupted = c ?: it.interrupted, finished = d ?: it.finished) else it
+        }
+    }
+}
 
 /** 进程内 TaskCenter 的展示状态，由 App 容器持有，Service 只是写入它的宿主。 */
 class TaskCenterState {

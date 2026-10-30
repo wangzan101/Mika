@@ -312,7 +312,22 @@ class TaskRun(
     @Volatile var usedGroups: List<String> = emptyList()
         private set
 
-    fun joinedSteers(): List<String> = _steers.value.filter { it.state == SteerState.Joined }.map { it.text }
+    fun joinedSteers(): List<String> = joined().map { it.text }
+
+    /** 和 [joinedSteers] 一一对应:每句插话打断的那段回复,没打断的是空串。 */
+    fun joinedInterrupted(): List<String> = joined().map { it.interrupted.orEmpty() }
+
+    /** 和 [joinedSteers] 一一对应:每句插话交给模型之前已经说完的那段回复,没有的是空串。 */
+    fun joinedFinished(): List<String> = joined().map { it.finished.orEmpty() }
+
+    private fun joined() = _steers.value.filter { it.state == SteerState.Joined }
+
+    /** 插话撤掉的那段回复,等这一批插话里第一句交给模型时挂到它上面。 */
+    private val steerJoin = SteerJoin()
+
+    private fun joinSteer(id: String) {
+        synchronized(service.taskState.shownLock) { _steers.value = steerJoin.joined(_steers.value, id) }
+    }
 
     /** 把 [ids] 这几句改成 [to];给了 [from] 时只改还在那个状态的(收下和交给模型可能先后颠倒,不往回改)。 */
     private fun markSteers(ids: Set<String>, to: SteerState, from: SteerState? = null) {
@@ -330,7 +345,9 @@ class TaskRun(
                     val n = synchronized(activityLog) { activityLog += e; activityLog.size }
                     _activities.value = logView(n)
                 }
-                e is RunEvent.State && e.name == "steer_received" -> markSteers(setOf(e.detail), SteerState.Joined)
+                e is RunEvent.State && e.name == "reply_interrupted" -> steerJoin.interrupted(e.detail)
+                e is RunEvent.State && e.name == "reply_finished_before_steer" -> steerJoin.finished(e.detail)
+                e is RunEvent.State && e.name == "steer_received" -> joinSteer(e.detail)
             }
         }
     }

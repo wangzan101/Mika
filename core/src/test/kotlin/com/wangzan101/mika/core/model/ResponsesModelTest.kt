@@ -209,4 +209,17 @@ class ResponsesModelTest {
         fail("expected ${T::class.simpleName}")
         throw AssertionError()
     }
+
+    // 插话打断后:半截回复是一条 assistant message(output_text),前面没有 reasoning 项;插话和运行时状态是后面的 user message
+    @Test fun interruptedReplyIsAnAssistantMessageWithoutReasoningBeforeTheSteer() = runTest {
+        server.enqueue(stream(completed()))
+        model().complete("s", InterruptedHistory.messages, emptyList())
+        val input = sentBody()["input"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(input.none { it["type"]!!.jsonPrimitive.content == "reasoning" })
+        assertEquals(listOf("user", "assistant", "user", "user"), input.map { it["role"]!!.jsonPrimitive.content })
+        val asst = input[1]["content"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(listOf("output_text"), asst.map { it["type"]!!.jsonPrimitive.content })
+        assertEquals(InterruptedHistory.PARTIAL, asst[0]["text"]!!.jsonPrimitive.content)
+        assertEquals(InterruptedHistory.STEER, input[2]["content"]!!.jsonArray[0].jsonObject["text"]!!.jsonPrimitive.content)
+    }
 }

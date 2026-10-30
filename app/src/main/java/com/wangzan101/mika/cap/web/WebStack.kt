@@ -88,6 +88,9 @@ class WebStack private constructor(
     /** 页面此刻在用户手上(接管中)。 */
     val handedOver: Boolean get() = handedTab != null
 
+    /** 这个任务有没有当前标签(当前标签挂在网页显示上,看得见);只在后台临时标签里读过网页时没有。 */
+    val hasVisibleTab: Boolean get() = pool.current(taskId) != null
+
     /**
      * 接管:把当前标签锁住,拿到主屏的接管界面里。没有当前标签、或界面打不开时返回 false。
      * [actions] 把界面上的按钮交给任务(处理好了、我自己做完了、取消、先放着);[currentKey] 是任务此刻的等待编号。

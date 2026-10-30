@@ -523,7 +523,7 @@ class TaskRun(
                     ) }
                 webStack = stack
                 side.launch {
-                    // 网页界面时画中画显示网页显示的画面;换界面时先清掉上一边的画面;页面在用户手上(接管中)时不显示
+                    // 网页界面时画中画显示网页显示的画面;换界面时先清掉上一边的画面;怎么显示见 WebPreview
                     var last: String? = null
                     while (true) {
                         delay(WEB_FRAME_MS)
@@ -532,12 +532,13 @@ class TaskRun(
                             _frames.value = null
                             last = surface
                         }
-                        val onWeb = surface == WEB
-                        when {
-                            onWeb && stack.handedOver -> _frames.value = null
-                            onWeb -> withContext(Dispatchers.IO) { stack.host.latestFrame() }?.let { _frames.value = it }
+                        val show = WebPreview.of(onWeb = surface == WEB, hasTab = stack.hasVisibleTab, handedOver = stack.handedOver)
+                        when (show) {
+                            WebPreview.Frames -> withContext(Dispatchers.IO) { stack.host.latestFrame() }?.let { _frames.value = it }
+                            WebPreview.Hidden, WebPreview.NoPage -> _frames.value = null
+                            WebPreview.Off -> Unit
                         }
-                        _webOpen.value = onWeb
+                        _webOpen.value = show.open
                     }
                 }
                 stack.screen

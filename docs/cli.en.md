@@ -22,24 +22,15 @@ flowchart LR
     CLI -->|"HTTP, optionally forwarded through ADB"| API
 ```
 
-## Install
+## Installation and maintenance
 
-Requires Python 3.10+ and a Mika APK containing task API v1. Older MCP-only APKs are rejected with a compatibility message. This feature is available in source builds; existing MCP support alone does not prove that a published APK includes it.
+See the [CLI / Skill installation guide](computer-install.en.md) for dependencies, installation, updates, rollback and removal. The phone must support task API v1, first shipped in official APK v0.1.23.
 
-From the repository root, install with pipx or inside your own Python virtual environment:
-
-```bash
-pipx install ./tools/mika
-# Or in an activated virtual environment:
-python3 -m pip install ./tools/mika
-mika --help
-```
-
-Alternatively run `python3 tools/mika/scripts/mika_cli.py --help` directly. There are no Python runtime dependencies. Install the computer Skill by copying the complete `tools/mika/` directory into your agent's supported skills directory as `mika`. It includes the client and license and works outside the repository. It does not depend on Mika's internal phone skills.
+With only the Skill installed, `mika` below means `python3 <actual-skill-directory>/scripts/mika_cli.py` (`py -3` on Windows).
 
 ## Connect
 
-ADB mode requires Android platform-tools and a phone connected over USB or already paired and connected over wireless debugging. If the wireless device is not listed by ADB, complete pairing/connection using the phone's wireless debugging screen first.
+ADB mode requires Android platform-tools and either USB or connected wireless ADB. For wireless ADB, this computer must be paired and connected to the phone, which must appear as `device` in `adb devices`. Pairing Mika's built-in helper on the phone does not pair the computer; both also differ from direct LAN access below.
 
 ```bash
 mika devices --json
@@ -50,6 +41,8 @@ mika doctor --device SERIAL --json
 You may omit `--device` when exactly one device is online; the existing ANDROID_SERIAL environment variable is also supported. Multiple devices require a choice, and connection failure never selects a different phone. `connect` runs Mika's official bootstrap script to enable computer access and start the required helper; it does not submit a task. Other commands only read the current connection.
 
 Each invocation reads the current token, port and boot number, allocates its own temporary `adb forward tcp:0` mapping, then removes only that mapping. Tokens stay in process memory; bootstrap output is captured instead of printed. Exiting the CLI leaves the phone service and ongoing tasks running.
+
+The CLI handles forwarding; you do not need the MCP instructions for manually forwarding a fixed port. After reconnecting the cable, make sure the same phone is back in ADB. After a phone reboot or turning off computer access, run `connect` again.
 
 For LAN/private-network access explicitly enabled in the phone's settings:
 

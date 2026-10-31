@@ -4,19 +4,21 @@
 
 This document is written for **an AI agent on your computer that can run commands**. With the phone connected over USB, the agent follows the steps below and uses adb to install and set up Mika. People can follow it too: every command can be copied as is.
 
+This guide starts with the phone APK. If the phone is already set up and you only need computer access, use the [CLI / Skill installation guide](computer-install.en.md) or [MCP guide](mcp.en.md) for your chosen entry point; do not repeat phone installation and permission setup. Step 10 below is also only for users who request computer access.
+
 If you are the user: connect the phone to the computer with a USB cable, turn on USB debugging on the phone (in Developer options, don't change switches this document doesn't mention: some can erase the phone), and send this to the AI agent on your computer:
 
 ```
 Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.md to install Mika on the Android phone connected over USB.
 ```
 
-If you are the AI agent: read the "Rules" first, then work through the steps one at a time, starting at step 1.
+If you are the AI agent: read the "Rules" first. Start at step 1 when phone installation and setup are needed; for computer access only, use the entry points above.
 
 ## Rules
 
 1. **Only install and set up Mika.** Do what this document describes and nothing else.
 2. **Leave unrelated system settings alone.** Do not change the lock screen, screen timeout, display, sound, network, other developer options, or any setting this document does not mention.
-3. **Never uninstall an app or clear any data**, including Mika itself. If uninstalling is needed, explain why and let the user decide and do it.
+3. **Never uninstall a phone app or clear its data**, including Mika itself. If uninstalling is needed, explain why and let the user decide and do it.
 4. **Never handle the user's model API key.** Do not ask for it, type it, or send it over adb. The user enters it in Mika.
 5. **Stop and tell the user whenever a step needs a tap on the phone.** Say what will appear on screen and which button to tap, and wait until the user says it's done.
 6. **Before each step, briefly tell the user what you are doing and why, in the user's language.** When a command fails, show the user the exact error, then the likely causes.
@@ -112,6 +114,8 @@ Success: no output.
 
 ## Step 5: Turn on Mika's accessibility service
 
+Only do this for phone app control on Android 12+. Skip it on Android 11 or for chat, web and files only; accessibility being off is not an installation failure in those cases.
+
 Mika uses its accessibility service to read the screen and tap. Turn it on by writing the system setting over adb. The reason: for apps installed from outside an app store, Android often blocks turning accessibility on by hand ("Restricted setting"); writing the setting over adb does not hit that block.
 
 Mika's accessibility service component (from `MikaAccessibilityService` in `app/src/main/AndroidManifest.xml`):
@@ -162,20 +166,22 @@ adb shell cmd deviceidle whitelist | grep com.wangzan101.mika
 
 ## Step 7: Start Mika's phone helper
 
-Mika has a built-in phone helper that launches and operates apps on the background screen. It needs Android's own debugging feature to start. There are two ways; let the user choose:
-
-- **A. Pair wireless debugging (recommended, set up once)**: pair once, and the helper comes back by itself after restarts, with no computer needed.
-- **B. Start over USB**: works right now while the cable is plugged in, no pairing; but after every phone restart it has to be run again from the computer (unless A is also done).
-
-Doing both is fine: B gets things working right away, A makes it permanent.
-
-First, open Mika once (both ways need this):
+First, open Mika once (needed for all uses, to initialize the app and connection scripts):
 
 ```
 adb shell am start -n com.wangzan101.mika/.ui.MainActivity
 ```
 
 `adb shell monkey -p com.wangzan101.mika 1` also works. On first launch Mika walks the user through adding a model; they can skip that for now ("Not now" or similar) and do it in step 8.
+
+On Android 11 or for chat, web and files only, go to step 8 after opening the app. The helper is only needed for phone app control; "Phone control" does not need to be ready in those cases.
+
+For phone app control, Mika's built-in helper starts using Android debugging. Keep the user's chosen method; if they have not chosen, explain the two options:
+
+- **A. Pair wireless debugging (recommended, set up once)**: pair on the phone. With the required permissions retained and wireless debugging and network conditions met, it can recover after a reboot without a computer.
+- **B. Start over USB**: run once with the cable connected, without pairing. Run it again after each phone reboot unless A can already recover automatically.
+
+You can use B first, then configure A for recovery. This pairing starts Mika's phone helper; it does not pair the computer for wireless ADB or enable computer access. Computer access is covered in step 10.
 
 ### A. Pair wireless debugging
 
@@ -203,8 +209,8 @@ adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/usb-start.sh
 ```
 
 - If it says the file does not exist: open Mika with the command above, wait a few seconds and try again. If it is still missing, the Mika version on the phone may not have this feature yet; use A instead.
-- Once it succeeds, the cable can be unplugged; the helper keeps running.
-- After a phone restart the helper stops, and this command has to be run again from the computer; not needed if A is done too.
+- After unplugging, check the helper status on the phone. If phone control becomes unavailable, reconnect and run this command again, or recover through an already-paired option A.
+- After a phone reboot, run this command again from the computer unless option A successfully restores the helper.
 
 ### Check that it is running
 
@@ -223,19 +229,26 @@ adb shell dumpsys package com.wangzan101.mika | grep versionName
 adb shell settings get secure enabled_accessibility_services
 ```
 
-Success: the first shows the version just installed; the second contains Mika's component.
+Success: the first shows the currently installed version. If step 5 was performed, the second should contain Mika's component; it is not required when phone control setup was skipped.
 
-Then suggest a harmless first task for the user to send in Mika, for example:
+If task execution needs to be verified, suggest a simple task for the user to send in Mika themselves. With phone control configured, they can try:
 
 ```
 Open Settings and tell me the Android version
 ```
 
-## Step 10 (optional): Connect your AI tool to Mika (MCP over USB)
+For chat, web and files only, start with an ordinary question. If no task was run, report "Installation and setup checked; task execution unverified."
 
-Do this step only if the user wants AI tools on the computer (you included) to hand tasks to Mika. Ask first. Mika then works as an MCP server that listens on the phone itself only; the computer reaches it over the USB cable through adb port forwarding. Nothing needs to be tapped on the phone. Details: [Computer access (MCP)](mcp.en.md).
+## Step 10 (optional): Use Mika from the computer (CLI + Skill or MCP)
 
-1. Turn it on. This also starts the phone helper from step 7 if it isn't running:
+Do this only when the user requests computer access. **Normally choose CLI + Skill or MCP; do not set up both by default.** Keep the entry point and user/project scope the user already specified; otherwise use the [installation guide](computer-install.en.md) to establish the choice.
+
+- **CLI + Skill**: use the Skill installation section; no prior pipx or global CLI installation is needed. Complete its connection checks, then skip the MCP steps below. For terminal/script use alone, install just the CLI.
+- **MCP**: continue with the USB steps below; no CLI or Skill installation is needed. Access uses ADB forwarding; other connection methods are in the [MCP guide](mcp.en.md).
+
+Keep the phone selected in step 1 for all ADB operations: pass the same `--device SERIAL` to CLI / Skill commands and use `adb -s <serial> ...` below. Submit test tasks only when the user requested task verification.
+
+1. Turn it on. This also attempts to start the phone helper from step 7 when needed:
 
    ```
    adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
@@ -265,9 +278,9 @@ Do this step only if the user wants AI tools on the computer (you included) to h
      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
    ```
 
-   Success: a JSON reply whose `result` has `serverInfo`.
+   Success: a JSON reply whose `result` has `serverInfo`. This verifies service reachability, authentication and the MCP handshake, not client configuration loading or model task success.
 
-5. The MCP client config: a Streamable HTTP (often called "http") server with URL `http://127.0.0.1:8765/mcp` and the header `Authorization: Bearer <token>`. Most clients take something like:
+5. The MCP client config: a Streamable HTTP (often called "http") server with URL `http://127.0.0.1:8765/mcp` and the header `Authorization: Bearer <token>`. This is a common JSON example; use the format required by the selected client:
 
    ```json
    {
@@ -281,7 +294,7 @@ Do this step only if the user wants AI tools on the computer (you included) to h
    }
    ```
 
-   If the user wants it, add Mika to **your own** MCP configuration in the format your tool uses. Don't change any other entry. Then tell the user to restart you or reload your MCP configuration if your tool needs that. Don't show the token in the chat unless the user asks for it.
+   Add Mika to the user's selected client and configuration scope, preserving other entries. Use your own MCP configuration only when the user chose the current assistant. If a restart or reload is needed, tell the user, then confirm that the client discovers Mika's tools. If this cannot be checked, report "Client loading unverified." Don't show the token in the chat unless the user asks for it.
 
 Tell the user:
 
@@ -300,12 +313,12 @@ Tell the user:
 | The phone helper is not running after a restart | With A: connect to Wi-Fi and wait a moment; Mika recovers by itself. If not, tap Pair again in Settings › Phone control. With only B: run the command from step 7 B again from the computer, or set up A. |
 | GitHub cannot be reached | Ask the user to open [Releases](https://github.com/wangzan101/Mika/releases/latest) in a browser and download the APK by hand, then run `adb install -r <path to the APK>`. |
 | Wireless debugging won't turn on | The phone must be on Wi-Fi, and the user must allow wireless debugging on this network in the prompt. If it still won't, use B. |
-| The AI tool can't reach Mika over USB (step 10) | Run `adb forward tcp:8765 tcp:8765` again (needed after every replug). After a phone restart, run the step 10 command that turns it on again and update the token. |
-| The forward fails with `cannot bind`, or the reply isn't from Mika (step 10) | Port 8765 is taken on the computer. Forward from another free port, e.g. `adb forward tcp:18765 tcp:8765`, and use `http://127.0.0.1:18765/mcp` in the config; nothing changes on the phone. |
+| The MCP client can't reach Mika over USB (step 10) | Run `adb forward tcp:8765 tcp:8765` again (needed after every replug). After a phone restart, run the step 10 command that turns it on again and update the token. |
+| The manual MCP forward fails with `cannot bind`, or the reply isn't from Mika (step 10) | Port 8765 is taken on the computer. Forward from another free port, e.g. `adb forward tcp:18765 tcp:8765`, and use `http://127.0.0.1:18765/mcp` in the config; nothing changes on the phone. |
 
 ## Finally: a short summary for the user
 
 When everything is done, tell the user in their language:
 
-- **What was done**: which version was installed; whether notifications, accessibility and the battery allowlist are set; how the phone helper was started and whether it is ready. Say honestly if a step failed or was skipped.
-- **What the user still needs to do**: add a model in Settings › Model (if not done yet); pair wireless debugging (if they chose A but haven't finished); if only B was used, remind them to run that command again from the computer after a phone restart; then send a simple task to try it out. If step 10 was done: whether Mika was added to your MCP configuration, and that `adb forward` must be run again after replugging the cable, and the step 10 command after a phone restart.
+- **What was done**: the current APK version; the chosen computer access method and components actually installed; CLI/Skill source tag, location and scope, or the target MCP client. Report installation, connectivity, Skill/MCP tool discovery and real task execution separately. Report notifications, accessibility, battery settings and the helper according to the required scope, identifying skipped or unverified steps.
+- **What the user still needs to do**: configure a model on the phone if needed; complete pairing if phone control and option A were chosen; with B only, restart the helper after a phone reboot. For task verification, have the user send a simple task or test within their existing authorization. If step 10 was performed, link the CLI/Skill [maintenance guide](computer-install.en.md) and explain that ADB access needs `connect` after reboot. For MCP, report whether the client loaded the tools and explain USB forwarding after replugging and token renewal after reboot.

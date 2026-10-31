@@ -5,7 +5,7 @@
 <a href="https://github.com/wangzan101/Mika/stargazers"><img src="https://img.shields.io/github/stars/wangzan101/Mika?style=flat&logo=github&label=Star&color=1f6feb" alt="stars" /></a>
 <a href="https://github.com/wangzan101/Mika/releases"><img src="https://img.shields.io/github/downloads/wangzan101/Mika/total?label=downloads&color=2ea043" alt="downloads" /></a>
 <a href="https://github.com/wangzan101/Mika/releases/latest"><img src="https://img.shields.io/github/v/release/wangzan101/Mika?include_prereleases&label=version" alt="version" /></a>
-<img src="https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white" alt="android" />
+<img src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" alt="android" />
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-lightgrey" alt="license" /></a>
 <a href="https://x.com/wangzan101"><img src="https://img.shields.io/badge/X-%40wangzan101-000000?logo=x&logoColor=white" alt="X @wangzan101" /></a>
 
@@ -16,7 +16,7 @@ It works on a hidden background screen, so you can keep using your phone.
 
 <h3><a href="https://github.com/wangzan101/Mika/releases/latest">⬇ Download Mika (Android APK)</a></h3>
 
-[Install](#install) · [Quick start](#quick-start) · [What it can do](#what-it-can-do) · [FAQ](#faq) · [Contributing](#contributing)
+[Install](#install) · [Computer CLI / Skill](docs/computer-install.en.md) · [Quick start](#quick-start) · [What it can do](#what-it-can-do) · [FAQ](#faq) · [Contributing](#contributing)
 
 </div>
 
@@ -25,7 +25,7 @@ It works on a hidden background screen, so you can keep using your phone.
 **Option 1: on the phone**
 
 1. Download the latest APK from [Releases](https://github.com/wangzan101/Mika/releases/latest) and install it.
-2. Open the "Set up phone control" (设置手机操作) wizard in Mika's Settings and pair wireless debugging once ([setup guide](docs/setup-guide.en.md)).
+2. For phone app control, open the "Set up phone control" (设置手机操作) wizard in Mika's Settings and pair wireless debugging once ([setup guide](docs/setup-guide.en.md)). Skip this for chat, web and files only.
 3. In "Models" (模型) in Settings, add a provider and enter your API key, or sign in with ChatGPT.
 
 Details for each step are in [Quick start](#quick-start) below.
@@ -40,16 +40,26 @@ Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.m
 
 It checks the phone, downloads and installs Mika, turns on the permissions it needs, and stops to tell you whenever something needs a tap on the phone. You enter your API key in Mika yourself; it never goes through the agent.
 
-**After installing: let AI tools on your computer use Mika (MCP)**
+**After installing: use Mika from your computer (CLI + Skill or MCP)**
 
-With the phone connected by USB, run on the computer:
+**Normally choose either CLI + Skill or MCP; you do not need to set up both.** Both require the phone APK. You can use both if you need to connect different clients.
+
+**CLI + Skill** suits computer agents that support Skills and can run commands, such as Codex or Claude Code. The Skill includes its own CLI script, so you do not need a separate global CLI installation or MCP configuration. For terminal or script use alone, install just the CLI. See the [computer CLI / Skill guide](docs/computer-install.en.md) for installation, updates and removal.
+
+**Using an MCP client: quick USB connection**
+
+Install adb on the computer, open Mika at least once on the phone, and authorize this computer for USB debugging. Connect the USB cable, then run on the computer:
 
 ```
 adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
 adb forward tcp:8765 tcp:8765
 ```
 
-The first command turns on Mika's computer access and prints the connection info (URL `http://127.0.0.1:8765/mcp` and a token). Add them to your AI tool's MCP config, and it can hand Mika tasks, check progress and get results. No tapping on the phone; USB only and token-protected, not reachable over Wi-Fi; confirmations such as payments can only be approved on the phone. With option 2, the AI agent can set this up for you. See the [computer access guide](docs/mcp.en.md).
+The first command turns on USB computer access and prints the connection URL and token. Add a Streamable HTTP MCP server to your AI tool, using `http://127.0.0.1:8765/mcp` as the URL and `Authorization: Bearer <token>` as the request header. Once configured, it can hand Mika tasks, check progress and get results.
+
+USB access uses ADB forwarding and token authentication. Direct Wi-Fi or private-network access must be enabled separately on the phone; see the [computer access guide](docs/mcp.en.md). Confirmations such as payments still have to be handled on the phone.
+
+With option 2, if you also request computer access, the AI agent will configure the access method you choose.
 
 > **Language**
 >
@@ -169,9 +179,9 @@ Apps and websites that already have usage knowledge (names as they appear in the
 
 ### AI tools on your computer can use it (CLI / MCP)
 
-With the phone connected to a computer, AI tools there can hand Mika tasks over MCP and get the results back. One command turns it on; USB only and token-protected. A LAN option is in Settings, off by default. See the [computer access guide](docs/mcp.en.md).
+Computer AI tools can use **CLI + Skill or MCP** to hand Mika tasks, check progress and get results; normally choose one. Both use the same phone task service. For terminal or script use alone, you can install just the CLI.
 
-You can also install the [computer CLI and Agent Skill](docs/cli.en.md) and use `mika connect`, `mika task run` and `mika task wait`. CLI and MCP are peer entry points into the same phone task service; the CLI requires no MCP configuration. An APK containing task API v1 is required.
+For CLI / Skill, see the [installation and maintenance guide](docs/computer-install.en.md); for MCP, see the [computer access guide](docs/mcp.en.md). Connection options include quick USB access and direct Wi-Fi / private-network access, which must be enabled separately on the phone.
 
 ## Quick start
 
@@ -183,13 +193,15 @@ You can also install the [computer CLI and Agent Skill](docs/cli.en.md) and use 
 | Phone app control | Android 12 or later; background work may affect main-screen focus on Android 12–13 |
 | Recommended | Android 14 or later: the background screen has its own focus, so it does not interfere with your typing on the main screen; running tasks from different conversations at the same time also needs it |
 | Linux sandbox | arm64 devices only; on other devices the app installs normally and the sandbox shows "not supported on this device" |
-| Model | An API key for an LLM that supports tool calling |
+| Model | A model that supports tool calling, configured through a provider API, a local service or ChatGPT sign-in; see [Add a model](#4-add-a-model) |
 
 ### 1. Download and install
 
 Download the latest APK from [Releases](https://github.com/wangzan101/Mika/releases/latest) and install it.
 
 ### 2. Accessibility (you can skip it for now)
+
+Steps 2 and 3 are for phone app control (Android 12+). For chat, web and files only, go straight to step 4 to add a model.
 
 Mika uses accessibility to read the UI and tap. You don't need to turn it on by hand: once pairing succeeds in the next step, Mika turns it on by itself. For apps installed from GitHub rather than an app store, Android often blocks turning accessibility on manually ("Restricted setting"), and letting Mika do it avoids that. When the wizard reaches this step, just choose Skip.
 
@@ -202,8 +214,6 @@ First time, stuck on a step, or not sure where the pairing code goes? See the [p
 Why this step: Mika has a built-in phone helper that launches and operates apps on the background screen, and it uses Android's own wireless debugging to start that helper. Everything happens on the phone; no computer or cable needed. After pairing, if the system turns wireless debugging off (Android does this when you change Wi-Fi or reboot), Mika turns it back on by itself, with your permission.
 
 If you have a computer and a USB cable at hand, you can skip pairing: open Mika once, then with the cable plugged in run `adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/usb-start.sh` on the computer to start the phone helper; this has to be run again after every phone restart. An AI agent on your computer can do this for you; see [Installing Mika with an AI agent](docs/install-with-agent.en.md).
-
-If you only want web browsing, files and chat, you can skip this step for now.
 
 ### 4. Add a model
 

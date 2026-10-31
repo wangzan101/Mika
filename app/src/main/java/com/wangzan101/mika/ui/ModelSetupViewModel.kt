@@ -9,6 +9,7 @@ import com.wangzan101.mika.core.model.ModelEndpoint
 import com.wangzan101.mika.core.model.ModelError
 import com.wangzan101.mika.core.model.ModelListResult
 import com.wangzan101.mika.core.model.ModelRole
+import com.wangzan101.mika.core.model.ModelContextSettings
 import com.wangzan101.mika.settings.LocalHosts
 import com.wangzan101.mika.settings.ModelOption
 import com.wangzan101.mika.settings.ModelOptions
@@ -553,6 +554,12 @@ class ModelSetupViewModel(
     fun setReasoningEffort(role: ModelRole, effort: String?) {
         store.setReasoningEffort(role, effort)
         sync()
+    }
+
+    fun setModelContext(providerId: String, model: String, settings: ModelContextSettings): Boolean {
+        val saved = store.setModelContextSettings(providerId, model, settings)
+        sync()
+        return saved
     }
 
     /** 把 [providerId] 下的 [model] 用作 [role](选择页和「用作」面板都走这里):没有配置的当场建一条。 */

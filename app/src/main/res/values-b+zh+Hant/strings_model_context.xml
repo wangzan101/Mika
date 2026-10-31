@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="model_context_title">上下文與壓縮</string>
+    <string name="model_context_summary">上下文與壓縮：%1$s · %2$s</string>
+    <string name="model_context_auto">自動</string>
+    <string name="model_context_auto_value">留空自動：%1$d tokens</string>
+    <string name="model_context_note">同一服務商的這個模型在所有用途間共用，從下次任務開始使用。調大本機預算不會擴大服務端的實際上限。</string>
+    <string name="model_context_window">上下文視窗（tokens）</string>
+    <string name="model_context_threshold">壓縮閾值</string>
+    <string name="model_context_percent">百分比</string>
+    <string name="model_context_tokens">絕對 token 數</string>
+    <string name="model_context_percent_value">百分比（1–99）</string>
+    <string name="model_context_token_value">觸發閾值（tokens）</string>
+    <string name="model_context_token_summary">%1$d tokens</string>
+    <string name="model_context_trigger_note">達到此輸入預算時嘗試壓縮；必須保留的內容可能推遲後續壓縮。</string>
+    <string name="model_context_effective">視窗：%1$d tokens · 觸發閾值約 %2$d tokens</string>
+    <string name="model_context_reset">還原預設值</string>
+    <string name="model_context_save_failed">模型資訊已變更，請關閉後重新開啟。</string>
+    <string name="model_context_error_integer">請輸入 1 到 2147483647 之間的整數。</string>
+    <string name="model_context_error_percent">請輸入 1 到 99 之間的整數百分比。</string>
+    <string name="model_context_error_window">絕對閾值必須小於有效的上下文視窗。</string>
+</resources>

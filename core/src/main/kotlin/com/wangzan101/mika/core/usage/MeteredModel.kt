@@ -42,6 +42,7 @@ fun ChatModel.metered(source: UsageSource, sink: UsageSink): ChatModel =
 
 private open class MeteredModel(private val inner: ChatModel, protected val source: UsageSource, protected val sink: UsageSink) : ChatModel {
     override val capabilities get() = inner.capabilities
+    override val compactionThreshold get() = inner.compactionThreshold
     override val name: String get() = inner.name
 
     override suspend fun complete(system: String, messages: List<Message>, tools: List<ToolSpec>): ModelReply =

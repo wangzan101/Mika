@@ -6,6 +6,8 @@ const prelude = fs.readFileSync(process.argv[2], 'utf8');
 const cases = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
 const write = process.stdout.write.bind(process.stdout);
 const stringify = JSON.stringify;
+// 浏览器原生的查找方法把选择器变成字符串时不经页面里的全局 String,假 DOM 也先存一份
+const asString = String;
 
 const log = { mutations: 0, clicks: 0, navigations: 0, requests: [] };
 
@@ -22,10 +24,10 @@ class Node extends EventTarget {
   _all() { const out = []; for (const k of this._kids) { out.push(k); out.push(...k._all()); } return out; }
   _match(sel) { return this._all().filter((e) => e._is(sel)); }
 }
-// 和浏览器一样,查找方法在 Element、Document 上,不在 Node 上
+// 和浏览器一样,查找方法在 Element、Document 上,不在 Node 上;选择器参数和浏览器一样先变成字符串
 const finders = {
-  querySelectorAll(sel) { return new NodeList(this._match(sel)); },
-  querySelector(sel) { return this._match(sel)[0] || null; },
+  querySelectorAll(sel) { return new NodeList(this._match(asString(sel))); },
+  querySelector(sel) { return this._match(asString(sel))[0] || null; },
 };
 class Element extends Node {
   constructor(tag, attrs, text) { super(); this.tagName = tag.toUpperCase(); Object.assign(this._attrs, attrs || {}); if (text != null) this._text = text; }
@@ -60,13 +62,26 @@ class Element extends Node {
   }
 }
 Object.assign(Element.prototype, finders);
-class HTMLElement extends Element {}
+class HTMLElement extends Element {
+  // 不排版时浏览器给的就是子孙的文字
+  get innerText() { return this.textContent; }
+  get outerText() { return this.textContent; }
+}
 class HTMLInputElement extends HTMLElement {
   get type() { return this._attrs.type || 'text'; }
   get value() { return this._value != null ? this._value : (this._attrs.value || ''); }
   set value(v) { log.mutations++; this._value = String(v); }
+  get name() { return this._attrs.name || ''; }
+  get valueAsNumber() { return this.type === 'number' ? Number(this.value) : NaN; }
+  get selectionStart() { return this.value.length; }
+  get selectionEnd() { return this.value.length; }
 }
-class HTMLTextAreaElement extends HTMLElement {}
+class HTMLTextAreaElement extends HTMLElement {
+  get value() { return this._value != null ? this._value : this.textContent; }
+  set value(v) { log.mutations++; this._value = String(v); }
+  get name() { return this._attrs.name || ''; }
+  get textLength() { return this.value.length; }
+}
 class Attr {}
 class NodeList {
   constructor(a) { a.forEach((x, i) => { this[i] = x; }); this.length = a.length; }
@@ -96,6 +111,9 @@ const form = add(body, new HTMLElement('form'));
 add(form, new HTMLInputElement('input', { type: 'password', value: 'hunter2' }));
 add(form, new HTMLInputElement('input', { type: 'hidden', name: 'csrf', value: 'tok-123' }));
 add(form, new HTMLInputElement('input', { type: 'text', name: 'q', value: 'shoes' }));
+add(form, new HTMLInputElement('input', { type: 'number', name: 'otp', autocomplete: 'one-time-code', value: '482913' }));
+add(form, new HTMLTextAreaElement('textarea', { name: 'code', autocomplete: 'one-time-code' }, 'otp-in-textarea'));
+add(form, new HTMLTextAreaElement('textarea', { name: 'note' }, 'leave at door'));
 
 class Location {
   constructor() { this.href = 'https://shop.test/list'; this.origin = 'https://shop.test'; }

@@ -20,8 +20,10 @@ const val READ_SLEEP_MAX_MS = 5_000
  *   (document、window、location、fetch、state、args、sleep、getComputedStyle、URL、URLSearchParams)。
  * - 给的页面对象都是包装:读属性照读(读到的对象再包一层),写、删、定义属性、改原型一律报 read_only;
  *   函数只有登记过的只读方法(查找、读属性、量位置、迭代)能调,别的(点、聚焦、提交、改 DOM、开窗、跳转)都报 read_only。
- *   原生函数只拿到原件,模型拿到的永远是包装;模型能碰到的内置对象先冻住,改不了它们来截原件。
- * - 密码、隐藏字段、验证码、银行卡一类输入框的值读出来是 `***`,按 value 属性选元素不行(能逐位猜出值)。
+ *   原生函数只拿到原件,模型拿到的永远是包装;模型能碰到的内置对象先冻住、全局名设成只读,改不了它们来截原件或换掉检查要用的函数。
+ * - 密码、隐藏字段、验证码、银行卡一类输入框的值读出来是 `***`,输入框自己接口上只有 [SECRET_FIELD_PROPS] 能照读;
+ *   按 value 属性选元素不行(能逐位猜出值),选择器先照 CSS 的规矩还原再判断([SelectorPolicy])。
+ *   选择器、属性名参数先变成字符串、只变一次:检查的就是交给浏览器的那一个。
  * - 读脚本不碰网络:fetch 调用就报 blocked_network([NETWORK_MESSAGE]);XMLHttpRequest、sendBeacon、WebSocket、EventSource、
  *   new Image() 一类经包装调用、构造也报 blocked_network;建元素、改 src/href 本来就是改页面(read_only)。只能读页面已经有的东西。
  * - state 是这个标签的读取世界里一直留着的对象:同一页面上前后几次读脚本共用;页面换了文档就没了。
@@ -83,7 +85,18 @@ object ReadScriptProtocol {
     /** 读不得的属性:Cookie、本地存储一类(登录凭据常在里面)。 */
     val DENIED_PROPS = listOf("cookie", "localStorage", "sessionStorage", "indexedDB", "caches", "cookieStore", "credentials", "serviceWorker", "clipboard", "openDatabase")
 
-    /** 先冻住再交给模型的内置对象(连同原型):模型改不了它们,也就截不到包装里传的原件。 */
+    /**
+     * 秘密输入框(密码框、隐藏字段、验证码一类)自己接口(HTMLInputElement、HTMLTextAreaElement)上能照读的属性:页面定好的设定,不随填的内容变。
+     * 接口上别的属性读出来都是 `***`:valueAsNumber、valueAsDate、selectionStart / selectionEnd、textLength、validity、validationMessage,
+     * 以及浏览器以后新加的;方法照旧经包装,能不能调由 [READ_METHODS] 管。value、textContent 一类另按有没有值给 `***` 或空。
+     */
+    val SECRET_FIELD_PROPS = listOf(
+        "type", "name", "form", "labels", "list", "placeholder", "autocomplete", "disabled", "readOnly", "required", "willValidate",
+        "maxLength", "minLength", "size", "pattern", "min", "max", "step", "multiple", "dirName", "cols", "rows", "wrap",
+        "formAction", "formEnctype", "formMethod", "formNoValidate", "formTarget",
+    )
+
+    /** 先冻住再交给模型的内置对象(连同原型),全局名也设成只读:模型改不了它们,也就截不到包装里传的原件、换不掉检查要用的函数。 */
     private val FROZEN = PageScriptProtocol.ALLOWED_GLOBALS.filter { it !in setOf("undefined", "NaN", "Infinity") } + listOf("URL", "URLSearchParams")
 
     /** 模型代码第 1 行前面,编译后的源码还有几行(`(async function anonymous(…`、`) {`、`'use strict';`、`return (` 或空行)。 */
@@ -123,7 +136,8 @@ object ReadScriptProtocol {
 
   // 冻住模型碰得到的内置对象
   const ice = (x) => { if (x && (typeof x === 'object' || typeof x === 'function')) { try { freeze(x); } catch (e) {} } };
-  for (const n of ${js(FROZEN)}) { const v = G[n]; ice(v); if (v && typeof v === 'function') ice(v.prototype); }
+  // 全局名也设成只读:不然模型代码改写 String 就能让下面的检查失效,之后在这个世界里跑的读脚本也一样
+  for (const n of ${js(FROZEN)}) { const v = G[n]; ice(v); if (v && typeof v === 'function') ice(v.prototype); if (v !== undefined) fixed(G, n, v); }
   for (const f of fnKinds) ice(getProto(f));
   const arrayIter = getProto([][Symbol.iterator]());
   for (const p of [arrayIter, getProto(arrayIter), getProto(new Map().entries()), getProto(new Set().values()), getProto(''[Symbol.iterator]())]) ice(p);
@@ -151,8 +165,7 @@ object ReadScriptProtocol {
   }
   const ATTRS = new WeakMap();
   for (const [k, i] of [['getAttribute', 0], ['getAttributeNS', 1]]) { const d = Elem && getDesc(Elem.prototype, k); if (d && typeof d.value === 'function') ATTRS.set(d.value, i); }
-  const BY_VALUE = /\[\s*value\b/i;
-  const DENIED = new Set(${js(DENIED_PROPS)});
+${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
 
   // 不读值的输入框:密码框、隐藏字段,autocomplete 标着密码、银行卡、一次性验证码的
   const SECRET_AC = new Set(${js(PageScriptProtocol.SECRET_AUTOCOMPLETE)});
@@ -176,7 +189,10 @@ object ReadScriptProtocol {
   } catch (e) {}
   markIn(doc);
   const secret = (el) => secretNow(el) || (!!el && typeof el === 'object' && wasSecret.has(el));
-  const SECRET_TEXT = new Set(['value', 'defaultValue', 'textContent', 'innerText', 'innerHTML', 'nodeValue']);
+  const SECRET_TEXT = new Set(['value', 'defaultValue', 'textContent', 'innerText', 'outerText', 'innerHTML', 'nodeValue']);
+  // 秘密输入框自己接口上的属性:只有页面定好、不随内容变的照读,别的(含浏览器以后新加的读值接口)都是 ***
+  const FIELD_SAFE = new Set(${js(SECRET_FIELD_PROPS)});
+  const fieldApi = (el, k) => !!((Input && el instanceof Input && getDesc(Input.prototype, k)) || (Area && el instanceof Area && getDesc(Area.prototype, k)));
   // HTML 里带着秘密输入框的 value 时,改在一份脱离页面的副本上打码再取
   const html = (el, k) => {
     let hit = secret(el);
@@ -193,6 +209,7 @@ object ReadScriptProtocol {
       if (DENIED.has(k)) deny('reading ' + k);
       if (Elem && v instanceof Elem && (k === 'outerHTML' || k === 'innerHTML')) return html(v, k);
       if (SECRET_TEXT.has(k) && secret(v)) { const x = rget(v, k, v); return x ? MASK : x; }
+      if (!FIELD_SAFE.has(k) && fieldApi(v, k) && secret(v)) { const x = rget(v, k, v); return typeof x === 'function' ? x : MASK; }
       if (AttrNode && v instanceof AttrNode && SECRET_TEXT.has(k) && String(v.name).toLowerCase() === 'value' && v.ownerElement && secret(v.ownerElement)) {
         const x = rget(v, k, v); return x ? MASK : x;
       }
@@ -234,8 +251,13 @@ object ReadScriptProtocol {
     const t = toNative(self);
     const args = [];
     for (const x of xs) args.push(toNative(x));
-    if (SELECTORS.has(f) && typeof args[0] === 'string' && BY_VALUE.test(args[0])) throw fail('invalid_selector', 'selecting by the value attribute is not allowed; read the value property instead');
+    // 选择器、属性名先变成字符串、只变一次:对象的 toString 每次可以给不一样的,检查的必须就是交给浏览器的那一个
+    if (SELECTORS.has(f) && args.length) {
+      args[0] = String(args[0]);
+      if (selectsByValue(args[0])) throw fail('invalid_selector', 'selecting by the value attribute is not allowed; read the value property instead');
+    }
     const at = ATTRS.get(f);
+    if (at !== undefined && at < args.length) args[at] = String(args[at]);
     if (at !== undefined && secret(t) && String(args[at]).toLowerCase() === 'value') { const x = apply(f, t, args); return x ? MASK : x; }
     return wrap(apply(f, t, args));
   };

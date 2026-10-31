@@ -231,6 +231,20 @@ class BrowserScriptTest {
         assertEquals(listOf("queryAll", "query", "query", "text"), r["actions"]!!.jsonArray.map { it.jsonObject.s("op") })
     }
 
+    @Test fun escapedValueSelectorsAreRefused() = runTest {
+        val got = mutableListOf<JsonObject>()
+        val web = ScriptWebPort { b ->
+            for (sel in listOf("input[v\\61 lue^=\"c\"]", "input[*|value^=\"c\"]", "input[/**/value^=\"c\"]", "input:is(url(/*),[value^=\"c\"])", "input[data-value]"))
+                got += b.call("queryAll", buildJsonObject { put("selector", sel) })
+            ScriptRun.Done(null)
+        }
+        val d = dispatcher(web)
+        d.script(sub = passthrough(d))
+        // 转义、命名空间、注释、url( 的写法照样认出来;只是名字里带 value 的属性照常读
+        assertEquals(listOf("invalid_selector", "invalid_selector", "invalid_selector", "invalid_selector", null), got.map { it["error"]?.jsonPrimitive?.content })
+        assertEquals("all", got[4]["read"]!!.jsonObject.s("mode"))
+    }
+
     @Test fun pageReadsShareTheReadLimit() = runTest {
         val web = ScriptWebPort { b -> repeat(SCRIPT_MAX_READS + 1) { b.call("text", buildJsonObject { put("selector", "body") }) }; ScriptRun.Done(null) }
         assertEquals("limit_exceeded", dispatcher(web).script().s("error"))

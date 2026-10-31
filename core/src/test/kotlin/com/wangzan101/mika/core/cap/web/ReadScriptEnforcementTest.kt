@@ -30,7 +30,7 @@ class ReadScriptEnforcementTest {
 
         private fun case(name: String, code: String, args: JsonObject? = null) { cases[name] = code to args }
 
-        private fun node(): String? = listOf("node", "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node").firstOrNull { n ->
+        internal fun node(): String? = listOf("node", "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node").firstOrNull { n ->
             runCatching { ProcessBuilder(n, "--version").redirectErrorStream(true).start().let { it.waitFor(10, TimeUnit.SECONDS) && it.exitValue() == 0 } }.getOrDefault(false)
         }
 
@@ -60,6 +60,14 @@ class ReadScriptEnforcementTest {
             case("visibleValue", "document.querySelectorAll('input')[2].value")
             case("formHtml", "document.querySelector('form').outerHTML")
             case("byValue", "document.querySelector('input[value^=h]')")
+            for ((i, sel) in SelectorPolicyTest.BY_VALUE.withIndex()) case("byValue$i", "document.querySelector(args.s)", buildJsonObject { put("s", sel) })
+            for ((i, sel) in SelectorPolicyTest.NOT_BY_VALUE.withIndex()) case("notByValue$i", "document.querySelector(args.s)", buildJsonObject { put("s", sel) })
+            case("selectorObject", "document.querySelector({ toString: () => 'input[value^=h]' })")
+            case("selectorArray", "document.querySelector(['input[value^=h]'])")
+            case("selectorFlip", "let n = 0; return document.querySelectorAll({ toString: () => (n++ ? 'input[value^=h]' : 'li') }).length;")
+            case("attrFlip", "let n = 0; return document.querySelectorAll('input')[1].getAttribute({ toString: () => (n++ ? 'value' : 'x') });")
+            case("textareas", "const [code, note] = document.querySelectorAll('textarea'); return [code.value, code.textLength, code.outerText, code.innerText, code.name, note.value, note.textLength, note.outerText];")
+            case("fieldProps", "const xs = document.querySelectorAll('input'); return [xs[3].valueAsNumber, xs[0].selectionEnd, xs[0].type, xs[3].name, xs[0].tagName, xs[2].selectionEnd];")
             case("post", "await fetch('/api', { method: 'POST' })")
             case("body", "await fetch('/api', { body: 'x' })")
             case("crossOrigin", "await fetch('https://evil.test/api')")
@@ -78,6 +86,8 @@ class ReadScriptEnforcementTest {
             case("hiddenGlobals", "[typeof process, typeof globalThis, typeof self, typeof setTimeout]")
             case("stringCode", "(() => {}).constructor('return 1')()")
             case("patchBuiltin", "WeakMap.prototype.get = () => 1; return 1;")
+            case("rebindGlobal", "String = () => 'x'; return document.querySelectorAll('input')[1].getAttribute('value');")
+            case("afterRebind", "[String(1), document.querySelectorAll('input')[1].getAttribute('value')]")
             case("big", "'x'.repeat(100)")
             case("syntax", "return (")
             case("errorLine", "const a = 1;\nnull.x;")
@@ -141,8 +151,23 @@ class ReadScriptEnforcementTest {
         assertEquals("\"***\"", ok("password"))
         assertEquals("\"***\"", ok("hiddenAttr"))
         val html = ok("formHtml")
-        assertTrue(html, "hunter2" !in html && "tok-123" !in html && "shoes" in html)
+        assertTrue(html, "hunter2" !in html && "tok-123" !in html && "482913" !in html && "otp-in-textarea" !in html && "shoes" in html && "leave at door" in html)
         blocked("byValue", "invalid_selector")
+        // 秘密输入框接口上不在白名单里的属性(能算出值或长度的)也是 ***;照读的只有页面定好的设定,别的元素照常
+        assertEquals("""["***","***","password","otp","INPUT",5]""", ok("fieldProps"))
+        assertEquals("""["***","***","***","***","code","leave at door",13,"leave at door"]""", ok("textareas"))
+    }
+
+    @Test fun valueSelectorsAreRefused() {
+        // 转义、命名空间、注释、url(、:has() 里的写法都拦(和 Kotlin 版用同一批);别的选择器照常交给页面
+        for (i in SelectorPolicyTest.BY_VALUE.indices) blocked("byValue$i", "invalid_selector")
+        for (i in SelectorPolicyTest.NOT_BY_VALUE.indices) assertTrue("notByValue$i: ${r("notByValue$i")}", r("notByValue$i").s("error") != "invalid_selector")
+        // 选择器、属性名不是字符串时只变一次字符串:检查的和交给页面的是同一个,toString 每次给不一样的也没用
+        blocked("selectorObject", "invalid_selector")
+        blocked("selectorArray", "invalid_selector")
+        // 检查时转一次、交给浏览器时再转一次的话,toString 第二次换成按 value 选的就过去了
+        assertEquals("2", ok("selectorFlip"))
+        assertEquals("null", ok("attrFlip"))
     }
 
     @Test fun noNetworkAtAll() {
@@ -167,6 +192,9 @@ class ReadScriptEnforcementTest {
         assertEquals("""["undefined","undefined","undefined","undefined"]""", ok("hiddenGlobals"))
         blocked("stringCode", "read_only")
         assertEquals("script_error", r("patchBuiltin").s("error"))
+        // 全局名改不了:改写 String 能让属性名的检查、秘密输入框的判断失效,之后的读脚本也一样
+        assertEquals("script_error", r("rebindGlobal").s("error"))
+        assertEquals("""["1","***"]""", ok("afterRebind"))
     }
 
     @Test fun resultsAreCappedAndErrorsLocated() {

@@ -29,7 +29,6 @@ private const val MAX_LOG_CHARS = 500
 private const val READ_DEFAULT_CHARS = 4_000
 private val PAGE_READS = setOf("query", "queryAll", "text")
 private val QUERY_FIELDS = setOf("text", "attrs", "value", "box", "count")
-private val BY_VALUE = Regex("""\[\s*value\b""", RegexOption.IGNORE_CASE)
 private const val SELECTOR_MAX_CHARS = 500
 const val QUERY_MAX_ITEMS = 200
 private const val QUERY_DEFAULT_ITEMS = 50
@@ -164,11 +163,11 @@ internal class ScriptCalls(private val callId: String, private val sub: SubActio
 
     /**
      * mika.query / queryAll / text:校验、计数,交回 `{ok, read:{mode, selector, fields, limit, maxChars}}`,由端口在读取世界里读。
-     * 按 value 属性选元素不行(能一位一位猜出隐藏字段的值)。
+     * 按 value 属性选元素不行(能一位一位猜出隐藏字段的值),转义、注释、命名空间的写法也认([SelectorPolicy])。
      */
     private fun pageRead(op: String, args: JsonObject): JsonObject {
         val selector = str(args, "selector")?.takeIf { it.length <= SELECTOR_MAX_CHARS } ?: return bad("mika.$op needs a CSS selector (at most $SELECTOR_MAX_CHARS characters)")
-        if (BY_VALUE.containsMatchIn(selector)) return fail("invalid_selector", "selecting by the value attribute is not allowed; read values with fields: ['value']")
+        if (SelectorPolicy.selectsByValue(selector)) return fail("invalid_selector", "selecting by the value attribute is not allowed; read values with fields: ['value']")
         val fields = when (val f = args["fields"]) {
             null, is JsonNull -> listOf("text")
             is JsonPrimitive -> listOfNotNull(f.takeIf { it.isString }?.content)

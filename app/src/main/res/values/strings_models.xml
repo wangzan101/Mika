@@ -109,4 +109,32 @@
     <string name="models_unverified">Not tested; tasks may fail</string>
     <string name="models_unverified_note">This provider has no model list, and %1$s (in use) hasn’t passed a test, so tasks may fail. Tap “Test again” to make one test call with it.</string>
     <string name="models_retest">Test again</string>
+
+    <string name="account_signin_title">Sign in with a subscription</string>
+    <string name="account_signin_xai_title">Use your Grok subscription</string>
+    <string name="account_signin_xai_body">Use your xAI / Grok subscription for requests in Mika. Requests go straight to the xAI Responses API and are not translated into another protocol. This sign-in reuses the public client identity of the official Grok CLI, not an app registered by Mika. xAI may not support this, and the account can be restricted. Tokens stay encrypted on this phone and are never written to logs.</string>
+    <string name="account_signin_xai_continue">Continue with Grok</string>
+    <string name="account_signin_copilot_title">Use GitHub Copilot</string>
+    <string name="account_signin_copilot_body">Use your GitHub Copilot subscription for requests in Mika. Requests go straight to the Copilot Chat Completions API and are not translated into another protocol. This sign-in reuses the public client identity of the GitHub Copilot extension in VS Code, not an app registered by Mika, and sends the editor integration headers that API expects. GitHub may not support this, and the account can be restricted. Tokens stay encrypted on this phone and are never written to logs.</string>
+    <string name="account_signin_copilot_continue">Continue with Copilot</string>
+    <string name="account_signin_code">Open the verification page and enter this code: %1$s</string>
+    <string name="account_signin_copy">Copy</string>
+    <string name="account_signin_copied">Copied</string>
+    <string name="account_signin_open">Open verification page</string>
+    <string name="account_signin_waiting">Waiting for you to finish signing in in the browser.</string>
+    <string name="account_signin_skip">Claude subscription sign-in and Google account (Gemini) sign-in are not offered. Anthropic does not allow third-party apps to sign in with Claude.ai or to spend subscription usage on their own requests. Google does not allow third-party apps to reuse Gemini CLI sign-in against its backend. Use an API key for those two (the Anthropic and Gemini presets).</string>
+    <string name="account_signin_notif_title">Signing in to a subscription</string>
+    <string name="account_signin_notif_body">Waiting for you to finish signing in in the browser</string>
+    <string name="account_fail_denied">Sign-in was cancelled.</string>
+    <string name="account_fail_expired">The sign-in code expired. Please try again.</string>
+    <string name="account_fail_timed_out">Sign-in timed out. Please try again.</string>
+    <string name="account_fail_rejected">Sign-in was rejected (error: %1$s). Please try again.</string>
+    <string name="account_fail_no_sub">This account does not have a usable subscription. Grok needs an xAI subscription; Copilot needs GitHub Copilot.</string>
+    <string name="account_fail_network">Could not reach the sign-in service. Check the network and try again.</string>
+    <string name="account_fail_issuer">The sign-in address was not allowed, so nothing was sent.</string>
+    <string name="account_signed_in_note_xai">Using a Grok subscription. Usage is shared with other clients on this account. This sign-in reuses an official client identity; see the notice shown before you continue.</string>
+    <string name="account_signed_in_note_copilot">Using a GitHub Copilot subscription. Usage is shared with other clients on this account. This sign-in reuses an official client identity; see the notice shown before you continue.</string>
+    <string name="account_signed_out_note">Signed out on this phone. Disconnect the app in your xAI or GitHub settings if you also want the remote grant revoked. Model choices are kept.</string>
+    <string name="account_manage_xai">Open xAI account</string>
+    <string name="account_manage_copilot">Open Copilot settings</string>
 </resources>

@@ -1,6 +1,8 @@
 package com.wangzan101.mika.ui
 
 import com.wangzan101.mika.R
+import com.wangzan101.mika.core.oauth.AccountSignInException
+import com.wangzan101.mika.core.oauth.AccountSignInFailure
 import com.wangzan101.mika.i18n.tr
 import com.wangzan101.mika.i18n.trPlural
 import androidx.compose.ui.res.stringResource
@@ -300,6 +302,8 @@ fun ProviderDetailContent(ui: ModelSetupUi, p: Provider, actions: ProviderDetail
         GroupLabel(ModelsCopy.CONNECTION)
         if (p.kind == ProviderConfig.Kind.ChatGpt) {
             ChatGptConnection(ui, state, actions)
+        } else if (p.kind == ProviderConfig.Kind.Xai || p.kind == ProviderConfig.Kind.Copilot) {
+            AccountConnection(ui, p, state, actions)
         } else {
             GroupCard {
                 ListRow(null, ModelsCopy.STATUS, first = true) {
@@ -428,6 +432,46 @@ private fun ChatGptConnection(ui: ModelSetupUi, state: ListState?, actions: Prov
     FooterNote(if (signedIn) ModelsCopy.CHATGPT_PLAN_NOTE else ModelsCopy.CHATGPT_SIGNED_OUT_NOTE)
     if (ui.chatGptRevokeUnconfirmed) FooterNote(ModelsCopy.CHATGPT_REVOKE_UNCONFIRMED, color = c.warn)
     (ui.chatGptSignIn as? ListState.Failed)?.let { FooterNote(it.message, color = c.bad) }
+}
+
+/** xAI 或 Copilot 的连接:账号、退出或再登录、打开对方的账号页。退出只清这台手机上的令牌。 */
+@Composable
+private fun AccountConnection(ui: ModelSetupUi, p: Provider, state: ListState?, actions: ProviderDetailActions) {
+    val c = MikaTheme.colors
+    val account = if (p.kind == ProviderConfig.Kind.Copilot) ui.copilotAccount else ui.xaiAccount
+    val signedIn = account?.signedIn == true
+    val waiting = ui.accountSignIn.running && (
+        (p.kind == ProviderConfig.Kind.Xai && ui.accountSignIn.provider == AccountProvider.Xai) ||
+            (p.kind == ProviderConfig.Kind.Copilot && ui.accountSignIn.provider == AccountProvider.Copilot)
+        )
+    GroupCard {
+        ListRow(null, ModelsCopy.STATUS, first = true) {
+            when {
+                !signedIn -> RowValue(ModelsCopy.CHATGPT_SIGNED_OUT, ValueTone.Warn)
+                state == ListState.Running -> RowValue(ModelsCopy.LISTING)
+                state is ListState.Failed -> RowValue(ModelsCopy.LIST_FAILED, ValueTone.Bad)
+                else -> RowValue(ModelsCopy.CHATGPT_SIGNED_IN, ValueTone.Ok)
+            }
+        }
+        account?.label?.takeIf { it.isNotEmpty() }?.let { label -> ListRow(null, ModelsCopy.CHATGPT_ACCOUNT) { RowValue(label) } }
+        ListRow(null, ModelsCopy.accountManage(p.kind), titleColor = c.accent, onClick = actions.manageUsage) { RowChevron() }
+        if (signedIn) {
+            ListRow(null, ModelsCopy.CHATGPT_SIGN_OUT, titleColor = c.bad, onClick = actions.signOut)
+        } else {
+            val again = if (p.kind == ProviderConfig.Kind.Copilot) ModelsCopy.ACCOUNT_COPILOT_CONTINUE else ModelsCopy.ACCOUNT_XAI_CONTINUE
+            ListRow(null, if (waiting) ModelsCopy.ACCOUNT_WAITING else again, titleColor = c.accent, onClick = actions.signIn)
+        }
+    }
+    FooterNote(if (signedIn) ModelsCopy.accountSignedInNote(p.kind) else ModelsCopy.ACCOUNT_SIGNED_OUT_NOTE)
+    if (!signedIn && waiting && ui.accountSignIn.userCode.isNotBlank()) {
+        FooterNote(ModelsCopy.accountCode(ui.accountSignIn.userCode))
+    }
+    ui.accountSignIn.failure?.takeIf { ui.accountSignIn.provider == accountProviderOf(p.kind) }?.let { FooterNote(it, color = c.bad) }
+}
+
+private fun accountProviderOf(kind: ProviderConfig.Kind) = when (kind) {
+    ProviderConfig.Kind.Copilot -> AccountProvider.Copilot
+    else -> AccountProvider.Xai
 }
 
 /**
@@ -606,6 +650,46 @@ object ModelsCopy {
         SignInFailure.Network -> tr(R.string.chatgpt_fail_network)
     }
 
+    val ACCOUNT_TITLE: String get() = tr(R.string.account_signin_title)
+    val ACCOUNT_XAI_TITLE: String get() = tr(R.string.account_signin_xai_title)
+    val ACCOUNT_XAI_BODY: String get() = tr(R.string.account_signin_xai_body)
+    val ACCOUNT_XAI_CONTINUE: String get() = tr(R.string.account_signin_xai_continue)
+    val ACCOUNT_COPILOT_TITLE: String get() = tr(R.string.account_signin_copilot_title)
+    val ACCOUNT_COPILOT_BODY: String get() = tr(R.string.account_signin_copilot_body)
+    val ACCOUNT_COPILOT_CONTINUE: String get() = tr(R.string.account_signin_copilot_continue)
+    val ACCOUNT_COPY: String get() = tr(R.string.account_signin_copy)
+    val ACCOUNT_OPEN: String get() = tr(R.string.account_signin_open)
+    val ACCOUNT_WAITING: String get() = tr(R.string.account_signin_waiting)
+    val ACCOUNT_SKIP: String get() = tr(R.string.account_signin_skip)
+    val ACCOUNT_SIGNED_OUT_NOTE: String get() = tr(R.string.account_signed_out_note)
+
+    fun accountCode(code: String) = tr(R.string.account_signin_code, code)
+
+    fun accountFailure(e: AccountSignInException): String = when (e.reason) {
+        AccountSignInFailure.Denied -> tr(R.string.account_fail_denied)
+        AccountSignInFailure.Expired -> tr(R.string.account_fail_expired)
+        AccountSignInFailure.TimedOut -> tr(R.string.account_fail_timed_out)
+        AccountSignInFailure.Rejected -> tr(R.string.account_fail_rejected, e.code ?: "unknown")
+        AccountSignInFailure.NoSubscription -> tr(R.string.account_fail_no_sub)
+        AccountSignInFailure.Network -> tr(R.string.account_fail_network)
+        AccountSignInFailure.BadIssuer -> tr(R.string.account_fail_issuer)
+    }
+
+    fun accountSignedInNote(kind: ProviderConfig.Kind) = when (kind) {
+        ProviderConfig.Kind.Copilot -> tr(R.string.account_signed_in_note_copilot)
+        else -> tr(R.string.account_signed_in_note_xai)
+    }
+
+    fun accountManage(kind: ProviderConfig.Kind) = when (kind) {
+        ProviderConfig.Kind.Copilot -> tr(R.string.account_manage_copilot)
+        else -> tr(R.string.account_manage_xai)
+    }
+
+    fun accountManageUrl(kind: ProviderConfig.Kind) = when (kind) {
+        ProviderConfig.Kind.Copilot -> "https://github.com/settings/copilot"
+        else -> "https://accounts.x.ai"
+    }
+
     /** 用途卡上的一行:[title] 是模型名([isModel])、「用主模型」「不用」或「未设置」([unset]),[subtitle] 是补充说明。 */
     data class RoleLine(val title: String, val subtitle: String, val isModel: Boolean = false, val unset: Boolean = false)
 
@@ -682,6 +766,8 @@ object ModelsCopy {
         ProviderConfig.Kind.Gemini -> "Gemini"
         ProviderConfig.Kind.OpenAiResponses -> "OpenAI Responses"
         ProviderConfig.Kind.ChatGpt -> "ChatGPT"
+        ProviderConfig.Kind.Xai -> "xAI Responses"
+        ProviderConfig.Kind.Copilot -> "GitHub Copilot"
     }
 
     fun shortUrl(url: String) = url.removePrefix("https://").removePrefix("http://")

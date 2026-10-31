@@ -216,6 +216,8 @@ Presets for DeepSeek, 通义千问, Kimi, 智谱, 硅基流动, 火山方舟, Mi
 
 You can also skip the API key and sign in with ChatGPT (Plus or Pro, uses your plan's usage): tap "Continue with ChatGPT" when adding a provider, sign in in the browser, then come back to Mika.
 
+Grok and GitHub Copilot subscriptions can sign in with a device code (enter the short code in the browser). Both reuse a public client identity from the official client, not an app registered by Mika. The provider may not support that, and the account can be restricted; the notice is on the button, and nothing starts until you tap it. Requests go to each provider's own API and are not translated into another provider's protocol. Claude subscription sign-in and Google account (Gemini) sign-in are not offered: those providers do not allow third-party apps to sign in that way. Use an API key instead.
+
 1. Add a provider: pick a preset, or pick Custom and enter the endpoint URL; enter your API key. For servers you run yourself, such as Ollama or LM Studio, the address is prefilled with the default port; change it to that machine’s address, and the key is optional.
 2. Tap "Test and save" (测试并保存). When you connect your first provider, a main model is picked automatically.
 3. The main model must support tool calling. Optional: a vision model (understands the UI and finds buttons in screenshots) and a light model (anything cheap and fast; handles small jobs like judging task outcomes and extracting memories).

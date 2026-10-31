@@ -13,6 +13,12 @@ import kotlinx.coroutines.launch
 /** 最近一次登录失败,只给诊断信息用:时间、原因的类别、服务端的错误代码、一小段说明(已脱敏)。 */
 data class ChatGptSignInFailureRecord(val atMs: Long, val kind: String, val code: String?, val detail: String)
 
+/** 这次登录是哪一家。前台服务和界面重建时靠它认,避免把别家的登录显示成 ChatGPT。 */
+enum class SignInTarget { None, ChatGpt, Xai, Copilot }
+
+/** 设备码登录给用户看的用户码和验证页。设备码本身不在这里。 */
+data class DevicePrompt(val userCode: String, val openUrl: String)
+
 /**
  * 「用 ChatGPT 登录」在进程里的那一份。登录要等用户在外部浏览器里输密码、过两步验证,期间 Mika 在后台:
  * 跑在 App 的作用域 [scope] 里(界面重建、退到后台都不断),开始时调 [keepAlive] 撑住进程(前台服务,
@@ -34,9 +40,41 @@ class ChatGptSignIns(
     @Volatile var lastFailure: ChatGptSignInFailureRecord? = null
         private set
 
+    /** 订阅账号(xAI、Copilot)最近一次登录失败;说明同样已脱敏。 */
+    @Volatile var lastAccountFailure: ChatGptSignInFailureRecord? = null
+        private set
+
+    /** 正在进行的是哪一家;没有在登录时是 [SignInTarget.None]。 */
+    @Volatile var target: SignInTarget = SignInTarget.None
+        private set
+
+    /** 前台通知上的文字;空则用 ChatGPT 的那两句。 */
+    @Volatile var noticeTitle: String? = null
+        private set
+
+    @Volatile var noticeBody: String? = null
+        private set
+
+    /** 设备码登录正在显示的用户码;登录结束就清掉。 */
+    @Volatile var devicePrompt: DevicePrompt? = null
+        private set
+
+    fun showDevice(prompt: DevicePrompt) {
+        devicePrompt = prompt
+    }
+
     /** 开始一次登录,跑 [block];已有一次在跑时不开,返回假。 */
-    fun start(block: suspend CoroutineScope.() -> Unit): Boolean = synchronized(this) {
+    fun start(
+        target: SignInTarget = SignInTarget.ChatGpt,
+        noticeTitle: String? = null,
+        noticeBody: String? = null,
+        block: suspend CoroutineScope.() -> Unit,
+    ): Boolean = synchronized(this) {
         if (_running.value) return false
+        this.target = target
+        this.noticeTitle = noticeTitle
+        this.noticeBody = noticeBody
+        devicePrompt = null
         _running.value = true
         runCatching(keepAlive).onFailure { log("sign-in keep-alive could not start", it) }
         // App 的作用域没有异常处理:漏出来的异常只记下,不让进程崩
@@ -50,7 +88,18 @@ class ChatGptSignIns(
             }
         }
         job = j
-        j.invokeOnCompletion { synchronized(this) { if (job === j) { job = null; _running.value = false } } }
+        j.invokeOnCompletion {
+            synchronized(this) {
+                if (job === j) {
+                    job = null
+                    _running.value = false
+                    this.target = SignInTarget.None
+                    devicePrompt = null
+                    this.noticeTitle = null
+                    this.noticeBody = null
+                }
+            }
+        }
         true
     }
 
@@ -61,6 +110,12 @@ class ChatGptSignIns(
     fun recordFailure(e: SignInException) {
         val detail = Diagnostics.sanitize(e.message.orEmpty()).take(MAX_DETAIL)
         lastFailure = ChatGptSignInFailureRecord(now(), e.reason.name, e.code, detail)
+    }
+
+    /** 订阅账号登录失败。只记下类别和错误代码,说明再过一遍脱敏。 */
+    fun recordAccountFailure(provider: String, reason: String, code: String?) {
+        val detail = Diagnostics.sanitize(listOfNotNull(reason, code).joinToString(": ")).take(MAX_DETAIL)
+        lastAccountFailure = ChatGptSignInFailureRecord(now(), provider, code, detail)
     }
 
     private companion object {

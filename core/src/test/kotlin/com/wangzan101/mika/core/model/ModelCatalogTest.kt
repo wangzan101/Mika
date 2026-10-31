@@ -115,6 +115,16 @@ class ModelCatalogTest {
         assertEquals(listOf(true, true, true, true, true, true), list.map { it.usable })
     }
 
+    /** Copilot 用 model_picker_enabled 把不给人选的模型标出来;没写这一项的照旧留下。 */
+    @Test fun copilotListSkipsModelsHiddenFromThePicker() = runTest {
+        server.enqueue(ok("""{"data":[
+            {"id":"gpt-4o","name":"GPT-4o","model_picker_enabled":true},
+            {"id":"hidden","model_picker_enabled":false},
+            {"id":"plain"}
+        ]}"""))
+        assertEquals(listOf("gpt-4o", "plain"), models(catalog.openAiCompat(base, "t")).map { it.id })
+    }
+
     /** 列表写明了不是对话模型的(`type`,或输出里没有文字):记下来,选默认主模型时跳过。 */
     @Test fun openAiCompatReadsWhetherAModelChats() = runTest {
         server.enqueue(ok("""{"data":[

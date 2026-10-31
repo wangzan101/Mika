@@ -22,10 +22,16 @@ import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.settings.RoleChoices
 import com.wangzan101.mika.settings.ChatGptSignIns
+import com.wangzan101.mika.settings.DevicePrompt
+import com.wangzan101.mika.settings.SignInTarget
 import com.wangzan101.mika.core.chatgpt.ChatGptAuth
 import com.wangzan101.mika.core.chatgpt.SignInException
 import com.wangzan101.mika.core.chatgpt.SignInFailure
 import com.wangzan101.mika.core.chatgpt.signInWithChatGpt
+import com.wangzan101.mika.core.oauth.AccountSignInException
+import com.wangzan101.mika.core.oauth.AccountSignInFailure
+import com.wangzan101.mika.core.oauth.CopilotAuth
+import com.wangzan101.mika.core.oauth.XaiAuth
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -50,6 +56,24 @@ sealed interface ListState {
 
 /** 用 ChatGPT 登录的账号:[email] 来自核对过的 ID 令牌(可能为空);退出登录后 [signedIn] 为假。 */
 data class ChatGptAccount(val email: String, val signedIn: Boolean)
+
+/** 用设备码登录的订阅:xAI / Grok,或 GitHub Copilot。 */
+enum class AccountProvider { Xai, Copilot }
+
+/** 一家订阅的账号。没有这家服务商时界面不放这一项。 */
+data class SubscriptionAccount(val label: String, val signedIn: Boolean)
+
+/**
+ * 正在进行或刚失败的订阅登录。没在登录、也没有失败时 [provider] 为 null。
+ * [userCode] 是给用户看的短码;[openUrl] 是核对过主机的验证页。
+ */
+data class AccountSignInUi(
+    val provider: AccountProvider? = null,
+    val running: Boolean = false,
+    val userCode: String = "",
+    val openUrl: String = "",
+    val failure: String? = null,
+)
 
 /**
  * 「用 ChatGPT 登录」要用到的系统能力:在浏览器里打开授权页、登录完回到 Mika、回调后浏览器里显示的网页。
@@ -153,6 +177,12 @@ data class ModelSetupUi(
     val chatGptWelcome: Boolean = false,
     /** 退出登录时 ChatGPT 那边没确认注销(本机令牌已清)。 */
     val chatGptRevokeUnconfirmed: Boolean = false,
+    /** 已连接的 Grok 订阅;没有这家时为 null。 */
+    val xaiAccount: SubscriptionAccount? = null,
+    /** 已连接的 GitHub Copilot 订阅;没有这家时为 null。 */
+    val copilotAccount: SubscriptionAccount? = null,
+    /** xAI 或 Copilot 的设备码登录。 */
+    val accountSignIn: AccountSignInUi = AccountSignInUi(),
     /**
      * 刚存下服务商时试调用的说明(见 [ModelSetupViewModel.testAndSave]):先试的模型没通过、主模型用了哪个,
      * 或一个都没通过、要用户自己选;再测试、选了主模型时清掉。
@@ -199,7 +229,7 @@ data class ModelSetupUi(
      * 有列表的服务商,模型是从列表里选的,不算。
      */
     fun unverified(p: Provider): List<String> =
-        if (p.kind == ProviderConfig.Kind.ChatGpt || p.models?.isEmpty() != true) emptyList()
+        if (p.kind == ProviderConfig.Kind.ChatGpt || p.kind == ProviderConfig.Kind.Xai || p.kind == ProviderConfig.Kind.Copilot || p.models?.isEmpty() != true) emptyList()
         else roles.referenced.mapNotNull { id -> configs.firstOrNull { it.id == id && it.providerId == p.id }?.model }
             .distinct().filter { it !in p.verifiedModels }
 
@@ -236,10 +266,22 @@ class ModelSetupViewModel(
         // 登录在别处结束(通知上取消了)或界面重建前就开始了:跟着它的进度
         scope.launch {
             signIns.running.collect { running ->
+                val prompt = signIns.devicePrompt
+                val target = signIns.target
                 _state.update {
                     when {
-                        running && it.chatGptSignIn == ListState.Idle -> it.copy(chatGptSignIn = ListState.Running)
+                        running && target == SignInTarget.ChatGpt && it.chatGptSignIn == ListState.Idle ->
+                            it.copy(chatGptSignIn = ListState.Running)
                         !running && it.chatGptSignIn == ListState.Running -> snapshot(it.copy(chatGptSignIn = ListState.Idle))
+                        running && (target == SignInTarget.Xai || target == SignInTarget.Copilot) -> it.copy(
+                            accountSignIn = it.accountSignIn.copy(
+                                provider = if (target == SignInTarget.Xai) AccountProvider.Xai else AccountProvider.Copilot,
+                                running = true,
+                                userCode = prompt?.userCode ?: it.accountSignIn.userCode,
+                                openUrl = prompt?.openUrl ?: it.accountSignIn.openUrl,
+                            ),
+                        )
+                        !running && it.accountSignIn.running -> snapshot(it.copy(accountSignIn = AccountSignInUi()))
                         else -> it
                     }
                 }
@@ -254,6 +296,12 @@ class ModelSetupViewModel(
             keyed = providers.filter { store.hasKey(it.id) }.map { it.id }.toSet(),
             chatGptAccount = store.chatGptProvider()?.let { p ->
                 store.chatGptSession(p.id).let { ChatGptAccount(it?.email.orEmpty(), it?.signedIn == true) }
+            },
+            xaiAccount = store.xaiProvider()?.let { p ->
+                store.accountSession(p.id).let { SubscriptionAccount(it?.label.orEmpty(), it?.signedIn == true) }
+            },
+            copilotAccount = store.copilotProvider()?.let { p ->
+                store.accountSession(p.id).let { SubscriptionAccount(it?.label.orEmpty(), it?.signedIn == true) }
             },
         )
     }
@@ -399,7 +447,9 @@ class ModelSetupViewModel(
      */
     private suspend fun probe(f: AddForm, baseUrl: String, key: String?, models: List<ListedModel>): ListProbe {
         // 用 ChatGPT 登录不走这张表单(登录本身就核对过了);表单只给 Key 的接口类型,这里再挡一次
-        if (f.kind == ProviderConfig.Kind.ChatGpt) return ListProbe.Done(null, emptyList())
+        if (f.kind == ProviderConfig.Kind.ChatGpt || f.kind == ProviderConfig.Kind.Xai || f.kind == ProviderConfig.Kind.Copilot) {
+            return ListProbe.Done(null, emptyList())
+        }
         val base = (ProviderPresets.forBaseUrl(baseUrl) ?: ProviderPresets.custom).capabilities
         val options = ModelOptions.merge(models, base)
         val order = ModelOptions.candidates(options, f.familyTokens).ifEmpty { listOfNotNull(options.firstOrNull()?.id) }
@@ -493,7 +543,7 @@ class ModelSetupViewModel(
      */
     fun signInWithChatGpt() {
         val browser = chatGptBrowser ?: return
-        if (_state.value.chatGptSignIn == ListState.Running) return
+        if (_state.value.chatGptSignIn == ListState.Running || signIns.running.value) return
         _state.update { it.copy(chatGptSignIn = ListState.Running, chatGptRevokeUnconfirmed = false) }
         signIns.start {
             val (listProblem, first) = try {
@@ -539,6 +589,85 @@ class ModelSetupViewModel(
     }
 
     fun dismissChatGptWelcome() = _state.update { it.copy(chatGptWelcome = false) }
+
+    /**
+     * 用设备码登录 xAI 或 GitHub Copilot:浏览器打开核对过的验证页,界面留下用户码。
+     * 登录成功后列出模型、存成这家订阅;还没有主模型时选一个。失败只说类别和错误代码。
+     */
+    fun signInWithAccount(provider: AccountProvider) {
+        val browser = chatGptBrowser ?: return
+        if (signIns.running.value || _state.value.accountSignIn.running || _state.value.chatGptSignIn == ListState.Running) return
+        _state.update { it.copy(accountSignIn = AccountSignInUi(provider = provider, running = true)) }
+        val started = signIns.start(
+            target = if (provider == AccountProvider.Xai) SignInTarget.Xai else SignInTarget.Copilot,
+            noticeTitle = tr(R.string.account_signin_notif_title),
+            noticeBody = tr(R.string.account_signin_notif_body),
+        ) {
+            try {
+                withContext(io) {
+                    val session = when (provider) {
+                        AccountProvider.Xai -> store.xaiAuth.signIn(
+                            openBrowser = browser::open,
+                            onChallenge = { challenge -> publishDevice(challenge.userCode, challenge.verificationUriComplete ?: challenge.verificationUri) },
+                        )
+                        AccountProvider.Copilot -> store.copilotAuth.signIn(
+                            openBrowser = browser::open,
+                            onChallenge = { challenge -> publishDevice(challenge.userCode, challenge.verificationUriComplete ?: challenge.verificationUri) },
+                        )
+                    }
+                    val kind = if (provider == AccountProvider.Xai) ProviderConfig.Kind.Xai else ProviderConfig.Kind.Copilot
+                    val base = session.apiBase.ifBlank { if (provider == AccountProvider.Xai) XaiAuth.API_BASE else CopilotAuth.API_BASE }
+                    val existing = if (provider == AccountProvider.Xai) store.xaiProvider() else store.copilotProvider()
+                    val listed = store.listModels(kind, base, session.accessToken)
+                    val p = store.connectAccount(session, (listed as? ModelListResult.Ok)?.models ?: existing?.models.orEmpty())
+                    if (store.roles.value.main == null) {
+                        val options = ModelOptions.ofProvider(p, store.list())
+                        (ModelOptions.defaultMain(options) ?: options.firstOrNull()?.id)?.let { m -> use(ModelRole.Main, p, m, options) }
+                    }
+                    listed as? ModelListResult.Failed
+                }.let { failed ->
+                    browser.returnToApp()
+                    val id = if (provider == AccountProvider.Xai) store.xaiProvider()?.id else store.copilotProvider()?.id
+                    _state.update {
+                        snapshot(it.copy(
+                            accountSignIn = AccountSignInUi(),
+                            formOpen = false,
+                            listing = if (failed != null && id != null) it.listing + (id to ListState.Failed(failed.message)) else it.listing - id.orEmpty(),
+                        ))
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val failure = e as? AccountSignInException ?: AccountSignInException(AccountSignInFailure.Network, cause = e)
+                signIns.recordAccountFailure(provider.name, failure.reason.name, failure.code)
+                browser.returnToApp()
+                _state.update { it.copy(accountSignIn = AccountSignInUi(provider = provider, failure = ModelsCopy.accountFailure(failure))) }
+            }
+        }
+        if (!started) _state.update { it.copy(accountSignIn = AccountSignInUi()) }
+    }
+
+    /** 把用户码留在界面上。打开浏览器由登录流程自己做,这里不再开一次。 */
+    private fun publishDevice(userCode: String, openUrl: String) {
+        signIns.showDevice(DevicePrompt(userCode, openUrl))
+        _state.update { it.copy(accountSignIn = it.accountSignIn.copy(userCode = userCode, openUrl = openUrl, running = true)) }
+    }
+
+    fun cancelAccountSignIn() {
+        signIns.cancel()
+        _state.update { it.copy(accountSignIn = AccountSignInUi()) }
+    }
+
+    fun dismissAccountFailure() = _state.update { it.copy(accountSignIn = AccountSignInUi()) }
+
+    /** 退出订阅登录:本机令牌清掉,服务商和用途留着。 */
+    fun signOutAccount(providerId: String) {
+        scope.launch {
+            withContext(io) { store.signOutAccount(providerId) }
+            _state.update { snapshot(it.copy(listing = it.listing - providerId)) }
+        }
+    }
 
     /** 退出 ChatGPT 登录:服务端注销、本机清令牌;服务商和用途不动,再登录就能接着用。 */
     fun signOutChatGpt(providerId: String) {
@@ -663,8 +792,12 @@ class ModelSetupViewModel(
         _state.value.providers.filter { it.models == null && _state.value.listing[it.id] == null && listable(it) }.forEach { refresh(it.id) }
     }
 
-    /** 退出了登录的 ChatGPT 列不了模型,等再登录。 */
-    private fun listable(p: Provider) = p.kind != ProviderConfig.Kind.ChatGpt || store.chatGptSession(p.id)?.signedIn == true
+    /** 退出了登录的订阅列不了模型,等再登录。 */
+    private fun listable(p: Provider) = when (p.kind) {
+        ProviderConfig.Kind.ChatGpt -> store.chatGptSession(p.id)?.signedIn == true
+        ProviderConfig.Kind.Xai, ProviderConfig.Kind.Copilot -> store.accountSession(p.id)?.signedIn == true
+        else -> true
+    }
 
     /** 换 Key,然后用新 Key 重新列一次模型。 */
     fun changeKey(providerId: String, apiKey: String) {
@@ -682,7 +815,11 @@ class ModelSetupViewModel(
         scope.launch {
             withContext(io) {
                 // ChatGPT 的先在服务端注销登录,再删
-                if (store.provider(providerId)?.kind == ProviderConfig.Kind.ChatGpt) store.signOutChatGpt(providerId)
+                when (store.provider(providerId)?.kind) {
+                    ProviderConfig.Kind.ChatGpt -> store.signOutChatGpt(providerId)
+                    ProviderConfig.Kind.Xai, ProviderConfig.Kind.Copilot -> store.signOutAccount(providerId)
+                    else -> Unit
+                }
                 store.removeProvider(providerId)
             }
             _state.update { snapshot(it.copy(listing = it.listing - providerId)) }

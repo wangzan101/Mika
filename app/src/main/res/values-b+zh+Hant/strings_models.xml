@@ -105,4 +105,32 @@
     <string name="models_unverified">沒測試通過，任務可能會失敗</string>
     <string name="models_unverified_note">這家不提供模型列表，在用的 %1$s 還沒測試通過，任務可能會失敗。點「重新測試」用它試呼叫一次。</string>
     <string name="models_retest">重新測試</string>
+
+    <string name="account_signin_title">用訂閱帳號登入</string>
+    <string name="account_signin_xai_title">用 Grok 訂閱</string>
+    <string name="account_signin_xai_body">用你的 xAI / Grok 訂閱在 Mika 裡呼叫 Grok。請求直接發到 api.x.ai 的 Responses 介面，不會轉成別的協定。這項登入複用官方 Grok CLI 的公開客戶端身分（不是 Mika 自己註冊的應用）。xAI 可能不支援這種用法，帳號有被限制的風險。權杖只加密存在這臺手機上，不會寫進日誌。</string>
+    <string name="account_signin_xai_continue">使用 Grok 訂閱繼續</string>
+    <string name="account_signin_copilot_title">用 GitHub Copilot</string>
+    <string name="account_signin_copilot_body">用你的 GitHub Copilot 訂閱在 Mika 裡呼叫模型。請求直接發到 Copilot 的 Chat Completions 介面，不會轉成別的協定。這項登入複用 VS Code 裡 GitHub Copilot 擴充功能的公開客戶端身分（不是 Mika 自己註冊的應用），並帶上該介面要求的編輯器整合標識。GitHub 可能不支援這種用法，帳號有被限制的風險。權杖只加密存在這臺手機上，不會寫進日誌。</string>
+    <string name="account_signin_copilot_continue">使用 Copilot 繼續</string>
+    <string name="account_signin_code">在瀏覽器裡打開驗證頁，輸入這個碼：%1$s</string>
+    <string name="account_signin_copy">複製</string>
+    <string name="account_signin_copied">已複製</string>
+    <string name="account_signin_open">打開驗證頁</string>
+    <string name="account_signin_waiting">正在等你在瀏覽器裡完成登入。</string>
+    <string name="account_signin_skip">Claude 官方訂閱和 Google 帳號（Gemini）登入沒有提供：Anthropic 不允許第三方 App 用 Claude.ai 登入，或把訂閱額度接到自己的請求上；Google 也不允許第三方借用 Gemini CLI 的登入去調它的後端。這兩家請用 API Key（Anthropic、Gemini 預設）。</string>
+    <string name="account_signin_notif_title">正在登入訂閱帳號</string>
+    <string name="account_signin_notif_body">正在等你在瀏覽器裡完成登入</string>
+    <string name="account_fail_denied">已取消登入。</string>
+    <string name="account_fail_expired">登入碼過期了，請再試一次。</string>
+    <string name="account_fail_timed_out">登入逾時了，請再試一次。</string>
+    <string name="account_fail_rejected">登入被拒絕了（錯誤：%1$s），請再試一次。</string>
+    <string name="account_fail_no_sub">這個帳號沒有可用的訂閱。Grok 需要 xAI 訂閱，Copilot 需要 GitHub Copilot 訂閱。</string>
+    <string name="account_fail_network">連不上登入服務，請檢查網路後再試。</string>
+    <string name="account_fail_issuer">登入地址不對，已停止，沒有繼續傳送。</string>
+    <string name="account_signed_in_note_xai">使用 Grok 訂閱。額度和其他用這個帳號的客戶端共用。這項登入複用了官方客戶端身分，風險見新增時的說明。</string>
+    <string name="account_signed_in_note_copilot">使用 GitHub Copilot 訂閱。額度和其他用這個帳號的客戶端共用。這項登入複用了官方客戶端身分，風險見新增時的說明。</string>
+    <string name="account_signed_out_note">這臺手機上已退出登入。對方帳號裡的授權要到 xAI 或 GitHub 的設定裡自己斷開。選好的模型都還在。</string>
+    <string name="account_manage_xai">打開 xAI 帳號</string>
+    <string name="account_manage_copilot">打開 Copilot 設定</string>
 </resources>

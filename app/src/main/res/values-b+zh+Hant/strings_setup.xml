@@ -50,6 +50,8 @@
     <string name="model_example_anthropic">例如 claude-sonnet-4-5</string>
     <string name="model_example_openai">例如 gpt-5-mini</string>
     <string name="model_example_compat">例如 deepseek-chat</string>
+    <string name="model_example_grok">例如 grok-4</string>
+    <string name="model_example_copilot">例如 gpt-4o</string>
     <string name="model_probe_not_found">模型「%1$s」不存在。要填服務商的說明文件裡完整的模型 ID（%2$s）。</string>
     <string name="model_probe_not_found_no_list">列不出模型，用「%1$s」試呼叫也說找不到：網址或介面型別可能填錯了，也可能沒有這個模型（模型名%2$s）。</string>
     <string name="model_probe_no_tools_pick">%1$s 沒有呼叫工具，Mika 做事需要會呼叫工具的模型，換一個當主模型。</string>

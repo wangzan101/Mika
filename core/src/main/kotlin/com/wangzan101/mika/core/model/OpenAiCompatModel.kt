@@ -40,6 +40,11 @@ class OpenAiCompatModel(
     reasoningField: String? = null,
     /** 每个请求都带的头(客户端标识、服务商要的会话号等,见 [ClientHeaders]);Key 的头由适配器自己加。 */
     private val headers: Map<String, String> = emptyMap(),
+    /**
+     * 会过期的登录令牌(Copilot 订阅)。给了就用它,不用 [apiKey];被拒(HTTP 401)先换一张再发一次。
+     * 固定的 API Key 不传这个。
+     */
+    private val token: BearerToken? = null,
 ) : StreamingChatModel {
     override val name: String get() = model
     private val endpoint = baseUrl.trimEnd('/') + "/chat/completions"
@@ -54,9 +59,22 @@ class OpenAiCompatModel(
     }
 
     override suspend fun complete(system: String, messages: List<Message>, tools: List<ToolSpec>): ModelReply {
-        val (status, retryAfter, text) = HttpSupport.execute(http, request(system, messages, tools, stream = false))
-        if (status !in 200..299) throw mapError(status, retryAfter, text)
-        // 有的兼容端点不守 OpenAI 的默认值:没让流式也照样回 SSE(本地、局域网上的自建服务常见)。按流读完再拼,别把 `data:` 当成坏 JSON。
+        var fresh = false
+        while (true) {
+            val (status, retryAfter, text) = HttpSupport.execute(
+                http, request(system, messages, tools, stream = false, authorization = authorization(fresh)),
+            )
+            if (status in 200..299) return replyFromBody(text)
+            if (status == 401 && token?.refreshable == true && !fresh) {
+                fresh = true
+                continue
+            }
+            throw mapError(status, retryAfter, text)
+        }
+    }
+
+    /** 非流式的成功响应:普通 JSON,或有的兼容端点没让流式也回了 SSE。 */
+    private fun replyFromBody(text: String): ModelReply {
         if (!looksLikeEvents(text)) return parse(text)
         val stream = OpenAiStream({}, ::parseUsage, ::thinking)
         eventsOf(text).forEach(stream::accept)
@@ -66,28 +84,46 @@ class OpenAiCompatModel(
     override suspend fun completeStreaming(
         system: String, messages: List<Message>, tools: List<ToolSpec>, onText: (String) -> Unit,
     ): ModelReply {
-        var stream = OpenAiStream(onText, ::parseUsage, ::thinking)
-        var response = HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept)
-        if (response.status == 400 && response.body.contains("stream_options")) {
-            // 一些兼容端点能流式生成，却没有用量选项。
-            stream = OpenAiStream(onText, ::parseUsage, ::thinking)
-            response = HttpSupport.stream(http, request(system, messages, tools, stream = true, includeUsage = false), stream::accept)
-        }
-        val (status, retryAfter, text) = response
-        if (status !in 200..299) {
-            // 不支持流式传输的兼容端点仍可按原接口完成任务。
-            if (status == 400 && text.contains("stream", ignoreCase = true)) return complete(system, messages, tools).also {
-                it.parts.filterIsInstance<Part.Text>().joinToString("") { part -> part.text }.takeIf(String::isNotEmpty)?.let(onText)
+        var fresh = false
+        while (true) {
+            var stream = OpenAiStream(onText, ::parseUsage, ::thinking)
+            var response = HttpSupport.stream(
+                http, request(system, messages, tools, stream = true, authorization = authorization(fresh)), stream::accept,
+            )
+            if (response.status == 400 && response.body.contains("stream_options")) {
+                // 一些兼容端点能流式生成，却没有用量选项。
+                stream = OpenAiStream(onText, ::parseUsage, ::thinking)
+                response = HttpSupport.stream(
+                    http,
+                    request(system, messages, tools, stream = true, includeUsage = false, authorization = authorization(fresh)),
+                    stream::accept,
+                )
             }
-            throw mapError(status, retryAfter, text)
+            val (status, retryAfter, text) = response
+            if (status == 401 && token?.refreshable == true && !fresh) {
+                fresh = true
+                continue
+            }
+            if (status !in 200..299) {
+                // 不支持流式传输的兼容端点仍可按原接口完成任务。
+                if (status == 400 && text.contains("stream", ignoreCase = true)) return complete(system, messages, tools).also {
+                    it.parts.filterIsInstance<Part.Text>().joinToString("") { part -> part.text }.takeIf(String::isNotEmpty)?.let(onText)
+                }
+                throw mapError(status, retryAfter, text)
+            }
+            if (text.isNotEmpty()) return parse(text).also { reply ->
+                reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
+            }
+            return stream.finish()
         }
-        if (text.isNotEmpty()) return parse(text).also { reply ->
-            reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
-        }
-        return stream.finish()
     }
 
-    private fun request(system: String, messages: List<Message>, tools: List<ToolSpec>, stream: Boolean, includeUsage: Boolean = true): Request {
+    private suspend fun authorization(fresh: Boolean): String? = token?.get(fresh) ?: apiKey
+
+    private fun request(
+        system: String, messages: List<Message>, tools: List<ToolSpec>, stream: Boolean,
+        includeUsage: Boolean = true, authorization: String? = null,
+    ): Request {
         val payload = buildJsonObject {
             put("model", model)
             // 思考只在带工具的请求里回传(工具调用一步接一步时要接着想);不带工具的旁路调用不需要
@@ -107,7 +143,7 @@ class OpenAiCompatModel(
         return Request.Builder().url(endpoint)
             .withHeaders(headers)
             .header("Accept", if (stream) "text/event-stream" else "application/json")
-            .apply { if (!apiKey.isNullOrEmpty()) header("Authorization", "Bearer $apiKey") }
+            .apply { if (!authorization.isNullOrEmpty()) header("Authorization", "Bearer $authorization") }
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
     }

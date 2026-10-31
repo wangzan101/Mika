@@ -44,9 +44,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -105,8 +107,24 @@ fun ModelSetupScreen(store: ProviderStore, onboarding: Boolean, onBack: () -> Un
             use = { role, model -> vm.pick(role, provider.id, model) },
             showAll = { allModels = true },
             retest = { vm.retest(provider.id) },
-            signIn = vm::signInWithChatGpt, signOut = { vm.signOutChatGpt(provider.id) },
-            manageUsage = { openInBrowser(context, ChatGptAuth.USAGE_URL) },
+            signIn = {
+                when (provider.kind) {
+                    ProviderConfig.Kind.Xai -> vm.signInWithAccount(AccountProvider.Xai)
+                    ProviderConfig.Kind.Copilot -> vm.signInWithAccount(AccountProvider.Copilot)
+                    else -> vm.signInWithChatGpt()
+                }
+            },
+            signOut = {
+                if (provider.kind == ProviderConfig.Kind.Xai || provider.kind == ProviderConfig.Kind.Copilot) vm.signOutAccount(provider.id)
+                else vm.signOutChatGpt(provider.id)
+            },
+            manageUsage = {
+                val url = when (provider.kind) {
+                    ProviderConfig.Kind.Xai, ProviderConfig.Kind.Copilot -> ModelsCopy.accountManageUrl(provider.kind)
+                    else -> ChatGptAuth.USAGE_URL
+                }
+                openInBrowser(context, url)
+            },
         )
         if (allModels) {
             BackHandler { allModels = false }
@@ -147,6 +165,7 @@ fun ModelSetupScreen(store: ProviderStore, onboarding: Boolean, onBack: () -> Un
             testAndSave = vm::testAndSave, openForm = vm::openForm, closeForm = vm::closeForm,
             openProvider = { openProvider = it; allModels = false }, pickRole = { picking = it }, next = onDone,
             signInWithChatGpt = vm::signInWithChatGpt, cancelChatGpt = vm::cancelChatGptSignIn,
+            signInWithAccount = vm::signInWithAccount, cancelAccount = vm::cancelAccountSignIn,
             setReasoningEffort = vm::setReasoningEffort,
         ),
         onBack,
@@ -169,6 +188,8 @@ class ModelSetupActions(
     val next: () -> Unit = {},
     val signInWithChatGpt: () -> Unit = {},
     val cancelChatGpt: () -> Unit = {},
+    val signInWithAccount: (AccountProvider) -> Unit = {},
+    val cancelAccount: () -> Unit = {},
     val setReasoningEffort: (ModelRole, String?) -> Unit = { _, _ -> },
 )
 
@@ -264,6 +285,9 @@ private fun AddProviderForm(ui: ModelSetupUi, actions: ModelSetupActions) {
         }
     }
     if (ui.chatGptAccount?.signedIn != true) ChatGptCard(ui, actions)
+    if (ui.xaiAccount?.signedIn != true || ui.copilotAccount?.signedIn != true || ui.accountSignIn.running || ui.accountSignIn.failure != null) {
+        SubscriptionCard(ui, actions)
+    }
     FlowRow(
         Modifier.fillMaxWidth().padding(bottom = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -377,6 +401,77 @@ private fun ChatGptCard(ui: ModelSetupUi, actions: ModelSetupActions) {
     }
 }
 
+/**
+ * xAI / Grok 和 GitHub Copilot 的订阅登录。风险写在按钮上面,点了才开始设备码流程。
+ * Claude 和 Google 账号登录不提供,原因写在卡片下面。
+ */
+@Composable
+private fun SubscriptionCard(ui: ModelSetupUi, actions: ModelSetupActions) {
+    val c = MikaTheme.colors
+    val signIn = ui.accountSignIn
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    GroupCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(ModelsCopy.ACCOUNT_TITLE, style = MikaType.Body, fontWeight = FontWeight.SemiBold, color = c.ink)
+            if (ui.xaiAccount?.signedIn != true) {
+                Text(ModelsCopy.ACCOUNT_XAI_TITLE, Modifier.padding(top = 12.dp), style = MikaType.Body, color = c.ink)
+                Text(ModelsCopy.ACCOUNT_XAI_BODY, Modifier.padding(top = 4.dp), fontSize = 13.sp, lineHeight = 19.sp, color = c.ink2)
+                if (signIn.provider != AccountProvider.Xai || !signIn.running) {
+                    MikaButton(
+                        ModelsCopy.ACCOUNT_XAI_CONTINUE, { actions.signInWithAccount(AccountProvider.Xai) },
+                        Modifier.fillMaxWidth().padding(top = 8.dp).testTag("xai-continue"),
+                        size = ButtonSize.Medium, enabled = !signIn.running && ui.chatGptSignIn != ListState.Running,
+                    )
+                }
+            }
+            if (ui.copilotAccount?.signedIn != true) {
+                Text(ModelsCopy.ACCOUNT_COPILOT_TITLE, Modifier.padding(top = 12.dp), style = MikaType.Body, color = c.ink)
+                Text(ModelsCopy.ACCOUNT_COPILOT_BODY, Modifier.padding(top = 4.dp), fontSize = 13.sp, lineHeight = 19.sp, color = c.ink2)
+                if (signIn.provider != AccountProvider.Copilot || !signIn.running) {
+                    MikaButton(
+                        ModelsCopy.ACCOUNT_COPILOT_CONTINUE, { actions.signInWithAccount(AccountProvider.Copilot) },
+                        Modifier.fillMaxWidth().padding(top = 8.dp).testTag("copilot-continue"),
+                        size = ButtonSize.Medium, enabled = !signIn.running && ui.chatGptSignIn != ListState.Running,
+                    )
+                }
+            }
+            if (signIn.running) {
+                if (signIn.userCode.isNotBlank()) {
+                    Text(ModelsCopy.accountCode(signIn.userCode), Modifier.padding(top = 10.dp).testTag("account-user-code"), fontSize = 13.sp, lineHeight = 18.sp, color = c.ink)
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            ModelsCopy.ACCOUNT_COPY,
+                            Modifier.clickable {
+                                clipboard.setText(AnnotatedString(signIn.userCode))
+                                Toast.makeText(context, tr(R.string.account_signin_copied), Toast.LENGTH_SHORT).show()
+                            }.testTag("account-copy-code"),
+                            fontSize = 13.sp, color = c.accent,
+                        )
+                        if (signIn.openUrl.isNotBlank()) {
+                            Text(
+                                ModelsCopy.ACCOUNT_OPEN,
+                                Modifier.clickable { openInBrowser(context, signIn.openUrl) }.padding(start = 16.dp).testTag("account-open-verify"),
+                                fontSize = 13.sp, color = c.accent,
+                            )
+                        }
+                    }
+                } else {
+                    Text(ModelsCopy.ACCOUNT_WAITING, Modifier.padding(top = 10.dp), fontSize = 13.sp, lineHeight = 18.sp, color = c.ink2)
+                }
+                Text(
+                    ModelSetupCopy.CANCEL, Modifier.clickable(onClick = actions.cancelAccount).padding(top = 8.dp).testTag("account-cancel"),
+                    fontSize = 13.sp, color = c.accent,
+                )
+            }
+            signIn.failure?.let {
+                Text(it, Modifier.padding(top = 10.dp).testTag("account-failed"), fontSize = 13.sp, lineHeight = 18.sp, color = c.bad)
+            }
+            Text(ModelsCopy.ACCOUNT_SKIP, Modifier.padding(top = 12.dp), fontSize = 12.sp, lineHeight = 18.sp, color = c.ink3)
+        }
+    }
+}
+
 /** 第一次用 ChatGPT 登录成功后说明一次:Mika 里的用量走你的 ChatGPT 套餐。 */
 @Composable
 private fun ChatGptWelcome(onDismiss: () -> Unit) {
@@ -482,6 +577,8 @@ object ModelSetupCopy {
             ProviderConfig.Kind.Gemini -> R.string.model_example_gemini
             ProviderConfig.Kind.Anthropic -> R.string.model_example_anthropic
             ProviderConfig.Kind.OpenAiResponses, ProviderConfig.Kind.ChatGpt -> R.string.model_example_openai
+            ProviderConfig.Kind.Xai -> R.string.model_example_grok
+            ProviderConfig.Kind.Copilot -> R.string.model_example_copilot
             ProviderConfig.Kind.OpenAiCompat -> R.string.model_example_compat
         },
     )

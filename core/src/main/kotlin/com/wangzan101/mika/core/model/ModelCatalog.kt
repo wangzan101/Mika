@@ -157,6 +157,8 @@ class ModelCatalog(private val http: OkHttpClient) {
     private fun openAiModel(o: JsonObject): ListedModel? {
         // 用 ChatGPT 账号列模型时(`models` 表)名字在 `slug`、显示名在 `display_name`,只留 `visibility` 为 list 的
         o.str("visibility")?.let { if (it != "list") return null }
+        // Copilot 的模型列表用这一项标出不给人选的;没写的(OpenAI 兼容)照旧留下
+        o.bool("model_picker_enabled")?.let { if (!it) return null }
         val id = (o.str("id") ?: o.str("slug"))?.takeIf { it.isNotBlank() } ?: return null
         val arch = o["architecture"] as? JsonObject
         val inputs = (arch?.get("input_modalities") as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }

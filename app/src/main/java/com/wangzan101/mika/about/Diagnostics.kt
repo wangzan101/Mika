@@ -81,6 +81,8 @@ data class DiagnosticsSnapshot(
         val chatGptSignedIn: Boolean,
         /** 这次运行以来最近一次用 ChatGPT 登录失败(说明已脱敏);没有为 null。 */
         val chatGptLastFailure: ChatGptSignInFailureRecord? = null,
+        /** 订阅账号(xAI、Copilot)最近一次登录失败;没有为 null。 */
+        val accountLastFailure: ChatGptSignInFailureRecord? = null,
     )
 
     /** 一个服务商:接口类型、地址(只取主机名)、列过几个模型(没列过为 null)。 */
@@ -139,6 +141,10 @@ object Diagnostics {
         line("ChatGPT sign-in", yes(m.chatGptSignedIn))
         m.chatGptLastFailure?.let { f ->
             line("ChatGPT last sign-in failure", "${ago(s.generatedAtMs - f.atMs)}: ${f.kind}" +
+                (f.code?.let { " (code $it)" } ?: "") + f.detail.takeIf { it.isNotBlank() }?.let { " — ${it.take(MAX_ERROR)}" }.orEmpty())
+        }
+        m.accountLastFailure?.let { f ->
+            line("subscription last sign-in failure", "${ago(s.generatedAtMs - f.atMs)}: ${f.kind}" +
                 (f.code?.let { " (code $it)" } ?: "") + f.detail.takeIf { it.isNotBlank() }?.let { " — ${it.take(MAX_ERROR)}" }.orEmpty())
         }
 

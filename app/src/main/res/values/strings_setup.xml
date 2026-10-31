@@ -50,6 +50,8 @@
     <string name="model_example_anthropic">e.g. claude-sonnet-4-5</string>
     <string name="model_example_openai">e.g. gpt-5-mini</string>
     <string name="model_example_compat">e.g. deepseek-chat</string>
+    <string name="model_example_grok">e.g. grok-4</string>
+    <string name="model_example_copilot">e.g. gpt-4o</string>
     <string name="model_probe_not_found">Model “%1$s” doesn’t exist. Enter the full model ID from the provider’s docs (%2$s).</string>
     <string name="model_probe_not_found_no_list">No models could be listed, and a test call with “%1$s” wasn’t found either: the address or interface type is probably wrong, or there is no such model (model names look like: %2$s).</string>
     <string name="model_probe_no_tools_pick">%1$s didn’t call the tool. Mika needs a model that can call tools to get things done; pick another main model.</string>

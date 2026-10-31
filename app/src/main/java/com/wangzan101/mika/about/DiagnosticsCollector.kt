@@ -142,6 +142,7 @@ object DiagnosticsCollector {
             light = role(ModelRole.Light),
             chatGptSignedIn = chatGpt != null && store.hasKey(chatGpt.id),
             chatGptLastFailure = app.chatGptSignIn.lastFailure,
+            accountLastFailure = app.chatGptSignIn.lastAccountFailure,
         )
     }
 

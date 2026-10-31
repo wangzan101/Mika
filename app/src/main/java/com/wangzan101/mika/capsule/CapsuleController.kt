@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import android.graphics.Rect
 import com.wangzan101.mika.record.RunStore
 import com.wangzan101.mika.R
+import com.wangzan101.mika.i18n.tr
 import com.wangzan101.mika.chat.ConversationStore
 import java.util.UUID
 import kotlinx.coroutines.withContext
@@ -463,7 +464,7 @@ class CapsuleController(
         val access = (context.applicationContext as MikaApp).appAccess.current()
         if (shot.sourcePackages.isEmpty() || shot.sourcePackages.any { !access.canShare(it) }) {
             inputUi = inputUi.copy(screen = null)
-            android.widget.Toast.makeText(context, "屏幕分享许可已失效，请重新截屏", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(context, tr(R.string.appaccess_share_expired), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         val conversationId = CapsuleCards.conversationOf(c) ?: ConversationStore.shared(context).newConversation()
@@ -473,7 +474,7 @@ class CapsuleController(
             val latest = (context.applicationContext as MikaApp).appAccess.current()
             if (shot.sourcePackages.any { !latest.canShare(it) }) {
                 inputUi = inputUi.copy(screen = null)
-                android.widget.Toast.makeText(context, "屏幕分享许可已失效，请重新截屏", android.widget.Toast.LENGTH_SHORT).show()
+                android.widget.Toast.makeText(context, tr(R.string.appaccess_share_expired), android.widget.Toast.LENGTH_SHORT).show()
                 return@launch
             }
             submit(c, kind, UserScreenMessage.compose(saved.id, words), conversationId)

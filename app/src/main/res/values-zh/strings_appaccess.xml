@@ -50,4 +50,5 @@
     <string name="appaccess_share_allow">允许仅分享屏幕</string>
     <string name="appaccess_share_unblock">移出黑名单</string>
     <string name="appaccess_share_cancel">取消分享</string>
+    <string name="appaccess_share_expired">屏幕分享许可已失效，请重新截屏</string>
 </resources>

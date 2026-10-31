@@ -264,7 +264,8 @@ class OpenAiCompatModel(
                 "length" -> StopReason.MaxTokens
                 else -> if (parts.any { it is Part.ToolCall }) StopReason.ToolUse else StopReason.Other
             }
-            return ModelReply(parts, stop, parseUsage(root["usage"]))
+            // 有的模型会把工具调用标记直接吐进正文:先还原成调用,还原不了就剥掉,别把乱码交给界面(见 LeakedToolMarkup)
+            return LeakedToolMarkup.repair(ModelReply(parts, stop, parseUsage(root["usage"])))
         } catch (e: ModelError) {
             throw e
         } catch (e: Exception) {
@@ -347,7 +348,8 @@ private class OpenAiStream(
     private fun appendVisible(t: String) {
         if (t.isEmpty()) return
         visible.append(t)
-        onText(visible.toString())
+        // 预览也先剥一遍:模型把工具调用标记吐进正文时,别让用户看着乱码流过去
+        onText(LeakedToolMarkup.stripMarkup(visible.toString()))
     }
 
     fun finish(): ModelReply {
@@ -366,7 +368,7 @@ private class OpenAiStream(
             "length" -> StopReason.MaxTokens
             else -> if (calls.isNotEmpty()) StopReason.ToolUse else StopReason.Other
         }
-        return ModelReply(parts, stop, usage)
+        return LeakedToolMarkup.repair(ModelReply(parts, stop, usage))
     }
 }
 

@@ -155,6 +155,12 @@ An on-device AI agent for Android that operates apps and the web to get things d
 - 每个对话一个工作区，可以跑 Python、Node 和 shell 命令，处理你发来的文件，把结果存到手机的「下载/Mika」。
 - 默认断网，需要时在设置里的「文件与计算环境」打开「允许脚本联网」。只支持 arm64 设备。
 
+### 从电脑调用 Mika（MCP）
+
+- 在设置 › MCP 连接里打开后,电脑上的 MCP 客户端可以交给 Mika 一件手机任务、查看进度和结果、回答追问、追加要求或取消。
+- 默认关闭,用连接令牌授权,通过 USB/ADB 转发连接;任务使用手机上配置的模型,登录、付款确认和接管沿用手机上的流程。
+- Codex 配置和连接步骤见[设置指南的 MCP 部分](docs/setup-guide.md#mcp)。
+
 ## 快速开始
 
 ### 系统要求

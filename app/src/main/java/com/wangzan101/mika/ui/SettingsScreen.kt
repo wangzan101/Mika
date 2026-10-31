@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 设置里能进入的子页面;[Home] 是设置首页。 */
-private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, Developer, RunStats }
+private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, Mcp, Developer, RunStats }
 
 /**
  * 设置页:总状态卡 + 基本 / 隐私与数据 / 高级 / 关于四组。各子页面在这里切换(返回键先回首页),
@@ -161,6 +161,7 @@ fun SettingsScreen(
             sandbox = sandboxStatus, onOpenSandbox = { page = SettingsPage.Sandbox },
             routes = routeCount, onOpenRoutes = { page = SettingsPage.Routes },
             onOpenRecovery = { page = SettingsPage.Recovery },
+            onOpenMcp = { page = SettingsPage.Mcp },
             showDeveloper = showDeveloper, onOpenDeveloper = { page = SettingsPage.Developer },
             versionName = BuildConfig.VERSION_NAME, updateVersion = updateVersion, onOpenAbout = onOpenAbout,
         )
@@ -188,6 +189,7 @@ fun SettingsScreen(
             onBack = toHome,
         )
         SettingsPage.Recovery -> RecoveryScreen(onBack = toHome)
+        SettingsPage.Mcp -> McpScreen(onBack = toHome)
         SettingsPage.Developer -> DeveloperOptionsScreen(
             speed, onSpeed = { flags.setSpeed(it); speed = it }, onBack = toHome,
             autonomous = autonomous, onAutonomous = onAutonomous,
@@ -250,6 +252,7 @@ fun SettingsContent(
     routes: Int? = null,
     onOpenRoutes: () -> Unit = {},
     onOpenRecovery: () -> Unit = {},
+    onOpenMcp: (() -> Unit)? = null,
     showDeveloper: Boolean = false,
     onOpenDeveloper: () -> Unit = {},
     versionName: String = "",
@@ -309,7 +312,7 @@ fun SettingsContent(
 
         val sandboxRow = sandbox?.takeIf { it !is SandboxStatus.Unsupported }
         val recoveryRow = status.sdkInt >= Prerequisites.MIN_SDK
-        if (sandboxRow != null || routes != null || recoveryRow || showDeveloper) {
+        if (sandboxRow != null || routes != null || recoveryRow || onOpenMcp != null || showDeveloper) {
             GroupLabel(stringResource(R.string.settings_advanced))
             GroupCard {
                 var first = true
@@ -324,6 +327,9 @@ fun SettingsContent(
                 }
                 if (recoveryRow) {
                     ListRow(MikaIcons.Wrench, stringResource(R.string.settings_recovery), first = take(), onClick = onOpenRecovery) { RowChevron() }
+                }
+                onOpenMcp?.let {
+                    ListRow(MikaIcons.Code, stringResource(R.string.mcp_title), stringResource(R.string.mcp_subtitle), first = take(), onClick = it) { RowChevron() }
                 }
                 if (showDeveloper) {
                     ListRow(MikaIcons.Code, stringResource(R.string.settings_developer), first = take(), onClick = onOpenDeveloper) { RowChevron() }

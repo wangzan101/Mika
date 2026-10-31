@@ -127,6 +127,15 @@
                 android:value="Runs a user-requested phone task on the app's own virtual display and shows its progress" />
         </service>
 
+        <service
+            android:name=".mcp.McpService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a user-enabled local MCP connection available for submitting and controlling phone tasks" />
+        </service>
+
         <!-- 后台准备运行环境(解出随 APK 自带的根文件系统),只在准备期间运行 -->
         <service
             android:name=".sandbox.SandboxService"

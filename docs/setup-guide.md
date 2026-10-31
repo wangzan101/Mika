@@ -238,3 +238,31 @@ adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/usb-start.sh
 | 无障碍里 Mika 的开关是灰的 / 提示「受限制的设置」 | 推荐的做法：跳过这一步，配对后 Mika 会自己打开。要手动打开的话：先试着打开一次被拦下，再去 设置 › 应用 › Mika，右上角 ⋮ › 允许受限制的设置，然后回无障碍设置打开 Mika。 |
 | 配对后无障碍还是没打开 | 确认 设置 › 恢复与修复 里「替我打开无障碍」是开着的，等几秒；还不行就按上一行手动打开。 |
 | 卡住了，上面都对不上 | 点向导底部的「复制诊断信息」（失败时出错的那一步里也有；也可以在 关于 Mika › 反馈问题 里找到），看一眼内容再点「复制」或「分享」，发给作者（微信或 GitHub 问题）。里面有版本、机型、每一步的状态和最近一次出错的原因，不包含 API Key、聊天内容和屏幕内容。 |
+
+<a id="mcp"></a>
+
+## MCP：从电脑交给 Mika 办事
+
+先在手机上配置好主模型。需要操作 App 时,还要完成前面的手机操作设置。电脑安装 Android platform-tools,用数据线连接手机并允许 USB 调试。
+
+1. 手机打开 设置 › MCP 连接,打开「允许电脑上的助手调用 Mika」。
+2. 电脑运行 `adb forward tcp:18765 tcp:18765`。连接多台设备时,用 `adb -s <设备编号> forward tcp:18765 tcp:18765` 指定这一台。
+3. 手机上点「复制连接令牌」,将令牌安全地转到电脑,在启动客户端的环境里设置 `MIKA_MCP_TOKEN`。令牌持有者可以交给 Mika 操作 App 和账号的任务,不要放进截图、Issue 或共享配置。
+4. Codex 可运行下面的命令添加连接;也可以点手机上的「复制 Codex 配置」,把内容加入电脑的 `~/.codex/config.toml`。
+
+```sh
+codex mcp add mika --url http://127.0.0.1:18765/mcp --bearer-token-env-var MIKA_MCP_TOKEN
+```
+
+其他支持 Streamable HTTP 的客户端使用同一 URL,认证头为 `Authorization: Bearer <连接令牌>`。手机只监听本机地址,不接受局域网或公网直连。
+
+| 工具 | 用途 |
+|---|---|
+| `mika_task(goal)` | 提交任务,立即返回 `task_id`,不表示任务已完成 |
+| `mika_status(task_id)` | 每隔几秒查询进度、追问或最终结果;不会重新执行任务 |
+| `mika_reply(task_id, message)` | 回答任务的追问,或在执行中追加要求;`accepted` 表示这条话已交给运行 |
+| `mika_cancel(task_id)` | 请求停止运行或移除排队任务,再查询终态;已经做过的动作保留 |
+
+遇到 `needs_input`,用 `mika_reply` 回答;遇到 `needs_phone`,在手机上完成登录、付款确认或接管。付款审批沿用 Mika 的询问 / 自主设置。结果里的 `verified`、`reviewed` 和 `sources` 照实返回,完成不等于已经独立核实。
+
+关闭设置里的开关或通知上的「关闭连接」可停止监听,已提交的任务继续在 Mika 里运行。每次重新开启都会换令牌,客户端需更新环境变量。句柄只在 Mika 当前进程内有效,结束结果保留最近 100 个;进程重启后请在手机对话和运行记录里查看结果,不会从中间续跑。

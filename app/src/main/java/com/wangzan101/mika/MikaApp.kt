@@ -80,6 +80,7 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
     /** 各任务的标签池共用的标签总数上限。 */
     val resources = ResourceScheduler()
     val mcpTasks by lazy { McpTaskHub(this) }
+    val mcp by lazy { com.wangzan101.mika.mcp.McpConnection(this) }
     val childRuns by lazy { FileChildRunStore(java.io.File(filesDir, "children-v3.json")) }
     override val tabBudget get() = resources.tabBudget
 

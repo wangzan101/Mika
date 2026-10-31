@@ -175,7 +175,11 @@ class TaskService : Service() {
                 allowQueue = true, provenance = RunProvenance(RunOrigin.Mcp,
                     Attendance.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_ATTENDANCE) } ?: Attendance.Unattended),
                 mcpExternalId = intent.getStringExtra(EXTRA_MCP_ID))
-            ACTION_CANCEL_MCP -> intent.getStringExtra(EXTRA_MCP_ID)?.let { id -> center.runs().firstOrNull { it.mcpExternalId == id }?.cancel() }
+            ACTION_CANCEL_MCP -> intent.getStringExtra(EXTRA_MCP_ID)?.let { id ->
+                center.runs().firstOrNull { it.mcpExternalId == id }?.let {
+                    if (center.cancelIfQueued(it)) cancelQueued(it) else it.cancel()
+                }
+            }
             ACTION_CANCEL -> if (run != null && center.cancelIfQueued(run)) cancelQueued(run) else run?.cancel()
             ACTION_RESUME -> run?.resume()
             ACTION_TAKE_OVER -> run?.takeOver(waitKeyOf(intent))
@@ -201,6 +205,12 @@ class TaskService : Service() {
         provenance: RunProvenance = RunProvenance(), triggerKey: String? = null,
         triggerActionGoal: String? = null, triggerThreadId: String? = null, mcpExternalId: String? = null, messageId: String? = null) {
         parallel = FeatureFlags.get(this).speedFlags().parallelTasks
+        val mcpTasks = (application as com.wangzan101.mika.MikaApp).mcpTasks
+        if (mcpExternalId != null && mcpTasks.cancelled(mcpExternalId)) {
+            mcpTasks.ended(mcpExternalId, TaskState.Cancelled)
+            keepForeground()
+            return
+        }
         // 同一对话里正在执行或排队的任务收到新原话时，交给它的 Inbox。
         requestedConversation?.let(center::byConversation)?.let { existing ->
             if (provenance.origin == RunOrigin.Ui) {
@@ -239,6 +249,7 @@ class TaskService : Service() {
                     center.store.save(it.copy(triggerWindowKey = triggerKey))
                 }
                 r.run.mcpExternalId = mcpExternalId
+                mcpExternalId?.let { mcpTasks.bind(it, r.run.state, queued = true, r.run::replyMcp) }
                 taskState._busy.value = true
                 taskState._conversationId.value = conversationId
                 // 先登记再显示:界面收到它的状态时,任务列表里已经有它(对话、原话)
@@ -262,6 +273,7 @@ class TaskService : Service() {
                     center.store.save(it.copy(triggerWindowKey = triggerKey))
                 }
                 run.mcpExternalId = mcpExternalId
+                mcpExternalId?.let { mcpTasks.bind(it, run.state, queued = false, run::replyMcp) }
                 // 先登记再显示:界面收到它的状态时,任务列表里已经有它(对话、原话)
                 publishRuns()
                 run.show()
@@ -301,6 +313,7 @@ class TaskService : Service() {
     private fun launch(run: TaskRun, store: ConversationStore) {
         run.job = scope.launch {
             center.markRunning(run)
+            run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.running(it) }
             val result = try {
                 run.execute(runCatching { store.turns(run.conversationId) }.getOrDefault(emptyList()))
             } catch (e: CancellationException) {
@@ -366,7 +379,7 @@ class TaskService : Service() {
                 }
             }.onFailure { Log.w(TAG, "result notification failed", it) }
             if (delivered) center.markDelivered(run)
-            run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, end::class.simpleName.orEmpty()) }
+            run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, end) }
             onRunEnded(run, store)
         }
     }
@@ -429,6 +442,7 @@ class TaskService : Service() {
     private fun cancelQueued(run: TaskRun) {
         run.handoffUnconsumed(cancelled = true)
         run.end(TaskState.Cancelled)
+        run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, TaskState.Cancelled) }
         recordTurn(ConversationStore.shared(this), run.conversationId, run.goal, TaskState.Cancelled, null)
         publishRuns()
         center.queued().forEachIndexed { i, q -> q.queue(i + 1) }
@@ -654,6 +668,9 @@ class TaskService : Service() {
     override fun onDestroy() {
         scope.cancel()
         if (center.runs().isNotEmpty()) {
+            center.runs().forEach { run -> run.mcpExternalId?.let {
+                (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, TaskState.Failed(tr(R.string.task_interrupted), FailKind.Environment))
+            } }
             // 标中断后当场善后(定时窗口、补送、告知、写进对话):进程还在,不等下次启动;用 App 级作用域,服务没了也做完
             center.store.interruptUnfinished()
             (application as com.wangzan101.mika.MikaApp).runRecovery.settleInterrupted()

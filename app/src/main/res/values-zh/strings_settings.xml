@@ -78,4 +78,16 @@
     <string name="routes_clear_title">清除全部已记住的操作路线?</string>
     <string name="routes_clear_body">清除后,做过的事下次会重新一步步来做,不影响别的设置。</string>
     <string name="clear">清除</string>
+    <string name="mcp_title">MCP 连接</string>
+    <string name="mcp_enable">允许电脑上的助手调用 Mika</string>
+    <string name="mcp_subtitle">从电脑提交手机任务、查看进度和结果</string>
+    <string name="mcp_explain">默认关闭。打开后，持有令牌的助手可以使用你的 App 和账号提交任务。登录、付款确认和屏幕接管仍在手机上处理。关闭连接不会停止已提交的任务，可在 Mika 中查看。重启后需重新打开，连接令牌会更新。</string>
+    <string name="mcp_connect">用 USB 连接电脑</string>
+    <string name="mcp_connect_steps">手机打开 USB 调试，用数据线连接电脑。在电脑上运行：\n%1$s\n\n服务地址：%2$s\n\n将复制的配置加入电脑上 Codex 的 config.toml，并在启动 Codex 的环境中把 MIKA_MCP_TOKEN 设为复制的令牌。其他 MCP 客户端也可以用同一地址和 Bearer 令牌连接。</string>
+    <string name="mcp_copy">复制 Codex 配置</string>
+    <string name="mcp_copy_token">复制连接令牌</string>
+    <string name="mcp_copied">已复制</string>
+    <string name="mcp_error">连接未开启：%1$s</string>
+    <string name="mcp_notification">MCP 连接已开启</string>
+    <string name="mcp_turn_off">关闭连接</string>
 </resources>

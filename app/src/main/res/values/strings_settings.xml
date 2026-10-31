@@ -84,4 +84,16 @@
     <string name="routes_clear_title">Clear all saved routes?</string>
     <string name="routes_clear_body">After clearing, Mika works things out step by step again next time. Other settings aren’t affected.</string>
     <string name="clear">Clear</string>
+    <string name="mcp_title">MCP connection</string>
+    <string name="mcp_enable">Allow computer assistants to use Mika</string>
+    <string name="mcp_subtitle">Submit phone tasks and check their progress from your computer</string>
+    <string name="mcp_explain">Off by default. While enabled, an assistant with the token can submit tasks using your apps and accounts. Login, payment approval and screen takeover stay on the phone. Turning this off closes the connection; submitted tasks continue in Mika. After a restart, enable it again to get a new token.</string>
+    <string name="mcp_connect">Connect over USB</string>
+    <string name="mcp_connect_steps">Connect the phone with USB debugging enabled. On your computer, run:\n%1$s\n\nServer address: %2$s\n\nAdd the copied configuration to your computer’s Codex config.toml. Set MIKA_MCP_TOKEN to the copied token in the environment that launches Codex. Other MCP clients can use the same address and Bearer token.</string>
+    <string name="mcp_copy">Copy Codex configuration</string>
+    <string name="mcp_copy_token">Copy connection token</string>
+    <string name="mcp_copied">Copied</string>
+    <string name="mcp_error">Could not open the connection: %1$s</string>
+    <string name="mcp_notification">MCP connection is on</string>
+    <string name="mcp_turn_off">Turn off</string>
 </resources>

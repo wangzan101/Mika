@@ -247,7 +247,7 @@ class TaskRun(
         internal set
     /** 发布与收尾互斥;[ended] 之后不再写状态,迟到的发布不能盖掉终态或重新拿锁。 */
     private val publishLock = Any()
-    private var ended = false
+    @Volatile private var ended = false
 
     fun cancel() {
         stopPressed = true
@@ -300,11 +300,23 @@ class TaskRun(
         }
     }
 
+    /** 远端只回答提问或插话;不代替用户确认付款、交回屏幕,也不把迟到的消息另开成任务。 */
+    internal suspend fun replyMcp(text: String): Boolean {
+        if (ended || stopPressed) return false
+        if (_state.value is TaskState.WaitingInput) return inbox.send(RunInput.Answer(text)) == InputReceipt.Accepted
+        val messageId = UUID.randomUUID().toString()
+        synchronized(service.taskState.shownLock) { _steers.value = _steers.value + SteerNote(messageId, text, SteerState.Pending) }
+        val accepted = inbox.send(RunInput.Steer(messageId, text)) == InputReceipt.Accepted
+        markSteers(setOf(messageId), if (accepted) SteerState.Received else SteerState.Cancelled, from = SteerState.Pending)
+        return accepted
+    }
+
     /** 收尾时还没交给模型的插话:作为这个对话的下一件事;停止了([cancelled])就一起作废。 */
     fun handoffUnconsumed(cancelled: Boolean = stopPressed) {
         val left = inbox.handoffUnconsumed()
-        markSteers(left.map { it.messageId }.toSet(), if (cancelled) SteerState.Cancelled else SteerState.Next)
-        if (!cancelled) left.forEach { service.deferMessage(conversationId, it.text) }
+        val defer = !cancelled && provenance.origin != RunOrigin.Mcp
+        markSteers(left.map { it.messageId }.toSet(), if (defer) SteerState.Next else SteerState.Cancelled)
+        if (defer) left.forEach { service.deferMessage(conversationId, it.text) }
     }
 
     /** 已交给这个任务的插话,随这一轮存进对话。 */

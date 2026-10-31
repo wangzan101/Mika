@@ -238,3 +238,31 @@ Good to know:
 | Mika's accessibility switch is greyed out / "Restricted setting" | Recommended: skip that step; Mika turns it on after pairing. To do it by hand: try turning it on once so the system blocks it, then go to Settings › Apps › Mika, tap ⋮ at the top right › Allow restricted settings, and go back to Accessibility settings to turn Mika on. |
 | Accessibility still off after pairing | Check that "Turn on accessibility for me" in Settings › Recovery & repair is on, and wait a few seconds; if it's still off, turn it on by hand as in the row above. |
 | Stuck and nothing above fits | Tap "Copy diagnostics" at the bottom of the wizard (also inside the failed step, and under About Mika › Send feedback). Look it over, then tap "Copy" or "Share" and send it to the author (WeChat or a GitHub issue). It has the version, phone model, the state of each step and the last error — no API keys, chat content or screen content. |
+
+<a id="mcp"></a>
+
+## MCP: delegate tasks from your computer
+
+Configure a main model in Mika first. For app control, complete the phone-control setup above as well. Install Android platform-tools on the computer, connect the phone by USB and allow USB debugging.
+
+1. Open Settings › MCP connection on the phone and enable “Allow computer assistants to use Mika”.
+2. On the computer, run `adb forward tcp:18765 tcp:18765`. With multiple devices, use `adb -s <device-id> forward tcp:18765 tcp:18765` to select this phone.
+3. Tap “Copy connection token”, transfer it securely to the computer, and set `MIKA_MCP_TOKEN` in the environment that launches the client. Anyone with the token can submit tasks using your apps and accounts. Keep it out of screenshots, issues and shared configuration.
+4. For Codex, run the command below, or use “Copy Codex configuration” on the phone and add the copied text to the computer's `~/.codex/config.toml`.
+
+```sh
+codex mcp add mika --url http://127.0.0.1:18765/mcp --bearer-token-env-var MIKA_MCP_TOKEN
+```
+
+Other Streamable HTTP clients can use the same URL with `Authorization: Bearer <connection-token>`. The phone listens only on loopback; direct LAN or public-internet connections are not accepted.
+
+| Tool | Purpose |
+|---|---|
+| `mika_task(goal)` | Submit a task and immediately return `task_id`; this does not mean it completed |
+| `mika_status(task_id)` | Poll every few seconds for progress, a question or the final result; never restarts the task |
+| `mika_reply(task_id, message)` | Answer a question or add instructions during execution; `accepted` means the run received the message |
+| `mika_cancel(task_id)` | Request cancellation of running or queued work, then check its final status; completed actions remain completed |
+
+For `needs_input`, answer with `mika_reply`. For `needs_phone`, handle sign-in, payment approval or takeover on the phone. Payment approval follows Mika's Ask / Autonomous setting. Results preserve `verified`, `reviewed` and `sources`; completion does not imply independent verification.
+
+Turn off the switch or tap “Turn off” in the notification to close the listener. Submitted tasks continue in Mika. Each new connection gets a new token, so update the client's environment variable. Handles last for the current Mika process, with the latest 100 completed results retained. After a process restart, inspect the phone's conversation and run records; interrupted tasks do not resume midway.

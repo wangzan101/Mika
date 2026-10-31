@@ -29,6 +29,9 @@ import kotlinx.serialization.json.put
 /** 传输层桩实现这个接口，外部连接只能拿到 ID 和事件流。 */
 fun interface McpTaskHost {
     fun submit(spec: RunSpec): McpTaskLink
+    fun status(id: RunId): JsonObject? = null
+    suspend fun reply(id: RunId, text: String): Boolean = false
+    fun cancel(id: RunId): Boolean = false
 }
 
 class McpTaskLink(val id: RunId, val events: RunEventBus, val cancel: () -> Unit = {})

@@ -155,6 +155,12 @@ Apps and websites that already have usage knowledge (names as they appear in the
 - Each conversation gets a workspace that can run Python, Node and shell commands, process files you send, and save results to your phone's Download/Mika folder.
 - Offline by default; when needed, turn on "Allow scripts to access the network" (允许脚本联网) under "Files & compute" (文件与计算环境) in Settings. arm64 devices only.
 
+### Call Mika from your computer (MCP)
+
+- Enable Settings › MCP connection to let an MCP client submit a phone task, check progress and results, answer questions, add instructions or cancel.
+- Off by default, authenticated with a connection token, and reached through USB/ADB forwarding. Tasks use the model configured on the phone; sign-in, payment approval and takeover keep using the phone's existing flow.
+- See [MCP setup](docs/setup-guide.en.md#mcp) for connection steps and a Codex configuration.
+
 ## Quick start
 
 ### Requirements

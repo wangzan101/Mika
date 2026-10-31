@@ -23,7 +23,7 @@
             ModelCaller · ContextBuilder/ContextCompressor · TurnPolicy/StopRules
             ToolDispatcher → ActionExecutor(唯一执行入口)
                      │  CapabilityProvider(核心不认识具体能力)
-          phone      web       sandbox      (mcp:骨架)
+          phone      web       sandbox      (mcp:客户端骨架)
 ```
 
 `:core` 里包之间的依赖方向(`PackageDependencyTest` 检查):
@@ -191,7 +191,10 @@
 
 ### MCP
 
-`core/mcp/McpServer.kt`(低层工具会话、整任务提交)和 `core/cap/mcp/McpClient.kt`(按注解定风险、工具列表开局冻结)只有骨架和测试,没有传输层,用户用不到。App 一侧已有 `McpTaskHub`(`app/task/McpTaskHub.kt`)和 `TaskService` 的 `ACTION_START_MCP` / `ACTION_CANCEL_MCP`,等传输层接上就能收任务、取消任务。
+- **服务端**:设置 › MCP 连接里手动打开,默认关闭。`app/mcp/McpService.kt` 持有前台通知和 `core/mcp/McpHttpServer.kt`,只监听 `127.0.0.1:18765/mcp`,电脑经 `adb forward` 连接。每次开启生成新的 256 位 Bearer 令牌,不落盘;所有请求都校验令牌,带 Origin 的请求一律拒绝,不开放 CORS。传输用 Streamable HTTP 的 JSON 响应形式,GET 返回 405,不维持协议会话或事件流。
+- **任务工具**:`core/mcp/McpTaskProtocol.kt` 提供 `mika_task`、`mika_status`、`mika_reply`、`mika_cancel`。开任务立即返回编号,查询不重跑;`McpTaskHub`(`app/task/McpTaskHub.kt`)经 `TaskService` 提交、排队和取消,任务仍用手机已配置的模型和同一个执行入口。来源是 Mcp、在场状态是 Reachable,可远端回答追问或插话,付款确认、登录和屏幕接管仍在手机上处理,沿用询问 / 自主模式。返回结果包含 `verified`、`reviewed` 和来源,不把提交成功当完成。
+- **句柄与结果**:只允许查询本 MCP 入口提交的任务;运行中和排队中的句柄保留,结束后保留最近 100 个。句柄跟进程走,进程重启后不能再用,对话与运行记录仍由现有账本保存。关闭 MCP 只停监听,已提交的任务继续执行;再次打开时令牌更新。
+- **未接入产品**:`core/mcp/McpServer.kt` 的低层工具会话和 `core/cap/mcp/McpClient.kt` 的外部工具客户端仍只有骨架和测试,没有传输层和设置入口。
 
 ## 7. 上下文与压缩
 

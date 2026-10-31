@@ -3,6 +3,7 @@ package com.wangzan101.mika.cap.phone.a11y
 import com.wangzan101.mika.cap.phone.a11y.MainScreenSpill.InUse
 import com.wangzan101.mika.cap.phone.a11y.MainScreenSpill.PullBack
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -110,6 +111,23 @@ class MainScreenSpillTest {
         // 树本来就读不出东西的 App 不算要用户处理,照常挪回
         assertEquals(false, MainScreenSpill.needsUser(passwordField = false, readable = false, secureWindow = false))
         assertEquals(false, MainScreenSpill.needsUser(passwordField = false, readable = true, secureWindow = false))
+    }
+
+    @Test fun authenticatorAuthPagesAreUserStepsButItsLauncherIsNot() {
+        val auth = setOf("com.google.android.gms", "com.google.android.gm")
+        // Google 账号验证、加账号、验证码:整屏、没有密码框,但它是账号认证器的页面
+        assertTrue(MainScreenSpill.authenticatorUi("com.google.android.gms",
+            "com.google.android.gms.auth.uiflows.minutemaid.MinuteMaidActivity", auth, null))
+        assertTrue(MainScreenSpill.authenticatorUi("com.google.android.gms",
+            "com.google.android.gms.auth.uiflows.addaccount.AddAccountActivity", auth, null))
+        // 认证器包自己的启动页不算(比如 Gmail 的收件箱)
+        assertTrue(MainScreenSpill.authenticatorUi("com.google.android.gm",
+            "com.google.android.gm.AddAccountActivity", auth, "com.google.android.gm.ConversationListActivityGmail"))
+        assertFalse(MainScreenSpill.authenticatorUi("com.google.android.gm",
+            "com.google.android.gm.ConversationListActivityGmail", auth, "com.google.android.gm.ConversationListActivityGmail"))
+        // 不是认证器的包、读不到页面,都不算
+        assertFalse(MainScreenSpill.authenticatorUi("com.example.app", "com.example.app.LoginActivity", auth, null))
+        assertFalse(MainScreenSpill.authenticatorUi("com.google.android.gms", null, auth, null))
     }
 
     @Test fun oneVerdictPerTaskInOrder() {

@@ -19,6 +19,9 @@ const makeDom = () => {
     constructor() { super(); this._kids = []; this._attrs = {}; this.parentNode = null; this._text = null; }
     // 和浏览器一样只有 Node 上一个 getter,对哪种节点都给对的值
     get nodeType() { return this._nodeType; }
+    get parentNode() { return this._parent || null; }
+    set parentNode(v) { this._parent = v; }
+    get firstChild() { return this._kids[0] || null; }
     get childNodes() { return new NodeList(this._kids); }
     get textContent() { return this._text != null ? this._text : this._kids.map((k) => k.textContent).join(''); }
     set textContent(v) { log.mutations++; this._text = String(v); this._kids = []; }
@@ -29,6 +32,17 @@ const makeDom = () => {
     _all() { const out = []; for (const k of this._kids) { out.push(k); out.push(...k._all()); } return out; }
     _match(sel) { return this._all().filter((e) => e._is(sel)); }
   }
+  class CharacterData extends Node {
+    constructor(text) { super(); this._nodeType = 3; this._text = text; }
+    get data() { return this._text; }
+    get nodeValue() { return this._text; }
+    get length() { return this._text.length; }
+    substringData(start, count) { return this._text.slice(start, start + count); }
+    _copy() { return new Text(this._text); }
+    get outerHTML() { return this._text; }
+    _is() { return false; }
+  }
+  class Text extends CharacterData { get wholeText() { return this._text; } }
   // 和浏览器一样,查找方法在 Element、Document、DocumentFragment 上,不在 Node 上;选择器参数和浏览器一样先变成字符串
   const finders = {
     querySelectorAll(sel) { return new NodeList(this._match(asString(sel))); },
@@ -159,9 +173,9 @@ const makeDom = () => {
     importNode(n, deep) { return n._copy(deep); }
   }
   Object.assign(Document.prototype, finders);
-  return { EventTarget, Node, Element, HTMLElement, HTMLInputElement, HTMLTextAreaElement, HTMLIFrameElement, HTMLTemplateElement, Attr, NamedNodeMap, NodeList, DocumentFragment, ShadowRoot, Document };
+  return { EventTarget, Node, CharacterData, Text, Element, HTMLElement, HTMLInputElement, HTMLTextAreaElement, HTMLIFrameElement, HTMLTemplateElement, Attr, NamedNodeMap, NodeList, DocumentFragment, ShadowRoot, Document };
 };
-const { EventTarget, Node, Element, HTMLElement, HTMLInputElement, HTMLTextAreaElement, HTMLIFrameElement, HTMLTemplateElement, Attr, NamedNodeMap, NodeList, DocumentFragment, ShadowRoot, Document } = makeDom();
+const { EventTarget, Node, CharacterData, Text, Element, HTMLElement, HTMLInputElement, HTMLTextAreaElement, HTMLIFrameElement, HTMLTemplateElement, Attr, NamedNodeMap, NodeList, DocumentFragment, ShadowRoot, Document } = makeDom();
 // 页面自己定义的自定义元素:构造时跑页面代码
 class XCard extends HTMLElement { constructor(...a) { super(...a); log.pageCode++; } }
 
@@ -177,8 +191,8 @@ const pw = add(form, new HTMLInputElement('input', { type: 'password', value: 'h
 add(form, new HTMLInputElement('input', { type: 'hidden', name: 'csrf', value: 'tok-123' }));
 add(form, new HTMLInputElement('input', { type: 'text', name: 'q', value: 'shoes' }));
 add(form, new HTMLInputElement('input', { type: 'number', name: 'otp', autocomplete: 'one-time-code', value: '482913' }));
-add(form, new HTMLTextAreaElement('textarea', { name: 'code', autocomplete: 'one-time-code' }, 'otp-in-textarea'));
-add(form, new HTMLTextAreaElement('textarea', { name: 'note' }, 'leave at door'));
+add(add(form, new HTMLTextAreaElement('textarea', { name: 'code', autocomplete: 'one-time-code' })), new Text('otp-in-textarea'));
+add(add(form, new HTMLTextAreaElement('textarea', { name: 'note' })), new Text('leave at door'));
 add(form, new XCard('x-card', {}, 'card'));
 // template 里的隐藏字段:不在文档树上,innerHTML 照样写出来
 add(add(form, new HTMLTemplateElement('template'))._content, new HTMLInputElement('input', { type: 'hidden', name: 'tpl', value: 'tpl-secret' }));
@@ -204,6 +218,12 @@ add(add(add(body, new Element('svg')), new Element('template')), new Element('ci
 const pageActions = {
   // 「显示密码」:读取世界建起之后把密码框改成 text
   showPassword: () => { pw._attrs.type = 'text'; return () => { pw._attrs.type = 'password'; }; },
+  // 页面异步重绘/清空输入框:脚本已经拿到的旧 Text 节点仍然存在,但不再有 parentNode。
+  detachSecretText: () => {
+    const area = form.querySelector('textarea'), old = area._kids.slice();
+    const timer = setTimeout(() => { area._kids = []; for (const n of old) n.parentNode = null; }, 0);
+    return () => { clearTimeout(timer); area._kids = old; for (const n of old) n.parentNode = area; };
+  },
 };
 // 页面上的节点此刻的样子(属性、值、文字,含 template 的内容、shadow root、iframe 里的文档):读完和读之前一比,就知道原件有没有被改过
 const pageState = () => {
@@ -235,7 +255,7 @@ const navigator = { userAgent: 'test', sendBeacon(u) { log.requests.push({ via: 
 
 Object.assign(globalThis, {
   XMLHttpRequest, WebSocket, EventSource, Image,
-  Node, Element, HTMLElement, HTMLInputElement, HTMLTextAreaElement, HTMLIFrameElement, HTMLTemplateElement, Attr, NamedNodeMap, NodeList, DocumentFragment, ShadowRoot, Document, EventTarget,
+  Node, CharacterData, Text, Element, HTMLElement, HTMLInputElement, HTMLTextAreaElement, HTMLIFrameElement, HTMLTemplateElement, Attr, NamedNodeMap, NodeList, DocumentFragment, ShadowRoot, Document, EventTarget,
   document: doc, location,
   getComputedStyle() { return { display: 'block' }; },
   open() { log.navigations++; },

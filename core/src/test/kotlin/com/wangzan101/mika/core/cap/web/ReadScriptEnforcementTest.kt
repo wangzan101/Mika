@@ -8,6 +8,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -69,6 +70,11 @@ class ReadScriptEnforcementTest {
             case("selectorFlip", "let n = 0; return document.querySelectorAll({ toString: () => (n++ ? 'input[value^=h]' : 'li') }).length;")
             case("attrFlip", "let n = 0; return document.querySelectorAll('input')[1].getAttribute({ toString: () => (n++ ? 'value' : 'x') });")
             case("textareas", "const [code, note] = document.querySelectorAll('textarea'); return [code.value, code.textLength, code.outerText, code.innerText, code.name, note.value, note.textLength, note.outerText];")
+            case("secretParentText", "[document.querySelector('form').textContent, document.body.textContent]")
+            case("secretParentRenderedText", "[document.querySelector('form').innerText, document.body.innerText, document.body.outerText]")
+            case("secretTextNode", "const n = document.querySelector('textarea').firstChild; return [n.textContent, n.nodeValue, n.data, n.wholeText, n.length, n.substringData(0, 3)];")
+            case("ordinaryTextNode", "const n = document.querySelectorAll('textarea')[1].firstChild; return [n.data, n.substringData(0, 5)];")
+            case("detachedSecretText", "const n = document.querySelector('textarea').firstChild; await sleep(50); return [n.data, n.nodeValue, n.textContent, n.wholeText, n.length, n.substringData(0, 3)];", page = "detachSecretText")
             case("frameFields", "const f = document.querySelector('iframe').contentDocument.body.children[0]; return [f.children[0].value, f.children[1].value, f.children[0].selectionEnd, f.children[1].type, f.children[2].value];")
             case("frameHtml", "document.querySelector('iframe').contentDocument.body.innerHTML")
             case("shadowHtml", "document.querySelector('div').shadowRoot.innerHTML")
@@ -194,6 +200,23 @@ class ReadScriptEnforcementTest {
         val html = listOf("formHtml", "frameHtml", "shadowHtml", "toggledHtml", "templateHtml", "svgTemplate")
         for (n in html) assertEquals(n, 0, r(n).getValue("pageCode").jsonPrimitive.int)
         for (n in html) assertEquals(n, "false", r(n).s("pageChanged"))
+    }
+
+    @Test fun secretTextareaTextCannotBeReadThroughRelatives() {
+        val parent = ok("secretParentText")
+        assertTrue(parent, "otp-in-textarea" !in parent && "leave at door" in parent && "***" in parent)
+        assertEquals("""["***","***","***"]""", ok("secretParentRenderedText"))
+        assertEquals("""["***","***","***","***","***","***"]""", ok("secretTextNode"))
+        assertEquals("""["leave at door","leave"]""", ok("ordinaryTextNode"))
+        for (name in listOf("secretParentText", "secretParentRenderedText", "secretTextNode", "ordinaryTextNode")) {
+            assertEquals(name, "false", r(name).s("pageChanged"))
+            assertEquals(name, 0, r(name).getValue("pageCode").jsonPrimitive.int)
+            assertTrue(name, r(name).getValue("requests").jsonArray.isEmpty())
+        }
+    }
+
+    @Test fun retainedSecretTextStaysMaskedAfterPageRemovesIt() {
+        assertEquals("""["***","***","***","***","***","***"]""", ok("detachedSecretText"))
     }
 
     @Test fun valueSelectorsAreRefused() {

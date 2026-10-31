@@ -22,7 +22,8 @@ const val READ_SLEEP_MAX_MS = 5_000
  *   函数只有登记过的只读方法(查找、读属性、量位置、迭代)能调,别的(点、聚焦、提交、改 DOM、开窗、跳转)都报 read_only。
  *   原生函数只拿到原件,模型拿到的永远是包装;模型能碰到的内置对象先冻住、全局名设成只读,改不了它们来截原件或换掉检查要用的函数。
  * - 密码、隐藏字段、验证码、银行卡一类输入框的值读出来是 `***`,输入框自己接口上只有 [SECRET_FIELD_PROPS] 能照读;
- *   同源 iframe、shadow root、template 里的也一样(认节点用原生 getter,不用 instanceof)。innerHTML 一类在不属于任何窗口的副本上打码,不跑页面代码。
+ *   同源 iframe、shadow root、template 里的也一样(认节点用原生 getter,不用 instanceof)。HTML 和祖先 textContent 在不属于任何窗口的副本上打码,
+ *   不跑页面代码;含秘密 textarea 的祖先 innerText / outerText 整段遮住,避免脱离排版的副本带出隐藏文字。秘密框的文本子节点也打码。
  *   按 value 属性选元素不行(能逐位猜出值),选择器先照 CSS 的规矩还原再判断([SelectorPolicy])。
  *   选择器、属性名参数先变成字符串、只变一次:检查的就是交给浏览器的那一个。
  * - 读脚本不碰网络:fetch 调用就报 blocked_network([NETWORK_MESSAGE]);XMLHttpRequest、sendBeacon、WebSocket、EventSource、
@@ -173,7 +174,8 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   const SECRET_TYPES = new Set(${js(PageScriptProtocol.SECRET_INPUT_TYPES)});
   // 节点是哪种用原生 getter 读,不用 instanceof:同源 iframe 里的节点属于那个框架自己的一套接口,instanceof 认不出,原生 getter 照样认
   const getterOf = (C, k) => { const d = C && getDesc(C.prototype, k); return d && d.get; };
-  const nodeTypeOf = getterOf(G.Node, 'nodeType'), localNameOf = getterOf(Elem, 'localName'), shadowHostOf = getterOf(G.ShadowRoot, 'host');
+  const nodeTypeOf = getterOf(G.Node, 'nodeType'), parentOf = getterOf(G.Node, 'parentNode');
+  const localNameOf = getterOf(Elem, 'localName'), shadowHostOf = getterOf(G.ShadowRoot, 'host');
   const native = (g, x) => { if (!g || x === null || typeof x !== 'object') return undefined; try { return apply(g, x, []); } catch (e) { return undefined; } };
   const tagOf = (x) => (native(nodeTypeOf, x) === 1 ? native(localNameOf, x) : undefined);
   const secretNow = (el) => {
@@ -196,6 +198,18 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   } catch (e) {}
   markIn(doc);
   const secret = (el) => secretNow(el) || (!!el && typeof el === 'object' && wasSecret.has(el));
+  // textarea 的原文也是它的文本子节点,不能从 childNodes / firstChild 绕过输入框上的打码。
+  const wasSecretText = new WeakSet();
+  const secretText = (v) => {
+    const type = native(nodeTypeOf, v);
+    if (type !== 3 && type !== 4) return false;
+    if (wasSecretText.has(v)) return true;
+    for (let p = native(parentOf, v); p; p = native(parentOf, p)) {
+      if (secret(p)) { wasSecretText.add(v); return true; }
+    }
+    return false;
+  };
+  const TEXT_DATA = new Set(['textContent', 'nodeValue', 'data', 'wholeText', 'length']);
   const SECRET_TEXT = new Set(['value', 'defaultValue', 'textContent', 'innerText', 'outerText', 'innerHTML', 'nodeValue']);
   // 秘密输入框自己接口上的属性:只有页面定好、不随内容变的照读,别的(含浏览器以后新加的读值接口)都是 ***
   const FIELD_SAFE = new Set(${js(SECRET_FIELD_PROPS)});
@@ -238,15 +252,30 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
     }
     return rget(c, k, c);
   };
+  // textContent 用同一份不运行页面代码的副本打码,其余普通文字保留。
+  // innerText / outerText 依赖真实排版,脱离窗口的副本不能还原;有秘密 textarea 时保守地遮住整段,
+  // 不把副本的隐藏文字当作原页面可见文字返回。没有秘密 textarea 时照常读取。
+  const containerText = (v, k) => {
+    const raw = rget(v, k, v);
+    if (typeof raw !== 'string' || !raw) return raw;
+    const type = native(nodeTypeOf, v);
+    if (type !== 1 && type !== 9 && type !== 11) return raw;
+    for (const x of fields(v, [])) {
+      if (tagOf(x) === 'textarea' && secret(x)) return k === 'textContent' ? html(v, k) : MASK;
+    }
+    return raw;
+  };
   const readProp = (v, k) => {
     if (typeof k === 'string') {
       if (DENIED.has(k)) deny('reading ' + k);
       if ((k === 'outerHTML' || k === 'innerHTML') && (native(nodeTypeOf, v) === 1 || (k === 'innerHTML' && native(shadowHostOf, v) !== undefined))) return html(v, k);
       if (SECRET_TEXT.has(k) && secret(v)) { const x = rget(v, k, v); return x ? MASK : x; }
+      if (TEXT_DATA.has(k) && secretText(v)) { const x = rget(v, k, v); return x ? MASK : x; }
       if (!FIELD_SAFE.has(k) && fieldApi(v, k) && secret(v)) { const x = rget(v, k, v); return typeof x === 'function' ? x : MASK; }
       if (native(nodeTypeOf, v) === 2 && SECRET_TEXT.has(k) && String(v.name).toLowerCase() === 'value' && v.ownerElement && secret(v.ownerElement)) {
         const x = rget(v, k, v); return x ? MASK : x;
       }
+      if (k === 'textContent' || k === 'innerText' || k === 'outerText') return containerText(v, k);
     }
     return rget(v, k, v);
   };
@@ -266,6 +295,8 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
         return out;
       }
     }
+    // 暴露节点时就记下,而不是等第一次读 data:页面可能在 await 期间重绘,把旧 Text 从输入框里摘走。
+    secretText(v);
     let p = toProxy.get(v);
     if (!p) { p = makeProxy(v); toProxy.set(v, p); toReal.set(p, v); }
     return p;
@@ -283,6 +314,7 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   const call = (f, self, xs) => {
     if (!SAFE.has(f)) { if (NETWORK.has(nameOf(f))) offline(); deny('calling ' + (nameOf(f) || 'this function')); }
     const t = toNative(self);
+    if (nameOf(f) === 'substringData' && secretText(t)) return MASK;
     const args = [];
     for (const x of xs) args.push(toNative(x));
     // 选择器、属性名先变成字符串、只变一次:对象的 toString 每次可以给不一样的,检查的必须就是交给浏览器的那一个

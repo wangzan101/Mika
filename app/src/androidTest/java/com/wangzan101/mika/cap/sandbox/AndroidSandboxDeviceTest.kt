@@ -46,6 +46,13 @@ class AndroidSandboxDeviceTest {
         }
     }
 
+    @Test fun fixedOffsetTimezonesAgreeAcrossRuntimes() {
+        for (id in listOf("+05:45", "-03:30", "+05:30", "+08:00")) {
+            val zone = java.time.ZoneOffset.of(id)
+            checkTimezone(zone, "export TZ='${ProcRunner.timezone { zone }}'; ")
+        }
+    }
+
     private fun checkTimezone(zone: java.time.ZoneId, prefix: String) {
         // 冬夏各测一次:不能把手机此刻的 UTC 偏移写死成全年偏移。
         for (date in listOf("2026-01-15T04:08:50Z", "2026-07-15T04:08:50Z")) {

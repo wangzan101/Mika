@@ -59,6 +59,52 @@ class OpenAiCompatModelTest {
         assertFalse(req.body.readUtf8().contains("\"tools\""))
     }
 
+    /**
+     * 非流式请求写明 `stream:false`、要一份 JSON;流式请求要 SSE。省掉 `stream` 时有的兼容端点(本地、局域网上的
+     * 自建服务一类)照样回 SSE,客户端按 JSON 解析就只看到 `data: …`。
+     */
+    @Test fun nonStreamRequestAsksForJsonInsteadOfEvents() = runTest {
+        server.enqueue(ok("""{"choices":[{"finish_reason":"stop","message":{"content":"ok"}}]}"""))
+        model().complete("s", user, emptyList())
+        val req = server.takeRequest()
+        assertTrue(req.body.readUtf8().contains("\"stream\":false"))
+        assertEquals("application/json", req.getHeader("Accept"))
+    }
+
+    /** 服务端不听 `stream:false`、照样回 SSE 时:按流读完再拼,不当成坏 JSON。 */
+    @Test fun readsEventStreamReplyToANonStreamRequest() = runTest {
+        val events = listOf(
+            """{"choices":[{"delta":{"content":"先看"}}]}""",
+            """{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"phone_tap","arguments":"{\"ref\":\"a1\"}"}}]},"finish_reason":"tool_calls"}]}""",
+            "[DONE]",
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody(events.joinToString("") { "data: $it\n\n" }),
+        )
+        val r = model().complete("s", user, tools)
+        assertEquals(listOf(Part.Text("先看"), Part.ToolCall("c1", "phone_tap", """{"ref":"a1"}""")), r.parts)
+        assertEquals(StopReason.ToolUse, r.stopReason)
+    }
+
+    /** 整份回复已经收全,只是没发 `[DONE]`:照常说完,不当成流提前断了。 */
+    @Test fun eventStreamWithoutDoneStillFinishes() = runTest {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/event-stream")
+                .setBody("data: {\"choices\":[{\"delta\":{\"content\":\"好\"},\"finish_reason\":\"stop\"}]}\n\n"),
+        )
+        val r = model().complete("s", user, emptyList())
+        assertEquals(listOf(Part.Text("好")), r.parts)
+        assertEquals(StopReason.EndTurn, r.stopReason)
+    }
+
+    /** 没有参数的工具,有的适配器给 `""`:当成 `{}`,免得调用方按 JSON 解析失败。 */
+    @Test fun blankToolCallArgumentsBecomeEmptyObject() = runTest {
+        server.enqueue(ok("""{"choices":[{"finish_reason":"tool_calls","message":{"content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"get_time","arguments":""}}]}}]}"""))
+        val r = model().complete("s", user, tools)
+        assertEquals(Part.ToolCall("c1", "get_time", "{}"), r.parts.filterIsInstance<Part.ToolCall>().single())
+    }
+
     @Test fun readsReasoningContent() = runTest {
         server.enqueue(ok("""{"choices":[{"finish_reason":"stop","message":{"content":"ok","reasoning_content":"想一想"}}]}"""))
         val r = model().complete("s", user, emptyList())

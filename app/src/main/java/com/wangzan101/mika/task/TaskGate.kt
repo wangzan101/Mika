@@ -4,6 +4,7 @@ import com.wangzan101.mika.R
 import com.wangzan101.mika.i18n.tr
 import com.wangzan101.mika.core.agent.GateReason
 import com.wangzan101.mika.core.agent.TaskState
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -20,7 +21,7 @@ import kotlinx.coroutines.flow.update
  * 不碰界面的步骤(模型推理、读屏)不经过这里,照常进行。
  */
 class TaskGate(
-    private val locked: StateFlow<Boolean>,
+    private val locked: Flow<Boolean>,
     private val shellAvailable: StateFlow<Boolean>,
     private val moveBack: suspend () -> Boolean,
 ) {
@@ -69,7 +70,7 @@ class TaskGate(
                     while (shellAvailable.value && !moveBack()) pauseUntilResume(MOVE_BACK_FAILED, setWaiting)
                     if (shellAvailable.value) movedAway.value = false
                 }
-                locked.value -> {
+                locked.first() -> {
                     setWaiting(TaskState.Held(LOCKED))
                     locked.first { !it }
                 }

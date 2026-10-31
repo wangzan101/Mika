@@ -7,6 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -47,6 +48,47 @@ class TaskGateTest {
         runCurrent()
         assertTrue(passed)
         assertEquals(null, reported.last())
+    }
+
+    @Test
+    fun samplesRealStateWithoutUnlockBroadcastAndStopsAfterPassing() = runTest {
+        var interactive = false
+        var keyguardLocked = true
+        var reads = 0
+        val states = DeviceStateWatcher.lockStates {
+            reads++
+            DeviceStateWatcher.isLocked(interactive, keyguardLocked)
+        }
+        val freshGate = TaskGate(states, shellUp) { true }
+        var passed = false
+        launch { freshGate.pass { reported += it }; passed = true }
+        runCurrent()
+        assertFalse(passed)
+        assertEquals(TaskState.Held(TaskGate.LOCKED), reported.last())
+
+        interactive = true // 亮屏不等于解锁
+        advanceTimeBy(DeviceStateWatcher.POLL_MS)
+        runCurrent()
+        assertFalse(passed)
+        keyguardLocked = false // 不发广播,也必须恢复
+        advanceTimeBy(DeviceStateWatcher.POLL_MS)
+        runCurrent()
+        assertTrue(passed)
+        assertEquals(null, reported.last())
+        val readsAfterPass = reads
+        advanceTimeBy(5_000)
+        assertEquals(readsAfterPass, reads)
+
+        // 再次锁屏后,下一步必须重新读取,不能沿用上一步的解锁状态。
+        keyguardLocked = true
+        val nextStep = launch { freshGate.pass { reported += it } }
+        runCurrent()
+        assertFalse(nextStep.isCompleted)
+        nextStep.cancel()
+        runCurrent()
+        val readsAfterCancel = reads
+        advanceTimeBy(5_000)
+        assertEquals(readsAfterCancel, reads)
     }
 
     @Test

@@ -19,6 +19,8 @@ data class ReleaseInfo(
     val pageUrl: String,
     val apkUrl: String?,
     val mirrorUrl: String?,
+    val apkSize: Long? = null,
+    val apkDigest: String? = null,
 ) {
     /** 「从 GitHub 下载」打开的地址:有 APK 直链就下 APK,没有就打开发布页。 */
     val downloadUrl: String get() = apkUrl ?: pageUrl
@@ -43,7 +45,6 @@ object Releases {
         val apk = o["assets"]?.let { a ->
             runCatching { a.jsonArray }.getOrNull()?.map { it.jsonObject }
                 ?.firstOrNull { it.str("name")?.endsWith(".apk", ignoreCase = true) == true }
-                ?.str("browser_download_url")
         }
         val version = AppVersion.normalize(tag)
         return ReleaseInfo(
@@ -52,8 +53,10 @@ object Releases {
             notes = withoutMirrorLine(body),
             date = o.str("published_at")?.take(10)?.takeIf { it.length == 10 },
             pageUrl = o.str("html_url") ?: "${MikaLinks.RELEASES}/tag/$tag",
-            apkUrl = apk,
+            apkUrl = apk?.str("browser_download_url"),
             mirrorUrl = mirrorIn(body),
+            apkSize = apk?.strOrNumber("size")?.toLongOrNull(),
+            apkDigest = apk?.str("digest"),
         )
     }
 
@@ -72,14 +75,18 @@ object Releases {
         put("pageUrl", r.pageUrl)
         r.apkUrl?.let { put("apkUrl", it) }
         r.mirrorUrl?.let { put("mirrorUrl", it) }
+        r.apkSize?.let { put("apkSize", it) }
+        r.apkDigest?.let { put("apkDigest", it) }
     }
 
     fun fromJson(o: JsonObject): ReleaseInfo? = runCatching {
         ReleaseInfo(
             version = o.str("version")!!, name = o.str("name") ?: o.str("version")!!, notes = o.str("notes").orEmpty(),
             date = o.str("date"), pageUrl = o.str("pageUrl") ?: MikaLinks.RELEASES, apkUrl = o.str("apkUrl"), mirrorUrl = o.str("mirrorUrl"),
+            apkSize = o.strOrNumber("apkSize")?.toLongOrNull(), apkDigest = o.str("apkDigest"),
         )
     }.getOrNull()
 
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    private fun JsonObject.strOrNumber(key: String): String? = (this[key] as? JsonPrimitive)?.content
 }

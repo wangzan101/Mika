@@ -3,6 +3,7 @@ package com.wangzan101.mika.ui
 import com.wangzan101.mika.ChineseUi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -203,10 +204,68 @@ class AboutScreenTest {
         compose.onNodeWithText("当前 0.1.0 Beta · 2026-11-05 发布").assertExists()
         compose.onNodeWithText("国内备用下载").assertExists()
         compose.onNodeWithText("以后再说").assertExists()
-        compose.onNodeWithText("从 GitHub 下载").performClick()
+        compose.onNodeWithText("下载更新").assertExists()
         compose.waitForIdle()
         assertEquals(0, calls.checks)
-        assertEquals(listOf("https://github.com/x/mika-0.2.0.apk"), calls.urls)
+        assertTrue(calls.urls.isEmpty())
+    }
+
+    @Test
+    fun updateWithoutApkStillOpensReleasePage() {
+        val r = r020.copy(apkUrl = null)
+        val calls = about(UpdateState(latest = r, update = r))
+        compose.onNodeWithText("检查更新").performClick()
+        compose.awaitOne("从 GitHub 下载").performClick()
+        assertEquals(listOf(r.pageUrl), calls.urls)
+    }
+
+    @Test
+    fun downloadedUpdateOffersInstallAndDelete() {
+        var installs = 0
+        var deletes = 0
+        compose.setContent {
+            MikaTheme {
+                androidx.compose.foundation.layout.Column {
+                    UpdateDownloadActions(com.wangzan101.mika.about.ApkDownloadState(com.wangzan101.mika.about.DownloadPhase.Ready),
+                        false, false, {}, { installs++ }, { deletes++ })
+                }
+            }
+        }
+        compose.onNodeWithText("安装更新").performClick()
+        compose.onNodeWithText("删除下载").performClick()
+        assertEquals(1, installs)
+        assertEquals(1, deletes)
+    }
+
+    @Test
+    fun downloadingShowsProgressAndCanBeCancelled() {
+        var deletes = 0
+        compose.setContent {
+            MikaTheme {
+                androidx.compose.foundation.layout.Column {
+                    UpdateDownloadActions(com.wangzan101.mika.about.ApkDownloadState(com.wangzan101.mika.about.DownloadPhase.Downloading, 50, 100),
+                        false, false, {}, {}, { deletes++ })
+                }
+            }
+        }
+        compose.onNodeWithText("正在下载 50%").assertIsNotEnabled()
+        compose.onNodeWithText("删除下载").performClick()
+        assertEquals(1, deletes)
+    }
+
+    @Test
+    fun failedDownloadCanBeRetried() {
+        var retries = 0
+        compose.setContent {
+            MikaTheme {
+                androidx.compose.foundation.layout.Column {
+                    UpdateDownloadActions(com.wangzan101.mika.about.ApkDownloadState(com.wangzan101.mika.about.DownloadPhase.Failed),
+                        false, false, { retries++ }, {}, {})
+                }
+            }
+        }
+        compose.onNodeWithText("重新下载").performClick()
+        assertEquals(1, retries)
     }
 
     @Test

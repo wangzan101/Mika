@@ -52,7 +52,7 @@ object UpdateSchedule {
 /**
  * 检查更新,没有自己的服务器:只问 GitHub 发布页接口;连不上、限流、读不懂都算这次没查到。
  * 查到的版本和上次自动检查的时间存在 [file],App 重开后红点还在;装了新版后当前版本不再落后,红点自然消失。
- * 只告诉用户有新版,不下载也不安装。
+ * 这里只检查版本；用户主动下载、安装由 [ApkUpdater] 处理。
  */
 class UpdateChecker(
     private val file: File,

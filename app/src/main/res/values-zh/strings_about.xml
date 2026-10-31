@@ -40,6 +40,16 @@
     <string name="about_author">由 王赞 开发 · © 2026</string>
     <string name="about_license_title">Apache-2.0 许可证</string>
     <string name="about_update_download">从 GitHub 下载</string>
+    <string name="about_update_download_in_app">下载更新</string>
+    <string name="about_update_downloading">正在下载…</string>
+    <string name="about_update_progress">正在下载 %1$d%%</string>
+    <string name="about_update_paused">等待网络，稍后自动继续…</string>
+    <string name="about_update_install">安装更新</string>
+    <string name="about_update_retry">重新下载</string>
+    <string name="about_update_cancel">删除下载</string>
+    <string name="about_update_working">正在处理…</string>
+    <string name="about_update_install_hint">下载完成后点「安装更新」，在系统安装页确认。首次安装需要允许 Mika 安装未知应用。</string>
+    <string name="about_update_error">下载或安装未完成，请稍后重试。若安装校验失败，请删除下载后重新下载。</string>
     <string name="about_update_mirror">国内备用下载</string>
     <string name="about_update_later">以后再说</string>
     <string name="about_no_browser">没有能打开链接的浏览器</string>

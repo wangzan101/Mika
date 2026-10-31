@@ -275,7 +275,8 @@ private fun NotesBox(notes: String) {
 private fun UpdateSheet(r: ReleaseInfo, current: String, beta: Boolean, onOpenUrl: (String) -> Unit, onDismiss: () -> Unit) {
     AboutSheetFrame(AboutCopy.updateTitle(r.version), AboutCopy.updateSub(current, beta, r.date), "update-sheet", onDismiss) {
         if (r.notes.isNotBlank()) NotesBox(r.notes)
-        MikaButton(AboutCopy.UPDATE_DOWNLOAD, { onOpenUrl(r.downloadUrl) }, Modifier.fillMaxWidth().padding(top = 14.dp))
+        if (r.apkUrl != null) UpdateDownloadControls(r)
+        else MikaButton(AboutCopy.UPDATE_DOWNLOAD, { onOpenUrl(r.pageUrl) }, Modifier.fillMaxWidth().padding(top = 14.dp))
         r.mirrorUrl?.let { url ->
             MikaButton(AboutCopy.UPDATE_MIRROR, { onOpenUrl(url) }, Modifier.fillMaxWidth().padding(top = 10.dp), kind = ButtonKind.Tonal)
         }

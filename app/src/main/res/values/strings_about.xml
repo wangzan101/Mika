@@ -40,6 +40,16 @@
     <string name="about_author">Made by Wang Zan · © 2026</string>
     <string name="about_license_title">Apache-2.0 License</string>
     <string name="about_update_download">Download from GitHub</string>
+    <string name="about_update_download_in_app">Download update</string>
+    <string name="about_update_downloading">Downloading…</string>
+    <string name="about_update_progress">Downloading %1$d%%</string>
+    <string name="about_update_paused">Waiting for network; download will resume…</string>
+    <string name="about_update_install">Install update</string>
+    <string name="about_update_retry">Download again</string>
+    <string name="about_update_cancel">Delete download</string>
+    <string name="about_update_working">Working…</string>
+    <string name="about_update_install_hint">When downloaded, tap “Install update” and confirm in the system installer. You may first need to allow Mika to install unknown apps.</string>
+    <string name="about_update_error">Download or installation did not complete. Please try again later. If verification failed, delete the download and download again.</string>
     <string name="about_update_mirror">Mirror download (China)</string>
     <string name="about_update_later">Later</string>
     <string name="about_no_browser">No browser available to open the link</string>

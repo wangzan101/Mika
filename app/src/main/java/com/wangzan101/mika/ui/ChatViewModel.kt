@@ -388,7 +388,7 @@ class ChatViewModel(
         scope.launch {
             store.changes.collect { id ->
                 if (id == _ui.value.conversationId) syncSaved(id)
-                // 删掉的对话又有人往里存了(比如悬浮胶囊接着在那个对话里说):重新列出来
+                // 删掉的对话又有人往里存了:重新列出来
                 if (id in _deleted.value && id !in deleting && store.turns(id).isNotEmpty()) _deleted.update { it - id }
             }
         }

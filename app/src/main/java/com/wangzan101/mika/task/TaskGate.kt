@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
  *    Mika 不自己判断用户是否用完,避免在用户眼前把 App 抽走;
  * 3. 屏幕熄灭或锁屏 → 等待解锁,亮屏并解锁后自动继续。
  * 前两条只在这一步用的是手机(phone 为 true)时才查:网页、沙箱上的步骤不需要助手,也不会被挪到主屏。
+ * 另外,用户在浏览器页上亲手摸了借给任务的页面([onUserOnPage])→ 不论哪种屏都先停下,用户点「继续」再接着做。
  * 不碰界面的步骤(模型推理、读屏)不经过这里,照常进行。
  */
 class TaskGate(
@@ -24,6 +25,7 @@ class TaskGate(
     private val moveBack: suspend () -> Boolean,
 ) {
     private val movedAway = MutableStateFlow(false)
+    private val userOnPage = MutableStateFlow(false)
     private val resumes = MutableStateFlow(0)
     /** 发现被挪走那一刻的点击计数:之后点的「继续」都算数,哪怕 Agent 还没走到 gate。 */
     @Volatile private var resumesAtMove = 0
@@ -36,13 +38,29 @@ class TaskGate(
     /** 已发现被挪走、还没挪回:任务服务据此立即显示暂停,不必等到下一个改动屏幕的工具。 */
     val movedAwayPending: Boolean get() = movedAway.value
 
-    /** 用户点了「继续」。只对点击之后才开始的、或正在进行的暂停有效。 */
-    fun resume() { resumes.update { it + 1 } }
+    /**
+     * 用户在浏览器页上亲手摸了借给任务的页面(他在操作,Mika 不能同时动):下一个会改动屏幕的工具之前停下,
+     * 等用户点「继续」;任务服务据此立即显示暂停。
+     */
+    fun onUserOnPage() { userOnPage.value = true }
+
+    /** 用户在借出的页面上操作、还没点「继续」。 */
+    val userOnPagePending: Boolean get() = userOnPage.value
+
+    /** 用户点了「继续」。只对点击之后才开始的、或正在进行的暂停有效;用户在页面上操作的那种暂停当场解除。 */
+    fun resume() {
+        resumes.update { it + 1 }
+        userOnPage.value = false
+    }
 
     suspend fun pass(phone: () -> Boolean = { true }, setWaiting: (TaskState?) -> Unit) {
         while (true) {
             val onPhone = phone()
             when {
+                userOnPage.value -> {
+                    setWaiting(TaskState.Held(paused(USER_ON_PAGE)))
+                    userOnPage.first { !it }
+                }
                 onPhone && !shellAvailable.value -> {
                     pauseUntilResume(SHELL_DOWN, setWaiting)
                 }
@@ -95,5 +113,7 @@ class TaskGate(
         val MOVED_AWAY: String get() = tr(R.string.gate_moved_away)
         val MOVE_BACK_FAILED: String get() = tr(R.string.gate_move_back_failed)
         val SHELL_DOWN: String get() = tr(R.string.gate_shell_down)
+        /** 用户在浏览器页上亲手操作借给任务的页面时暂停的原因(界面据此认出这种暂停)。 */
+        val USER_ON_PAGE: String get() = tr(R.string.gate_user_on_page)
     }
 }

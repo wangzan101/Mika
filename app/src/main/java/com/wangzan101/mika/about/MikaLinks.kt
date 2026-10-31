@@ -4,7 +4,7 @@ import com.wangzan101.mika.R
 import com.wangzan101.mika.i18n.tr
 import java.net.URLEncoder
 
-/** Mika 对外的地址都在这里:仓库、问题、作者、检查更新用的两个来源。换地址只改这一处。 */
+/** Mika 对外的地址都在这里:仓库、问题、作者、交流群、检查更新用的两个来源。换地址只改这一处。 */
 object MikaLinks {
     const val REPO = "https://github.com/wangzan101/Mika"
     const val REPO_LABEL = "github.com/wangzan101/Mika"
@@ -13,13 +13,9 @@ object MikaLinks {
     const val NEW_ISSUE = "$REPO/issues/new"
     const val X = "https://x.com/wangzan101"
     const val X_HANDLE = "@wangzan101"
-    const val AUTHOR_WECHAT_ID = "wangzan101"
 
-    /** 让 Mika 替用户发给作者的那句话。 */
-    val GROUP_REQUEST: String get() = tr(R.string.group_request)
-
-    /** 关于页「让 Mika 帮我发消息入群」交给 Mika 的原话:按微信号找作者发 [GROUP_REQUEST];找不到就说明还没加好友,不加、不发给别人。 */
-    val GROUP_TASK: String get() = tr(R.string.group_task, AUTHOR_WECHAT_ID, GROUP_REQUEST)
+    /** X 上的 Mika 交流群:点开即申请加入(不用微信的走这里)。 */
+    const val X_GROUP = "https://x.com/i/chat/group_join/g2116500883139862983/xP74Qyff3X"
 
     /** 检查更新只问 GitHub 发布页(不登录,每小时有次数限制)。 */
     const val LATEST_RELEASE_API = "https://api.github.com/repos/wangzan101/Mika/releases/latest"

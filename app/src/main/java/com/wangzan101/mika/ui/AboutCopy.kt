@@ -2,11 +2,10 @@ package com.wangzan101.mika.ui
 
 import com.wangzan101.mika.R
 import com.wangzan101.mika.i18n.tr
+import com.wangzan101.mika.i18n.uiLocale
 import com.wangzan101.mika.about.CheckStatus
 import com.wangzan101.mika.about.MikaLinks
 import com.wangzan101.mika.about.UpdateState
-import com.wangzan101.mika.settings.Prerequisites
-import com.wangzan101.mika.settings.Problem
 
 /** 关于页的文字,以及「检查更新」一行、设置首页「关于 Mika」一行、侧栏入口上的提示怎么显示。 */
 object AboutCopy {
@@ -31,10 +30,7 @@ object AboutCopy {
     val FEEDBACK_SHEET_SUB: String get() = tr(R.string.about_feedback_sheet_sub)
     val FEEDBACK_GITHUB: String get() = tr(R.string.about_feedback_github)
     val FEEDBACK_GITHUB_SUB: String get() = tr(R.string.about_feedback_github_sub)
-    val FEEDBACK_WECHAT: String get() = tr(R.string.about_feedback_wechat)
-    val FEEDBACK_WECHAT_SUB: String get() = tr(R.string.about_feedback_wechat_sub)
-    val FEEDBACK_X: String get() = tr(R.string.about_feedback_x)
-    val FEEDBACK_X_SUB: String get() = tr(R.string.about_feedback_x_sub, MikaLinks.X_HANDLE)
+    val FEEDBACK_GROUP: String get() = tr(R.string.about_feedback_group)
 
     val DIAGNOSTICS: String get() = tr(R.string.diagnostics_copy)
     val DIAGNOSTICS_SUB: String get() = tr(R.string.diagnostics_copy_sub)
@@ -53,8 +49,11 @@ object AboutCopy {
     val SAVE_QR: String get() = tr(R.string.about_save_qr)
     val QR_SAVED: String get() = tr(R.string.about_qr_saved)
     val QR_SAVE_FAILED: String get() = tr(R.string.about_qr_save_failed)
-    val GROUP_ALREADY_ADDED: String get() = tr(R.string.about_group_already_added)
-    val GROUP_ASK_MIKA: String get() = tr(R.string.about_group_ask_mika)
+    val GROUP_NO_WECHAT: String get() = tr(R.string.about_group_no_wechat)
+    val GROUP_JOIN_X: String get() = tr(R.string.about_group_join_x)
+
+    /** 界面是英文时交流群面板先放 X 群聊、再放微信群码;中文界面微信在前。按 App 实际显示的语言(资源里的 ui_locale)算,不看系统语言。 */
+    val X_GROUP_FIRST: Boolean get() = uiLocale().language != "zh"
 
     val FOLLOW: String get() = tr(R.string.about_follow)
     val FOLLOW_SUB: String get() = tr(R.string.about_follow_sub, MikaLinks.X_HANDLE)
@@ -98,23 +97,6 @@ object AboutCopy {
     fun settingsValue(updateVersion: String?, versionName: String): CheckValue =
         if (updateVersion != null) CheckValue(available(updateVersion), dot = true, highlight = true)
         else CheckValue(versionName.takeIf { it.isNotEmpty() })
-
-    /** 「让 Mika 帮我发消息入群」还差的那一步:提示 [message],去 [fix] 那页补上(为空时去设置首页)。 */
-    enum class GroupTaskGap(private val messageRes: Int, val fix: Fix?) {
-        Model(R.string.about_group_gap_model, Fix.AddModel),
-        Phone(R.string.about_group_gap_phone, Fix.OpenPhoneSetup),
-        TooOld(R.string.about_group_gap_too_old, null);
-
-        val message: String get() = tr(messageRes)
-    }
-
-    /** 这件事要操作微信:模型配好、手机操作就绪才开始;差什么返回什么,都齐了为 null。 */
-    fun groupTaskGap(check: Prerequisites.Check): GroupTaskGap? = when {
-        Problem.NoModel in check.problems -> GroupTaskGap.Model
-        Problem.SystemTooOld in check.problems -> GroupTaskGap.TooOld
-        !check.phoneReady -> GroupTaskGap.Phone
-        else -> null
-    }
 
     /** 侧栏「关于 Mika」上的红点。 */
     fun drawerDot(s: UpdateState): Boolean = s.hasUpdate

@@ -1,5 +1,6 @@
 package com.wangzan101.mika.core.model
 
+import com.wangzan101.mika.core.agent.RetryPolicy
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -99,15 +100,81 @@ class StreamingModelsTest {
         assertEquals("/v1beta/models/m:streamGenerateContent?alt=sse", server.takeRequest().path)
     }
 
-    @Test fun truncatedStreamCannotBecomeFinalAnswer() = runTest {
-        server.enqueue(stream("""{"choices":[{"delta":{"content":"半句"}}]}"""))
-        val model = OpenAiCompatModel(server.url("/v1").toString().trimEnd('/'), "k", "m", caps, OkHttpClient())
+    private fun openAi() = OpenAiCompatModel(server.url("/v1").toString().trimEnd('/'), "k", "m", caps, OkHttpClient())
+    private fun anthropic() = AnthropicModel(server.url("/").toString().trimEnd('/'), "k", "m", caps, OkHttpClient())
+    private fun gemini() = GeminiModel(server.url("/").toString().trimEnd('/'), "k", "m", caps, OkHttpClient())
+
+    /** 没收尾就断开的流不能当成回答,而是可重试的一时故障(和接口配置无关)。 */
+    private suspend fun assertCut(model: StreamingChatModel) {
         try {
             model.completeStreaming("s", user, emptyList()) {}
             throw AssertionError("应拒绝不完整响应")
-        } catch (e: ModelError.BadResponse) {
-            assertTrue(e.message.orEmpty().contains("提前结束"))
+        } catch (e: ModelError.StreamCut) {
+            assertTrue(RetryPolicy.transient(e))
         }
+    }
+
+    @Test fun openAiStreamCutAfterOneChunkIsRetryable() = runTest {
+        server.enqueue(stream("""{"choices":[{"delta":{"content":"半句"}}]}"""))
+        assertCut(openAi())
+    }
+
+    @Test fun anthropicStreamCutAfterOneChunkIsRetryable() = runTest {
+        server.enqueue(stream(
+            """{"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":0}}}""",
+            """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}""",
+            """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"半句"}}""",
+        ))
+        assertCut(anthropic())
+    }
+
+    @Test fun geminiStreamCutAfterOneChunkIsRetryable() = runTest {
+        server.enqueue(stream("""{"candidates":[{"content":{"parts":[{"text":"半句"}]}}]}"""))
+        assertCut(gemini())
+    }
+
+    /** 事件流一帧都没来就断了(比如长时间思考时被网关掐断),同样是可重试的断流。 */
+    @Test fun eventStreamCutBeforeAnyEventIsRetryable() = runTest {
+        server.enqueue(stream())
+        assertCut(openAi())
+    }
+
+    /** 成功响应却既不是事件流、也没有任何事件(地址指到了网页):是配置问题,不重试。 */
+    @Test fun nonStreamBodyWithoutEventsIsBadResponse() = runTest {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody("<html>hi</html>"))
+        try {
+            openAi().completeStreaming("s", user, emptyList()) {}
+            throw AssertionError("应拒绝非流式内容")
+        } catch (e: ModelError.BadResponse) {
+            assertTrue(!RetryPolicy.transient(e))
+        }
+    }
+
+    /** 收到结束原因就算完整:有的端点不发最后的结束标记。 */
+    @Test fun openAiFinishReasonWithoutDoneIsComplete() = runTest {
+        server.enqueue(stream("""{"choices":[{"delta":{"content":"好了"},"finish_reason":"stop"}]}"""))
+        val reply = openAi().completeStreaming("s", user, emptyList()) {}
+        assertEquals(listOf(Part.Text("好了")), reply.parts)
+        assertEquals(StopReason.EndTurn, reply.stopReason)
+    }
+
+    @Test fun anthropicStopReasonWithoutMessageStopIsComplete() = runTest {
+        server.enqueue(stream(
+            """{"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":0}}}""",
+            """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}""",
+            """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"好了"}}""",
+            """{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}""",
+        ))
+        val reply = anthropic().completeStreaming("s", user, emptyList()) {}
+        assertEquals(listOf(Part.Text("好了")), reply.parts)
+        assertEquals(StopReason.EndTurn, reply.stopReason)
+    }
+
+    @Test fun geminiFinishReasonIsComplete() = runTest {
+        server.enqueue(stream("""{"candidates":[{"content":{"parts":[{"text":"好了"}]},"finishReason":"STOP"}]}"""))
+        val reply = gemini().completeStreaming("s", user, emptyList()) {}
+        assertEquals(listOf(Part.Text("好了")), reply.parts)
+        assertEquals(StopReason.EndTurn, reply.stopReason)
     }
 
     @Test fun openAiCompatibleEndpointCanStreamWithoutUsageOption() = runTest {

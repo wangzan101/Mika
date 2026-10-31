@@ -47,7 +47,6 @@ class AboutScreenTest {
         var checks = 0
         var saves = 0
         var licenses = 0
-        var asks = 0
     }
 
     private val sampleDiagnostics = "Mika 诊断信息 / Mika diagnostics\n\n[App]\nversion: 0.1.0 (build abc1234)\n"
@@ -59,7 +58,7 @@ class AboutScreenTest {
                 AboutScreen(
                     versionName = "0.1.0", build = "abc1234", beta = true, update = update, issueUrl = "issue://prefilled",
                     onCheck = { calls.checks++ }, onOpenUrl = { calls.urls += it },
-                    onSaveQr = { calls.saves++; true }, onAskMikaToJoin = { calls.asks++ }, onOpenLicense = { calls.licenses++ }, onBack = {},
+                    onSaveQr = { calls.saves++; true }, onOpenLicense = { calls.licenses++ }, onBack = {},
                     diagnostics = { sampleDiagnostics },
                 )
             }
@@ -80,7 +79,7 @@ class AboutScreenTest {
         compose.onNodeWithText("版本 0.1.0").assertIsDisplayed()
         compose.onNodeWithText("Beta").assertIsDisplayed()
         compose.onNodeWithText("· 构建 abc1234").assertIsDisplayed()
-        for (t in listOf("检查更新", "更新记录", "反馈问题", "加入内测群", "关注作者", "开源仓库", "使用说明与参与方式", AboutCopy.DATA_NOTE, AboutCopy.AUTHOR)) {
+        for (t in listOf("检查更新", "更新记录", "加入交流群", "反馈问题", "关注作者", "开源仓库", "使用说明与参与方式", AboutCopy.DATA_NOTE, AboutCopy.AUTHOR)) {
             scrollTo(t)
             compose.onNodeWithText(t).assertIsDisplayed()
         }
@@ -106,14 +105,13 @@ class AboutScreenTest {
     }
 
     @Test
-    fun feedbackSheetHasFourOptions() {
+    fun feedbackSheetHasThreeOptions() {
         val calls = about()
         compose.onNodeWithText("反馈问题").performClick()
         compose.awaitOne(AboutCopy.FEEDBACK_SHEET_SUB)
-        compose.onAllNodesWithTag("feedback-option").assertCountEquals(4)
+        compose.onAllNodesWithTag("feedback-option").assertCountEquals(3)
         compose.onNodeWithText("复制诊断信息").assertIsDisplayed()
-        compose.onNodeWithText(AboutCopy.FEEDBACK_WECHAT).assertIsDisplayed()
-        compose.onNodeWithText(AboutCopy.FEEDBACK_X).assertIsDisplayed()
+        compose.onNodeWithText("在交流群里说").assertIsDisplayed()
         compose.onNodeWithText(AboutCopy.FEEDBACK_GITHUB).performClick()
         compose.waitForIdle()
         assertEquals(listOf("issue://prefilled"), calls.urls)
@@ -140,38 +138,44 @@ class AboutScreenTest {
     }
 
     @Test
-    fun feedbackWeChatOpensQrSheet() {
+    fun feedbackGroupOpensGroupSheet() {
         val calls = about()
         compose.onNodeWithText("反馈问题").performClick()
-        compose.awaitOne(AboutCopy.FEEDBACK_WECHAT).performClick()
+        compose.awaitOne("在交流群里说").performClick()
         compose.awaitOne(AboutCopy.GROUP_SHEET_TITLE)
         compose.onNodeWithTag("wechat-qr").assertExists()
         compose.onNodeWithText(AboutCopy.SAVE_QR).performClick()
         assertEquals(1, calls.saves)
     }
 
+    /** 交流群面板:微信群码、保存按钮,下面「不用微信？」接 X 群聊。 */
     @Test
-    fun groupRowOpensQrSheet() {
-        about()
-        compose.onNodeWithText("加入内测群").performClick()
+    fun groupRowOpensGroupSheet() {
+        val calls = about()
+        compose.onNodeWithText("加入交流群").performClick()
         compose.awaitOne(AboutCopy.GROUP_SHEET_SUB).assertIsDisplayed()
         compose.onNodeWithTag("wechat-qr").assertExists()
         compose.onNodeWithText(AboutCopy.GROUP_HINT).assertExists()
+        compose.onNodeWithText(AboutCopy.SAVE_QR).assertExists()
+        compose.onNodeWithText("不用微信？").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("group-join-x").performScrollTo().assertIsDisplayed()
+        // 中文界面微信在前
+        assertTrue(top("wechat-qr") < top("group-join-x"))
+        compose.onNodeWithTag("group-join-x").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(MikaLinks.X_GROUP), calls.urls)
     }
 
-    /** 二维码下面:已经加过作者微信的,点一下让 Mika 去发消息;连点只算一次。 */
+    /** 英文界面([GroupSheet] 的 xFirst):X 群聊按钮在微信群码上面,不再写「不用微信？」。 */
     @Test
-    fun groupSheetAsksMikaOnce() {
-        val calls = about()
-        compose.onNodeWithText("加入内测群").performClick()
+    fun groupSheetPutsXFirstWhenAsked() {
+        compose.setContent { MikaTheme { GroupSheet(xFirst = true, onSave = {}, onJoinX = {}, onDismiss = {}) } }
         compose.awaitOne(AboutCopy.GROUP_SHEET_SUB)
-        compose.onNodeWithText(AboutCopy.SAVE_QR).assertExists()
-        compose.onNodeWithText(AboutCopy.GROUP_ALREADY_ADDED).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithTag("group-ask-mika").performScrollTo().assertIsDisplayed().performClick()
-        compose.waitForIdle()
-        assertEquals(1, calls.asks)
-        compose.onAllNodesWithTag("group-ask-mika").assertCountEquals(0)
+        assertTrue(top("group-join-x") < top("wechat-qr"))
+        compose.onAllNodesWithText("不用微信？").assertCountEquals(0)
     }
+
+    private fun top(tag: String) = compose.onNodeWithTag(tag).getUnclippedBoundsInRoot().top
 
     @Test
     fun checkRowStartsCheckWhenNoUpdate() {

@@ -1,6 +1,8 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.RemoteAccess
 import kotlinx.serialization.json.Json
+import com.wangzan101.mika.core.remote.RemoteTaskApi
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -25,8 +27,10 @@ object McpUsb {
     fun info(port: Int, token: String, boot: String): String = pretty.encodeToString(
         kotlinx.serialization.json.JsonObject.serializer(),
         buildJsonObject {
+            put("api_version", 1)
+            put("api_url", "http://127.0.0.1:$port${RemoteTaskApi.ROOT}")
             put("transport", "streamable-http")
-            put("url", "http://127.0.0.1:$port${McpAccess.PATH}")
+            put("url", "http://127.0.0.1:$port${McpRpc.PATH}")
             putJsonObject("headers") { put("Authorization", "Bearer $token") }
             put("token", token)
             put("port", port)

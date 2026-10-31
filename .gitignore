@@ -16,3 +16,8 @@ dist/
 
 # 给 AI 编程助手的本地规则,只留在本机
 CLAUDE.md
+
+# Computer CLI build and test artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/

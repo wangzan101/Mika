@@ -55,6 +55,8 @@ data class BrowserPage(
  * 视图挂在哪一处、哪一处走了才关网页,见 [PageHosts]。
  * WebView 的环境是 [MutableContextWrapper]:挂到界面上时换成那个 Activity(下拉框、长按菜单要它),摘下时换回 App。
  * 页面打开前过一遍 [WebUrlPolicy.checkNavigable];访问过的页面记进 [recent];页面停下来后看一眼登录状态,记进站点登记表。
+ * 用户在页面上问 Mika 时,看着的这一页借给那个对话的任务当当前网页标签(见 [loans]):页面开关弹窗时借的跟着换,
+ * 关掉页面时交给任务接着用、不销毁;用户亲手摸页面([userTouched])时告诉借着它的任务。
  * 只在主线程调用。
  */
 class UserBrowser private constructor(private val app: Context) {
@@ -64,11 +66,17 @@ class UserBrowser private constructor(private val app: Context) {
     val favorites = BrowserFavorites(dir)
     val looks = SiteLooks(dir)
     private val modes = UserSiteModes(dir)
+    /** 看着的这一页借给任务(见 [PageLoans])。 */
+    val loans = PageLoans<WebTab>()
+    /** 标签编号:每个都不一样(页面和它弹出的窗口可能先后借给同一个任务)。 */
+    private var tabCount = 0
 
     private val main = Handler(Looper.getMainLooper())
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val wrapper = MutableContextWrapper(app)
     private var tab: WebTab? = null
+    /** 页面弹出的窗口开着时([tab] 是弹窗),打开它的那一页;没有弹窗为 null。 */
+    private var opener: WebTab? = null
     private val hosts = PageHosts<ViewGroup, Context>()
     private var probe: Runnable? = null
     /** 「给 Mika 登录」要登录的网站;平常浏览为 null。标签的版本规则在后台线程也会读。 */
@@ -176,24 +184,65 @@ class UserBrowser private constructor(private val app: Context) {
         refresh()
     }
 
-    /** 系统返回键:网页能后退就后退,不能就关掉网页回到起始页。没有打开的网页时返回 false。 */
+    /** 系统返回键:网页能后退就后退,不能时开着弹窗就关掉弹窗,否则关掉网页回到起始页。没有打开的网页时返回 false。 */
     fun systemBack(): Boolean {
         val v = tab?.view ?: return false
-        if (v.canGoBack()) v.goBack() else closePage()
+        if (v.canGoBack()) v.goBack() else if (!closePopup()) closePage()
         return true
     }
 
-    /** 关掉网页回到起始页。 */
+    /** 关掉网页回到起始页。借给任务的那个标签交给任务接着用(任务收下了就不销毁)。 */
     fun closePage() {
         probe?.let(main::removeCallbacks)
         probe = null
         loginHost = null
+        opener?.let { o ->
+            opener = null
+            if (!loans.closing(o)) o.destroy() else handedOff(o)
+        }
         tab?.let { t ->
             tab = null
-            t.destroy()
+            if (!loans.closing(t)) t.destroy() else handedOff(t)
         }
+        loans.withdraw()
         _page.value = null
         _dialog.value = null
+    }
+
+    // 交给任务的标签:不再是这里的(视图已由任务挂到它的网页显示上),环境换回 App(不留着界面)
+    private fun handedOff(t: WebTab) {
+        wrapper.baseContext = app
+        Log.i(TAG, "browser page ${t.id} handed to the task that borrowed it")
+    }
+
+    // ---------- 在这一页上问 Mika ----------
+
+    /** 此刻看着的这一页(给 Mika 的说明用);没有打开的网页为 null。 */
+    fun pageInfo(): com.wangzan101.mika.core.cap.web.AttachedPage.Page? {
+        val url = currentUrl()?.takeIf { it.startsWith("http") } ?: return null
+        val title = tab?.view?.title?.takeIf { it != url }.orEmpty().ifEmpty { _page.value?.title.orEmpty() }
+        return com.wangzan101.mika.core.cap.web.AttachedPage.Page(url, title)
+    }
+
+    /** 读用户在页面上选中的字,交给 [onText](没选、读不到为 null)。 */
+    fun readSelection(onText: (String?) -> Unit) {
+        val t = tab ?: return onText(null)
+        t.view.evaluateJavascript(SELECTION_SCRIPT) { raw ->
+            val text = runCatching { org.json.JSONArray("[$raw]").optString(0) }.getOrNull()
+            onText(text?.takeIf { raw != "null" && it.isNotBlank() })
+        }
+    }
+
+    /** 用户在这一页上问了,页面借给对话 [conversationId] 接下来开跑的任务。 */
+    fun lend(conversationId: String) = loans.offer(conversationId)
+
+    /** 对话 [conversationId] 的任务 [runKey] 开跑时来取答应借给它的页面;没答应过、页面没了、已借出时为 null。 */
+    fun claim(conversationId: String, runKey: String): PageLoans.Loan<WebTab>? =
+        loans.claim(conversationId, runKey, tab?.takeIf { !it.destroyed && !it.crashed })
+
+    /** 用户亲手摸了看着的页面(真实的触摸,不是 Mika 自己发的输入)。 */
+    fun userTouched() {
+        tab?.let(loans::touched)
     }
 
     /** 回答页面弹框。 */
@@ -262,7 +311,7 @@ class UserBrowser private constructor(private val app: Context) {
         return if (WebUrlPolicy.external(url) != null) tr(R.string.browser_external_link) else tr(R.string.browser_bad_scheme)
     }
 
-    private fun newTab(): WebTab = WebTab(wrapper, "browser", OWNER).also { t ->
+    private fun newTab(): WebTab = WebTab(wrapper, "browser${++tabCount}", OWNER).also { t ->
         t.view.settings.apply {
             builtInZoomControls = true
             displayZoomControls = false
@@ -347,31 +396,42 @@ class UserBrowser private constructor(private val app: Context) {
         }
 
         /**
-         * 页面要开新窗口(target=_blank、window.open):只认用户点出来的,在当前页打开。
-         * 借一个临时标签接下这个窗口,等它第一次要去哪个网址([WebTab.popupOpener] 设成空,任何网址都会经
-         * [WebTab.Listener.onPopupRefused] 报上来),拿到网址就关掉它,在当前页打开那个网址。
+         * 页面要开新窗口(target=_blank、window.open):只认用户点出来的,只开一层。新窗口盖在当前页上显示,
+         * 当前页留着([opener]):「用第三方账号登录」这类弹窗登录完要把结果交回打开它的页面,页面没了就停在白屏。
+         * 弹窗关掉自己,或在弹窗里退无可退时,回到打开它的那一页。
          */
         override fun onCreateWindow(tab: WebTab, isUserGesture: Boolean, resultMsg: Message): Boolean {
-            if (!isUserGesture) return false
+            if (!isUserGesture || tab !== this@UserBrowser.tab || opener != null) return false
             val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-            val popup = WebTab(app, "browser-popup", OWNER)
-            popup.popupOpener = ""
-            popup.listener = object : WebTab.Listener {
-                override fun onPopupRefused(tab: WebTab, url: String) {
-                    if (popup.destroyed) return
-                    main.post {
-                        if (popup.destroyed) return@post
-                        popup.destroy()
-                        open(url)?.let { _notice.value = it }
-                    }
-                }
-            }
+            val popup = newTab()
             transport.webView = popup.view
             resultMsg.sendToTarget()
-            // 一直没去任何网址(空白窗口):过一会儿收掉
-            main.postDelayed({ if (!popup.destroyed) popup.destroy() }, POPUP_WAIT_MS)
+            (tab.view.parent as? ViewGroup)?.removeView(tab.view)
+            opener = tab
+            this@UserBrowser.tab = popup
+            place()
+            // 借给任务的是看得见的那一个:跟着换成弹出的窗口
+            loans.swapped(tab, popup)
             return true
         }
+
+        override fun onCloseWindow(tab: WebTab) {
+            if (tab === this@UserBrowser.tab) closePopup()
+        }
+    }
+
+    /** 关掉弹出的窗口,回到打开它的那一页;没有弹窗时返回 false。 */
+    private fun closePopup(): Boolean {
+        val o = opener ?: return false
+        opener = null
+        tab?.let { popup ->
+            loans.swapped(popup, o)
+            popup.destroy()
+        }
+        tab = o
+        place()
+        refresh()
+        return true
     }
 
     /**
@@ -426,12 +486,18 @@ class UserBrowser private constructor(private val app: Context) {
         const val OWNER = "user-browser"
         private const val PROBE_DELAY_MS = 1_500L
         private const val PROBE_RETRIES = 3
-        private const val POPUP_WAIT_MS = 10_000L
         private const val CONFIRM_WAIT_MS = 2_500L
         /** 收下的网站图标至少这么大,存的时候至多这么大(像素)。 */
         private const val MIN_ICON_PX = 16
         private const val MAX_ICON_PX = 128
         val LOGGED_IN_NOTICE: String get() = tr(R.string.browser_logged_in)
+        /** 页面上选中的字(含输入框里选中的那段)。 */
+        private const val SELECTION_SCRIPT = "(function(){var s=window.getSelection();var t=s?String(s):'';" +
+            "var a=document.activeElement;if(!t&&a&&typeof a.selectionStart==='number'&&a.type!=='password')" +
+            "t=String(a.value||'').substring(a.selectionStart,a.selectionEnd);return t;})()"
+
+        /** 进程里已经有的那一份;还没打开过浏览器页为 null(不为它建一份)。 */
+        fun existing(): UserBrowser? = instance
 
         @Volatile private var instance: UserBrowser? = null
 

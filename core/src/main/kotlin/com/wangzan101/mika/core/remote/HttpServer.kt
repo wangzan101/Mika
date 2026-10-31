@@ -1,4 +1,4 @@
-package com.wangzan101.mika.core.mcp
+package com.wangzan101.mika.core.remote
 
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
@@ -20,6 +20,7 @@ class HttpRequest(
     val headers: Map<String, String>,
     val body: ByteArray,
     val remote: InetAddress,
+    val query: String = "",
 ) {
     fun header(name: String): String? = headers[name.lowercase()]
 }
@@ -65,7 +66,7 @@ class MiniHttpServer(
         try { s.bind(bind, 32) } catch (e: IOException) { s.close(); throw e }
         server = s
         running.set(true)
-        Thread({ acceptLoop(s) }, "mcp-accept").apply { isDaemon = true }.start()
+        Thread({ acceptLoop(s) }, "remote-accept").apply { isDaemon = true }.start()
     }
 
     @Synchronized fun stop() {
@@ -91,7 +92,7 @@ class MiniHttpServer(
                     runCatching { socket.close() }
                     slots.release()
                 }
-            }, "mcp-conn").apply { isDaemon = true }.start()
+            }, "remote-conn").apply { isDaemon = true }.start()
         }
     }
 
@@ -159,7 +160,7 @@ class MiniHttpServer(
                 else -> ByteArray(0)
             }
             val target = parts[1]
-            return HttpRequest(parts[0], target.substringBefore('?'), headers, body, remote)
+            return HttpRequest(parts[0], target.substringBefore('?'), headers, body, remote, target.substringAfter('?', ""))
         }
 
         private fun readHead(input: InputStream): String? {
@@ -218,8 +219,8 @@ class MiniHttpServer(
         }
 
         private val REASONS = mapOf(
-            200 to "OK", 202 to "Accepted", 400 to "Bad Request", 401 to "Unauthorized", 403 to "Forbidden",
-            404 to "Not Found", 405 to "Method Not Allowed", 406 to "Not Acceptable", 413 to "Payload Too Large",
+            200 to "OK", 201 to "Created", 202 to "Accepted", 400 to "Bad Request", 401 to "Unauthorized", 403 to "Forbidden",
+            404 to "Not Found", 405 to "Method Not Allowed", 406 to "Not Acceptable", 409 to "Conflict", 413 to "Payload Too Large",
             415 to "Unsupported Media Type", 429 to "Too Many Requests", 431 to "Request Header Fields Too Large",
             500 to "Internal Server Error", 503 to "Service Unavailable",
         )

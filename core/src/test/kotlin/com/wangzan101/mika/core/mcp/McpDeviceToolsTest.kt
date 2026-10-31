@@ -1,5 +1,8 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.RemoteHost
+import com.wangzan101.mika.core.remote.HttpResponse
+import com.wangzan101.mika.core.remote.HttpRequest
 import com.wangzan101.mika.core.device.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
@@ -48,7 +51,7 @@ class McpDeviceToolsTest {
     }
 
     @Test fun deviceToolsUseTheExistingTokenAndBrowserGuards() {
-        val host = McpHost(FakeRemoteTasks(), { "test-token" }, 0, false, "test", device = DeviceAccess(port, store))
+        val host = RemoteHost(FakeRemoteTasks(), { "test-token" }, 0, false, "test", device = DeviceAccess(port, store))
         val body = """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mika_unlock_device","arguments":{}}}""".toByteArray()
         fun call(token: String?, origin: String? = null): HttpResponse {
             val headers = mutableMapOf("content-type" to "application/json")

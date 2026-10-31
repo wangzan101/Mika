@@ -1,5 +1,7 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.RemoteStatus
+import com.wangzan101.mika.core.remote.RemoteTask
 import com.wangzan101.mika.core.agent.FailKind
 import com.wangzan101.mika.core.agent.GateReason
 import com.wangzan101.mika.core.agent.TaskState
@@ -68,7 +70,7 @@ class McpTaskToolsTest {
         rejects(McpTaskTools.RUN, args("goal" to "x".repeat(McpTaskTools.MAX_GOAL + 1)), "too long")
         // 只能接着电脑自己开的对话,手机上的对话编号不收
         rejects(McpTaskTools.RUN, args("goal" to "hi", "conversation" to "3f2c1d7e-0000-4000-8000-000000000000"), "conversation")
-        rejects(McpTaskTools.RUN, args("goal" to "hi", "conversation" to "mcp-../../x"), "conversation")
+        rejects(McpTaskTools.RUN, args("goal" to "hi", "conversation" to "mcp-../../x"), "earlier MCP task")
         assertTrue(fake.tasks.isEmpty())
     }
 
@@ -130,9 +132,9 @@ class McpTaskToolsTest {
     @Test fun answerOnlyGoesToAnOpenQuestion() = runTest {
         call(McpTaskTools.RUN, args("goal" to "buy it"))
         fake.set("t1", TaskState.WaitingConfirmation(ConfirmationRequest(IrrevAction.order, "Shop", "1 item", "¥25", "com.example.shop")))
-        rejects(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to "yes"), "on the phone")
+        rejects(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to "yes"), "cannot be answered over MCP")
         fake.set("t1", TaskState.WaitingTakeover("payment", "Please pay"))
-        rejects(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to "yes"), "on the phone")
+        rejects(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to "yes"), "mika_wait_task")
         fake.set("t1", TaskState.Running(1, "x"))
         rejects(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to "yes"), "not waiting")
         assertTrue("nothing may reach the task", fake.answers.isEmpty())
@@ -142,6 +144,21 @@ class McpTaskToolsTest {
         val r = call(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to " M "))
         assertEquals("true", r.str("accepted"))
         assertEquals(listOf("t1" to "M"), fake.answers)
+    }
+
+    @Test fun closedQuestionPointsToTheStatusTool() = runTest {
+        val closing = object : com.wangzan101.mika.core.remote.RemoteTasks by fake {
+            override fun answer(id: String, text: String) = false
+        }
+        val closingTools = McpTaskTools(closing)
+        closingTools.call(McpTaskTools.RUN, args("goal" to "x"))
+        fake.set("t1", TaskState.WaitingInput("Which size?"))
+        try {
+            closingTools.call(McpTaskTools.ANSWER, args("task_id" to "t1", "text" to "M"))
+            fail("expected an error")
+        } catch (e: McpTaskTools.ToolError) {
+            assertEquals("The question is no longer open; check mika_task_status.", e.message)
+        }
     }
 
     @Test fun cancelLeavesFinishedTasksAlone() = runTest {
@@ -193,6 +210,16 @@ class McpTaskToolsTest {
         val t0 = testScheduler.currentTime
         assertEquals("done", call(McpTaskTools.WAIT, args("task_id" to "t1")).str("status"))
         assertEquals(t0, testScheduler.currentTime)
+    }
+
+    @Test fun waitReturnsTheLastSeenStatusWhenTheTaskDisappears() = runTest {
+        call(McpTaskTools.RUN, args("goal" to "x"))
+        fake.set("t1", TaskState.Running(1, "a"))
+        launch { kotlinx.coroutines.delay(1_000); fake.tasks.remove("t1") }
+        val r = call(McpTaskTools.WAIT, args("task_id" to "t1", "timeout_s" to 10))
+        assertEquals("running", r.str("status"))
+        assertEquals("false", r.str("changed"))
+        assertTrue(testScheduler.currentTime < 10_000)
     }
 
     @Test fun conversationIdsAreRecognisable() {

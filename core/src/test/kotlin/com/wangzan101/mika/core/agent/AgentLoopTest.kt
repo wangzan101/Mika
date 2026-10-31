@@ -10,6 +10,7 @@ import com.wangzan101.mika.core.model.ModelReply
 import com.wangzan101.mika.core.model.Part
 import com.wangzan101.mika.core.model.Role
 import com.wangzan101.mika.core.model.StopReason
+import com.wangzan101.mika.core.model.StreamingChatModel
 import com.wangzan101.mika.core.model.ToolSpec
 import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.core.record.RunSink
@@ -452,6 +453,37 @@ class AgentLoopTest {
     @Test fun rateLimitWaitIsCapped() = runTest {
         loop(FakeModel(ModelError.RateLimited(600_000), finish())).run("t")
         assertEquals(30_000, currentTime)
+    }
+
+    // 流式回复没收尾连接就断了:回复还没进历史、也没执行工具,原样重发;界面上那半截字在重试前就清掉
+    @Test fun streamCutIsRetriedWithoutKeepingPartialText() = runTest {
+        lateinit var l: AgentLoop
+        val previews = mutableListOf<String?>()
+        val requests = mutableListOf<List<Message>>()
+        fun preview() = (l.state.value as? TaskState.Running)?.preview
+        val model = object : StreamingChatModel {
+            override val capabilities = Capabilities(toolCalls = true, vision = false, contextTokens = 128_000, reasoning = false)
+            override suspend fun complete(system: String, messages: List<Message>, tools: List<ToolSpec>): ModelReply = error("应走流式")
+            override suspend fun completeStreaming(
+                system: String, messages: List<Message>, tools: List<ToolSpec>, onText: (String) -> Unit,
+            ): ModelReply {
+                requests += messages
+                if (requests.size == 1) {
+                    onText("半句")
+                    previews += preview()
+                    throw ModelError.StreamCut()
+                }
+                previews += preview()
+                onText(DONE)
+                return finish()
+            }
+        }
+        l = AgentLoop(model, toolDispatcher(FakeScreen()), "BASE", retry = FIXED_RETRY, streamReplies = true)
+        com.wangzan101.mika.core.testing.assertAnswered(DONE, l.run("t"))
+        assertEquals(listOf("半句", null), previews)
+        assertEquals(2, requests.size)
+        assertEquals(requests[0], requests[1])
+        assertEquals(1000, currentTime)
     }
 
     @Test fun networkErrorRetriesAfterOneSecond() = runTest {

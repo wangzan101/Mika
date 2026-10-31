@@ -259,7 +259,8 @@ private class AnthropicStream(
     }
 
     fun finish(): ModelReply {
-        if (!stopped) throw ModelError.BadResponse("流式响应提前结束")
+        // message_delta 带来 stop_reason 时内容块都已收齐,只差 message_stop 也算完整;两样都没有是连接中途被断开
+        if (!stopped && reason == null) throw ModelError.StreamCut()
         val parts = blocks.values.mapNotNull { block ->
             when (block.type) {
                 "text" -> block.text.toString().takeIf(String::isNotEmpty)?.let(Part::Text)

@@ -1,6 +1,7 @@
 package com.wangzan101.mika.ui
 
 import androidx.compose.foundation.gestures.scrollBy
+import com.wangzan101.mika.core.cap.web.AttachedPage
 import com.wangzan101.mika.ui.components.keepsKeyboard
 import android.content.Context
 import android.graphics.Bitmap
@@ -475,16 +476,19 @@ private fun ExchangeStatus.isActive() =
  * 带着用户此刻的屏幕时上面是截图缩略图和「你此刻的屏幕 · App · 时刻」,附言在下面的气泡里(见 [UserMessage])。
  * 带着附件时上面是照片格子和文件卡片(见 [SentAttachments]),点开在 App 里的查看页看;写的话在下面另起一个气泡,路径那几行不显示。
  * 引用了前面的消息时最上面是引的那条(见 [SentQuote])。长按气泡弹出复制 / 引用 / 选择文字([key] 认是哪一条,见 [MessageArea])。
+ * 在浏览器页上对着一页问的,最上面是「网页 · 网站」和选中的字(见 [SentPage]),页面说明那几行不显示。
  */
 @Composable
 internal fun UserBubble(text: String, conversationId: String?, note: String? = null, key: String = "") {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val quoted = remember(text) { QuoteMessage.parse(text) }
+    val paged = remember(text) { AttachedPage.parse(text) }
+    val quoted = remember(text) { QuoteMessage.parse(paged.words) }
     val attached = remember(text) { AttachmentMessage.parse(quoted.words) }
     BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 14.dp), contentAlignment = Alignment.CenterEnd) {
         val max = maxWidth * 0.8f
         Column(horizontalAlignment = Alignment.End) {
+            paged.page?.let { SentPage(it, max) }
             quoted.quote?.let { SentQuote(it, max) }
             if (attached.hasAttachments) {
                 SentAttachments(attached, conversationId, max) { item ->
@@ -493,7 +497,7 @@ internal fun UserBubble(text: String, conversationId: String?, note: String? = n
                 }
             }
             if (attached.hasAttachments && attached.words.isNotEmpty()) Spacer(Modifier.size(6.dp))
-            if (!attached.hasAttachments || attached.words.isNotEmpty()) UserMessage(conversationId, attached.words.takeIf { attached.hasAttachments } ?: quoted.words, ChatThumbWidth) { words ->
+            if ((!attached.hasAttachments || attached.words.isNotEmpty()) && (paged.page == null || quoted.words.isNotEmpty())) UserMessage(conversationId, attached.words.takeIf { attached.hasAttachments } ?: quoted.words, ChatThumbWidth) { words ->
                 // 选择文字时蓝底上选中的底色用白色半透明,把手照旧是蓝色(画在气泡外面)
                 val colors = MikaTheme.colors
                 CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(colors.accent, colors.onAccent.copy(alpha = 0.35f))) {

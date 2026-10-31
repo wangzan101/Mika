@@ -32,7 +32,7 @@
 
 **方式二：让电脑上的 AI 助手帮你装**
 
-手机用数据线连上电脑，在手机上打开 USB 调试，然后把下面这句话发给电脑上能执行命令的 AI 助手：
+手机用数据线连上电脑，在手机上打开 USB 调试（开发者选项里别的开关不要动，除非 AI 助手请你打开；有的会清除手机数据），然后把下面这句话发给电脑上能执行命令的 AI 助手：
 
 ```
 请按 https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.md 的步骤，帮我把 Mika 安装到通过 USB 连着的安卓手机上。
@@ -165,9 +165,11 @@ adb forward tcp:8765 tcp:8765
 - 每个对话一个工作区，可以跑 Python、Node 和 shell 命令，处理你发来的文件，把结果存到手机的「下载/Mika」。
 - 默认断网，需要时在设置里的「文件与计算环境」打开「允许脚本联网」。只支持 arm64 设备。
 
-### 电脑上的 AI 工具也能用（MCP）
+### 电脑上的 AI 工具也能用（CLI / MCP）
 
 手机连着电脑时，电脑上的 AI 工具可以通过 MCP 把任务交给 Mika，在手机上办完把结果拿回去。一条命令打开，只经数据线、要令牌；也可以在设置里打开局域网连接（默认关）。见[电脑连接说明](docs/mcp.md)。
+
+也可以安装[电脑端 CLI 与 Agent Skill](docs/cli.md),用 `mika connect`、`mika task run`、`mika task wait` 完成连接和任务交接。CLI 与 MCP 并列接入同一份手机任务服务,CLI 不需要配置 MCP;需要包含任务 API v1 的 APK。
 
 ## 快速开始
 
@@ -191,7 +193,7 @@ Mika 靠无障碍读界面、做点按。不用手动去开：下一步配对成
 
 ### 3. 配对无线调试（只需一次）
 
-打开设置里的「设置手机操作」向导，照着清单做：打开开发者选项、USB 调试、无线调试，然后用 6 位配对码配对。
+打开设置里的「设置手机操作」向导，照着清单做：打开开发者选项、USB 调试、无线调试，然后用 6 位配对码配对。开发者选项里 Mika 没提到的开关不要动，有的会清除手机数据，比如「以 16KB 页面大小启动设备」。
 
 第一次设置、卡在某一步，或者不知道配对码填在哪里：看[手机操作设置指南](docs/setup-guide.md)，每一步都写了在哪里点、怎么算成功、常见问题怎么办。
 
@@ -291,12 +293,14 @@ Mika 在一块单独的后台屏上操作 App，安卓 12 起可以使用手机�
 
 ### 构建与测试
 
+CLI 测试另需 Python 3.10+,可用 `-PmikaPython=/path/to/python3` 指定解释器。
+
 需要 JDK 17 和 Android SDK（`local.properties` 里的 `sdk.dir`，或环境变量 `ANDROID_HOME`）。
 
 ```bash
 ./gradlew :app:assembleDebug                  # 调试包
 ./gradlew :app:assemblePerf                   # 看流畅度用的包：和发布版一样预先编译、不可调试，用调试签名，可直接覆盖调试包
-./gradlew :core:test :app:testDebugUnitTest   # 单元测试
+./gradlew :core:test :core:cliTest :app:testDebugUnitTest   # 单元测试
 ```
 
 调试包不做预先编译，界面会慢好几倍；判断流畅度请用 perf 包。
@@ -337,7 +341,8 @@ Mika 在一块单独的后台屏上操作 App，安卓 12 起可以使用手机�
 ## 联系作者
 
 - X：[@wangzan101](https://x.com/wangzan101)
-- 微信：在 App 设置里的「关于 Mika」扫码加作者微信，备注「Mika」，拉你进内测群。
+- 微信群：在 App 设置的「关于 Mika」›「加入交流群」扫码。
+- X 群聊：<https://x.com/i/chat/group_join/g2116500883139862983/xP74Qyff3X>
 
 ## 许可证
 

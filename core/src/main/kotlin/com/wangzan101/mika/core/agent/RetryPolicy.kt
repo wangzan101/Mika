@@ -4,7 +4,8 @@ import com.wangzan101.mika.core.model.ModelError
 import kotlin.random.Random
 
 /**
- * 模型调用遇到一时的故障要不要再试、等多久。一时的故障:限流(429)、服务端出错(5xx)、连不上 / 连接被断 / 超时。
+ * 模型调用遇到一时的故障要不要再试、等多久。一时的故障:限流(429)、服务端出错(5xx)、连不上 / 连接被断 / 超时、
+ * 流式回复没收尾连接就断了(这时回复还没写进历史、也没执行任何工具,重发是安全的)。
  * 其余错误(Key、额度、模型名、内容被拒、其他 4xx、解析不了)再试也一样,不重试;上下文超长另由压缩处理。
  * 限流带了 Retry-After 就照它等(有上限);其余按指数退避加抖动,每次调用最多重试 [maxRetries] 次。
  * 一个任务里花在等重试上的总时间有上限 [taskWaitBudgetMs](默认 5 分钟,只是安全网):用完之后再出错就直接交出,不再等。
@@ -43,7 +44,7 @@ class RetryPolicy(
 
         /** 一时的故障,过一会儿再发同一个请求可能就好了。 */
         fun transient(e: Throwable): Boolean = when (e) {
-            is ModelError.RateLimited, is ModelError.Network -> true
+            is ModelError.RateLimited, is ModelError.Network, is ModelError.StreamCut -> true
             is ModelError.Server -> e.status in 500..599
             else -> false
         }
@@ -52,6 +53,7 @@ class RetryPolicy(
         fun label(e: Throwable): String = when (e) {
             is ModelError.RateLimited -> "rate_limited"
             is ModelError.Network -> "network"
+            is ModelError.StreamCut -> "stream_cut"
             is ModelError.Server -> "server_${e.status}"
             else -> e::class.simpleName.orEmpty()
         }

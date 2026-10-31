@@ -60,4 +60,5 @@
     <string name="task_not_done">任务没有完成</string>
     <string name="task_stopped">任务已停止</string>
     <string name="task_stopped_body">你停止了这个任务</string>
+    <string name="gate_user_on_page">你在操作，Mika 已暂停</string>
 </resources>

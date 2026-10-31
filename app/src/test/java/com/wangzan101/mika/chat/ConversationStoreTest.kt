@@ -73,11 +73,15 @@ class ConversationStoreTest {
         java.io.File(dir, "$id.json.tmp").writeText("x")
         store.append(other, Turn("订票", "好了", "succeeded"))
         val changes = mutableListOf<String>()
+        val deletions = mutableListOf<String>()
         val job = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { store.changes.collect { changes += it } }
+        val gone = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { store.deletions.collect { deletions += it } }
         store.delete(id)
         kotlinx.coroutines.yield()
         job.cancel()
+        gone.cancel()
         assertEquals(listOf(id), changes)
+        assertEquals(listOf(id), deletions)
         assertEquals(listOf("$other.json"), dir.list()!!.sorted())
         assertEquals(listOf(other), store.list().map { it.id })
         assertEquals(emptyList<Turn>(), store.turns(id))
@@ -241,12 +245,41 @@ class ConversationStoreTest {
     @Test fun announcesChangedConversations() = kotlinx.coroutines.test.runTest {
         val s = ConversationStore(tmp.newFolder("c"))
         val seen = mutableListOf<String>()
+        val deleted = mutableListOf<String>()
         backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { s.changes.collect { seen += it } }
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { s.deletions.collect { deleted += it } }
         s.append("a", Turn("查天气", "晴", "succeeded", runId = "r1", usedMemory = listOf("m1")))
         s.append("b", Turn("订票", "好了", "succeeded"))
         s.updateTurn("a", "r1") { it.copy(outcome = "晴转多云") }
         s.updateTurn("a", "missing") { it }
         s.stripMemory(setOf("m1"))
         assertEquals(listOf("a", "b", "a", "a"), seen)
+        // 只有删对话才发 deletions
+        assertEquals(emptyList<String>(), deleted)
+    }
+
+    /** 从哪一页开始的对话:记在旁边的 .page 文件里,列表里带着;旧对话没有它照常读;删对话一起删掉。 */
+    @Test fun pageOriginPersistsAndIsOptional() {
+        val dir = tmp.newFolder("c")
+        val a = ConversationStore(dir)
+        val plain = a.newConversation()
+        a.append(plain, Turn("查天气", "晴", "succeeded"))
+        val paged = a.newConversation()
+        assertTrue(a.setPageOrigin(paged, PageOrigin("https://shop.example.com/s?k=1", "shop.example.com", "搜索")))
+        a.append(paged, Turn("挑一个", "好", "succeeded"))
+        val b = ConversationStore(dir)
+        assertEquals(PageOrigin("https://shop.example.com/s?k=1", "shop.example.com", "搜索"), b.pageOrigin(paged))
+        assertEquals(null, b.pageOrigin(plain))
+        val listed = b.list().associateBy { it.id }
+        assertEquals("shop.example.com", listed.getValue(paged).page?.host)
+        assertEquals(null, listed.getValue(plain).page)
+        // 对话文件的格式不变:没有多出来的字段
+        assertFalse(java.io.File(dir, "$paged.json").readText().contains("shop.example.com"))
+        // 坏了的 .page 当作没有
+        java.io.File(dir, "$plain.page").writeText("{not json")
+        assertEquals(null, b.pageOrigin(plain))
+        b.delete(paged)
+        assertFalse(java.io.File(dir, "$paged.page").exists())
+        assertFalse(b.setPageOrigin(paged, PageOrigin("https://a.example/", "a.example")))
     }
 }

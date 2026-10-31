@@ -1,5 +1,6 @@
 package com.wangzan101.mika.core.model
 
+import com.wangzan101.mika.core.agent.RetryPolicy
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -136,9 +137,9 @@ class ResponsesModelTest {
         assertEquals(listOf(Part.Text("半")), reply.parts)
     }
 
-    @Test fun streamEndingBeforeCompletedIsANetworkFailure() = runTest {
+    @Test fun streamEndingBeforeCompletedIsARetryableCut() = runTest {
         server.enqueue(stream("""{"type":"response.output_text.delta","delta":"半"}"""))
-        expect<ModelError.Network> { model().complete("s", user, emptyList()) }
+        assertTrue(RetryPolicy.transient(expect<ModelError.StreamCut> { model().complete("s", user, emptyList()) }))
     }
 
     @Test fun usageErrorsInsideTheStreamAreMapped() = runTest {

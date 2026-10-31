@@ -52,6 +52,8 @@ Some phones can't report these switches, or report them wrong: you've turned a s
 
 ## Step 2: Turn on USB debugging
 
+> Note: in Developer options, don't change any switch this guide doesn't mention. Setup only needs "USB debugging" here and "Wireless debugging" in step 4. Some switches can erase the phone: "Boot with 16 KB page size", for example, asks to erase all data on some phones. If you see a prompt to erase data, reformat or factory reset the phone, tap "Cancel", not "Erase all data".
+
 **In Mika**: tap "Open Developer options".
 
 **In system settings**:

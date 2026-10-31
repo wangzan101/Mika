@@ -91,6 +91,43 @@ class WebStack private constructor(
     /** 这个任务有没有当前标签(当前标签挂在网页显示上,看得见);只在后台临时标签里读过网页时没有。 */
     val hasVisibleTab: Boolean get() = pool.current(taskId) != null
 
+    /** 当前标签是借来的、用户看着的那一页(见 [borrow]):它不在网页显示上,画中画不放画面。 */
+    val onBorrowedTab: Boolean get() = pool.current(taskId)?.let { pool.isExternal(it.id) } == true
+
+    // ---------- 借来的标签 ----------
+
+    /**
+     * 借来用户在浏览器页上看着的标签 [tab],当成这个任务的当前标签(见 [WebTabPool.attachExternal]);生死仍归原来的主人。
+     * 借不进来(已关、崩了)返回 false。主线程。
+     */
+    fun borrow(tab: WebTab): Boolean = pool.attachExternal(taskId, tab).also { if (it) Log.i(TAG, "task $taskId borrowed tab ${tab.id}") }
+
+    /** 还回借来的标签 [tab](任务结束、用户那边不再给了);不是借来的不动。主线程。 */
+    fun giveBack(tab: WebTab) {
+        if (pool.detachExternal(tab.id)) Log.i(TAG, "task $taskId returned tab ${tab.id}")
+    }
+
+    /**
+     * 借来的标签换成了 [next](用户的页面开了或关了弹出的窗口,看得见的成了另一个):原来那个还回去,新的借进来;
+     * 原来那个是当前标签时新的也是。主线程。
+     */
+    fun swapBorrowed(prev: WebTab, next: WebTab) {
+        val wasCurrent = pool.current(taskId) === prev
+        giveBack(prev)
+        if (wasCurrent || pool.current(taskId) == null) borrow(next)
+    }
+
+    /**
+     * 用户关掉了借出页面所在的浏览器页,标签交给这个任务([adopt]):还回借的那一份,在池里收下同一个 WebView 当普通标签,
+     * 挂到网页显示上照常运行,页面状态(滚动、表单、单页应用的状态)不丢;任务结束时随别的标签一起关。收不下(已关、崩了)返回 false,
+     * 调用方自己销毁。主线程。
+     */
+    fun adopt(tab: WebTab): Boolean {
+        val wasCurrent = pool.current(taskId) === tab
+        giveBack(tab)
+        return pool.adopt(taskId, tab, current = wasCurrent).also { if (it) Log.i(TAG, "task $taskId adopted tab ${tab.id}") }
+    }
+
     /**
      * 接管:把当前标签锁住,拿到主屏的接管界面里。没有当前标签、或界面打不开时返回 false。
      * [actions] 把界面上的按钮交给任务(处理好了、我自己做完了、取消、先放着);[currentKey] 是任务此刻的等待编号。
@@ -98,7 +135,9 @@ class WebStack private constructor(
     fun showForTakeover(reason: String, message: String?, waitKey: Int, actions: (WebHandover.Action) -> Unit, currentKey: () -> Int?): Boolean {
         val tab = pool.current(taskId) ?: return false
         pool.lock(tab.id)
-        val shown = WebHandover.show(context, tab, host, reason, message, waitKey, taskId, actions, currentKey)
+        // 借来的标签本来就在用户眼前(浏览器页):不挪,锁住等用户在那里处理好了交回
+        val shown = if (pool.isExternal(tab.id)) !tab.destroyed
+            else WebHandover.show(context, tab, host, reason, message, waitKey, taskId, actions, currentKey)
         if (shown) handedTab = tab else pool.unlock(tab.id)
         // 人机验证或访问拦截真把任务拦住了(要交给用户):把任务所在的网站记为碰到过拦截
         if (shown && reason in SiteRegistry.CHALLENGE_KINDS) {
@@ -111,10 +150,18 @@ class WebStack private constructor(
     fun returnFromTakeover(loggedIn: Boolean): HandoverActivity? {
         val tab = handedTab ?: return null
         handedTab = null
+        if (pool.isExternal(tab.id)) {
+            pool.unlock(tab.id)
+            if (loggedIn && !tab.destroyed) LoginProbe.probe(tab) { host, state -> if (state == LoginState.SignedIn) WebSites.registry(context).markLoggedIn(host) }
+            return HandoverActivity(borrowedTouches?.invoke(tab) ?: 0, tab.view.title?.takeIf { it.isNotBlank() })
+        }
         val r = WebHandover.end(loggedIn, WebSites.registry(context), tab)
         pool.unlock(tab.id)
         return r
     }
+
+    /** 借来的标签上用户摸了几下(接管交回时记进结果);由借出的一方给。 */
+    @Volatile var borrowedTouches: ((WebTab) -> Int)? = null
 
     /** 任务结束:还在接管就先收回,再关掉这个任务的标签和显示。 */
     fun close() {

@@ -1,5 +1,8 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.RemoteHost
+import com.wangzan101.mika.core.remote.RemoteAccess
+import com.wangzan101.mika.core.remote.HttpRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -20,19 +23,19 @@ class McpUsbTest {
         "POST", "/mcp", token?.let { mapOf("authorization" to "Bearer $it") }.orEmpty(), ByteArray(0), InetAddress.getByName(from),
     )
 
-    private fun status(v: McpAccess.Verdict) = (v as? McpAccess.Verdict.Reject)?.response?.status ?: 200
+    private fun status(v: RemoteAccess.Verdict) = (v as? RemoteAccess.Verdict.Reject)?.status ?: 200
 
     @Test fun usbModeBindsIpv4LoopbackOnly() {
-        val a = McpHost.bindAddress(allowAllInterfaces = false, port = 8765)
+        val a = RemoteHost.bindAddress(allowAllInterfaces = false, port = 8765)
         assertTrue(a.address is Inet4Address)
         assertEquals("127.0.0.1", a.address.hostAddress)
         assertEquals(8765, a.port)
         // 局域网那种绑所有网卡
-        assertTrue(McpHost.bindAddress(allowAllInterfaces = true, port = 8765).address.isAnyLocalAddress)
+        assertTrue(RemoteHost.bindAddress(allowAllInterfaces = true, port = 8765).address.isAnyLocalAddress)
     }
 
     @Test fun usbTokenIsOnlyAcceptedFromLoopback() {
-        val access = McpAccess({ null }, loopbackToken = { USB })
+        val access = RemoteAccess({ null }, loopbackToken = { USB })
         assertEquals(200, status(access.check(req(USB, "127.0.0.1"))))
         assertEquals(401, status(access.check(req(USB, "192.168.1.20"))))
         assertEquals(401, status(access.check(req("wrong", "127.0.0.1"))))
@@ -40,17 +43,17 @@ class McpUsbTest {
     }
 
     @Test fun bothTokensWorkWhenBothModesAreOn() {
-        val access = McpAccess({ NET }, loopbackToken = { USB })
+        val access = RemoteAccess({ NET }, loopbackToken = { USB })
         assertEquals(200, status(access.check(req(NET, "192.168.1.20"))))
         assertEquals(200, status(access.check(req(NET, "127.0.0.1"))))
         assertEquals(200, status(access.check(req(USB, "127.0.0.1"))))
         // USB 关了:令牌当场作废
-        val off = McpAccess({ NET }, loopbackToken = { null })
+        val off = RemoteAccess({ NET }, loopbackToken = { null })
         assertEquals(401, status(off.check(req(USB, "127.0.0.1"))))
     }
 
     @Test fun loopbackHostAcceptsTheUsbTokenOverHttp() {
-        val host = McpHost(FakeRemoteTasks(), { null }, port = 0, allowAllInterfaces = false, serverVersion = "test", loopbackToken = { USB })
+        val host = RemoteHost(FakeRemoteTasks(), { null }, port = 0, allowAllInterfaces = false, serverVersion = "test", loopbackToken = { USB })
         host.start()
         try {
             val client = OkHttpClient()

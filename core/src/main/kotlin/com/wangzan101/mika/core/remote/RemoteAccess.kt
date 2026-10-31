@@ -1,4 +1,4 @@
-package com.wangzan101.mika.core.mcp
+package com.wangzan101.mika.core.remote
 
 import java.net.Inet4Address
 import java.net.Inet6Address
@@ -7,11 +7,11 @@ import java.security.MessageDigest
 
 /**
  * 电脑连接的门口:每个请求先过这里,过了才交给协议层。顺序固定:
- * 浏览器来的(带 Origin)一律 403;同一地址认证失败太多次先 429;访问令牌不对 401;路径不对 404。
+ * 浏览器来的(带 Origin)一律 403;同一地址认证失败太多次先 429;访问令牌不对 401。路由和错误序列化交给入口适配器。
  * 令牌按常量时间比较;失败次数按对方地址记,[clock] 可换,测试里拨时间。
  * [token] 从哪里来的连接都认;[loopbackToken](经 USB 的电脑连接用的那个)只认本机回环来的连接。
  */
-class McpAccess(
+class RemoteAccess(
     private val token: () -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val maxFailures: Int = 5,
@@ -21,7 +21,7 @@ class McpAccess(
 ) {
     sealed interface Verdict {
         data object Pass : Verdict
-        data class Reject(val response: HttpResponse) : Verdict
+        data class Reject(val status: Int, val message: String, val headers: Map<String, String> = emptyMap()) : Verdict
     }
 
     private class Failures(var count: Int, var since: Long, var lockedUntil: Long)
@@ -29,14 +29,14 @@ class McpAccess(
 
     fun check(req: HttpRequest): Verdict {
         // 浏览器的请求总带 Origin;电脑上的 MCP 客户端不带。网页不该能碰到这个端口(防 DNS 重绑定)
-        if (req.header("origin") != null) return Verdict.Reject(McpRpc.transportError(403, "Browser requests are not allowed"))
+        if (req.header("origin") != null) return Verdict.Reject(403, "Browser requests are not allowed")
         val who = req.remote.hostAddress ?: "?"
         val now = clock()
         synchronized(failures) {
             val f = failures[who]
             if (f != null && f.lockedUntil > now) {
                 val wait = ((f.lockedUntil - now + 999) / 1000).coerceAtLeast(1)
-                return Verdict.Reject(McpRpc.transportError(429, "Too many failed attempts", mapOf("Retry-After" to wait.toString())))
+                return Verdict.Reject(429, "Too many failed attempts", mapOf("Retry-After" to wait.toString()))
             }
         }
         val given = req.header("authorization")?.let { h ->
@@ -46,10 +46,10 @@ class McpAccess(
         // 两个都比,不因对上了第一个就少比一次
         if (given == null || !(matches(given, token()) or matches(given, loopback))) {
             fail(who, now)
-            return Verdict.Reject(McpRpc.transportError(401, "Missing or wrong access token", mapOf("WWW-Authenticate" to "Bearer")))
+            return Verdict.Reject(401, "Missing or wrong access token", mapOf("WWW-Authenticate" to "Bearer"))
         }
         synchronized(failures) { failures.remove(who) }
-        if (req.path != PATH) return Verdict.Reject(McpRpc.transportError(404, "Not found; the endpoint is $PATH"))
+
         return Verdict.Pass
     }
 
@@ -65,8 +65,6 @@ class McpAccess(
     }
 
     companion object {
-        const val PATH = "/mcp"
-
         /** 常量时间比较:先各自摘要成等长,再逐字节比,耗时不随前面对上了几个字符变。 */
         fun same(a: String, b: String): Boolean {
             val d = MessageDigest.getInstance("SHA-256")

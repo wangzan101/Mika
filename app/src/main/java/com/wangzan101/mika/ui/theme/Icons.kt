@@ -127,7 +127,7 @@ object MikaIcons {
     val Code = stroke("code", "M8 7 l-5 5 l5 5 M16 7 l5 5 l-5 5")
     val Info = stroke("info", "M3 12 a9 9 0 1 0 18 0 a9 9 0 1 0 -18 0", "M12 11 v5.5 M12 7.8 v0.2")
 
-    // 关于页:更新记录、反馈问题、聊天(加作者微信)、X、说明文档
+    // 关于页:更新记录、反馈问题、聊天(交流群)、X、说明文档
     val Lines = stroke("lines", "M9 7 h11 M9 12 h11 M9 17 h11", "M4.5 7 h0.01 M4.5 12 h0.01 M4.5 17 h0.01", width = 2f)
     val Bug = stroke(
         "bug", "M8 9 h8 v6 a4 4 0 0 1 -8 0 z",

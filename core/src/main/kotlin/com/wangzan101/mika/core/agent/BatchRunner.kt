@@ -378,7 +378,7 @@ class BatchRunner(
                             put("additionalProperties", false)
                         })
                     })
-                    put("reason", buildJsonObject { put("type", "string"); put("description", "Optional short note on why you are calling this; not used for execution.") })
+                    put("reason", buildJsonObject { put("type", "string"); put("description", com.wangzan101.mika.core.tool.REASON_NOTE) })
                 })
                 put("required", JsonArray(listOf(JsonPrimitive("steps"))))
                 put("additionalProperties", false)

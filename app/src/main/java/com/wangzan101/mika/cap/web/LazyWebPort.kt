@@ -46,6 +46,14 @@ class LazyWebPort(private val create: suspend () -> WebPort) : WebPort {
 
     override suspend fun navigate(url: String, newTab: Boolean): NavResult = built().navigate(url, newTab)
 
+    /** 现在就建好(任务开局就要用网页时,如借来了用户看着的页面);建不起来返回 false,下次用到时再试。 */
+    suspend fun prepare(): Boolean = try {
+        built()
+        true
+    } catch (e: WebTabCrashed) {
+        false
+    }
+
     // ---------- 没建之前:没有打开的网页 ----------
 
     override suspend fun snapshot(): ScreenSnapshot = port?.snapshot() ?: EMPTY

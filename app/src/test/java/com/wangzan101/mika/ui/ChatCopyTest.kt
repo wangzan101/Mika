@@ -41,6 +41,9 @@ class ChatCopyTest {
         assertEquals("照片", ChatCopy.title(listOf(first.copy(goal = "附件:/workspace/inbox/a.jpg(1 KB)"))))
         assertEquals("a.pdf", ChatCopy.plainTitle("附件:/workspace/inbox/a.pdf(1 KB)"))
         assertEquals(ScreenCopy.TAG, ChatCopy.plainTitle("[[screen:s1]]"))
+        // 在浏览器页上对着一页问的:页面说明不当标题
+        val paged = com.wangzan101.mika.core.cap.web.AttachedPage.compose(com.wangzan101.mika.core.cap.web.AttachedPage.Page("https://a.example/", "页"), "挑一个\n第二行")
+        assertEquals("挑一个", ChatCopy.plainTitle(paged))
     }
 
     @Test fun subtitleSaysWhatIsGoingOn() {
@@ -135,6 +138,15 @@ class ChatCopyTest {
         val unpinned = drawerSections(all.map { if (it.id == "b") it.copy(pinnedAt = null) else it }, CurrentConversation("a", false, "一", ""), emptyList(), { null }, true, 0L, zone)
         assertEquals(listOf("e", "d"), unpinned.pinned.map { it.id })
         assertEquals(listOf("a", "b", "c"), unpinned.recent.map { it.id })
+    }
+
+    /** 在浏览器页上对着一页开始的对话:侧栏那一条带着网站(画成「网页」小标签和网站名),进行中、最近两段都是。 */
+    @Test fun drawerMarksConversationsStartedFromAPage() {
+        val page = com.wangzan101.mika.chat.PageOrigin("https://shop.example.com/s?k=1", "shop.example.com", "搜索")
+        val all = listOf(ConversationSummary("a", "一", 0L, page = page), ConversationSummary("b", "二", 0L), ConversationSummary("c", "三", 0L, page = page))
+        val s = drawerSections(all, CurrentConversation("x", false, "", ""), others = listOf("c"), { null }, canSwitch = true, now = 0L, zone = zone)
+        assertEquals(listOf("shop.example.com", null), s.recent.map { it.site })
+        assertEquals("shop.example.com", s.running.single().site)
     }
 
     /** 任务进行中、没开并行:只有当前对话能点。 */

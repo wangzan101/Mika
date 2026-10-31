@@ -388,7 +388,7 @@ private fun InputField(field: CardInput, ui: CardInputUi, actions: CardActions, 
 
 /** 输入框右边的停止键:黑底圆钮里一个方块,同对话页输入栏。 */
 @Composable
-private fun StopKey(onStop: () -> Unit) {
+internal fun StopKey(onStop: () -> Unit) {
     val c = MikaTheme.colors
     Box(
         Modifier.testTag("capsule-stop").size(KeySize).clip(MikaShapes.Pill).background(c.ink)
@@ -522,7 +522,7 @@ private fun Detail(
 
 /** 要你点的按钮(接管、同意、选项、继续),固定在卡片中间那段的下面,不跟着滚。 */
 @Composable
-private fun Pinned(content: CardContent?, key: String, actions: CardActions) {
+internal fun Pinned(content: CardContent?, key: String, actions: CardActions) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (content) {
             is CardContent.Takeover -> {
@@ -581,10 +581,10 @@ private fun ChatCard(
 
 /**
  * 对话的来回(旧的在上):打开时最新那句你说的话停在顶上;滚到顶往前多加载几轮,列表按每条的 key 停在原处;
- * 往下长的字只在你本来就在底部时跟着往下(同对话页);来了新的一问时滚到它。
+ * 往下长的字只在你本来就在底部时跟着往下(同对话页);来了新的一问时滚到它。[footer] 排在最后一条后面。
  */
 @Composable
-private fun ThreadList(thread: ChatThread, conversationId: String?, actions: CardActions) {
+internal fun ThreadList(thread: ChatThread, conversationId: String?, actions: CardActions, footer: (@Composable () -> Unit)? = null) {
     val c = MikaTheme.colors
     val state = rememberLazyListState(initialFirstVisibleItemIndex = thread.anchor)
     var following by remember { mutableStateOf(false) }
@@ -649,8 +649,12 @@ private fun ThreadList(thread: ChatThread, conversationId: String?, actions: Car
                 }
             }
         }
+        // 接在来回后面的一段(浏览器页面板里此刻的步骤):紧跟着最后一条,跟到底部时一起往下
+        footer?.let { f -> item(FOOTER_KEY) { f() } }
     }
 }
+
+private const val FOOTER_KEY = "thread-footer"
 
 /** 卡片来回里截图缩略图的宽。 */
 private val ThreadThumbWidth = 78.dp
@@ -661,9 +665,10 @@ private const val END_OFFSET = 1_000_000
 /**
  * 干活中的步骤(旧的在上):按内容高、最多 [max] 高。放不下时最新一步留在底下,旧的在上面截掉、顶上淡出,往上滚看更早的;
  * 来了新的一步时,本来就在底部才跟着往下,往上翻着看时不拽回去(同 [ThreadList])。
+ * [tags] 和 [steps] 一一对应:那一步在哪(「网页」「App」),写成步骤前面的小标签;没有为 null。
  */
 @Composable
-private fun Steps(steps: List<String>, max: Dp) {
+internal fun Steps(steps: List<String>, max: Dp, tags: List<String?> = emptyList()) {
     val c = MikaTheme.colors
     // 倒着排:第 0 项是最新一步,贴在底下
     val state = rememberLazyListState()
@@ -695,10 +700,18 @@ private fun Steps(steps: List<String>, max: Dp) {
             val i = steps.lastIndex - j
             val current = j == 0
             StepItem(if (current) StepState.Current else StepState.Done, first = i == 0, last = current, dotY = 11.dp) {
-                Text(
-                    steps[i], Modifier.padding(vertical = 2.dp), style = if (current) Step.copy(fontWeight = FontWeight.Medium) else Step,
-                    color = if (current) c.ink else c.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                )
+                Row(verticalAlignment = Alignment.Top) {
+                    tags.getOrNull(i)?.let { t ->
+                        Text(
+                            t, Modifier.padding(top = 3.dp, end = 5.dp).background(c.accentSoft, RoundedCornerShape(6.dp)).padding(horizontal = 5.dp),
+                            style = TextStyle(fontSize = 10.5.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium), color = c.accent, maxLines = 1,
+                        )
+                    }
+                    Text(
+                        steps[i], Modifier.padding(vertical = 2.dp), style = if (current) Step.copy(fontWeight = FontWeight.Medium) else Step,
+                        color = if (current) c.ink else c.ink2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

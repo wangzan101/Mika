@@ -35,7 +35,10 @@ internal object HttpSupport {
         })
     }
 
-    /** SSE 按事件交付，流断开时由调用者检查结束标记；取消协程会同时取消 HTTP 请求。 */
+    /**
+     * SSE 按事件交付；取消协程会同时取消 HTTP 请求。流读到头时由调用者按各自协议判断有没有正常收尾，
+     * 没收尾算 [ModelError.StreamCut]。一个事件都没有、又不是事件流格式的成功响应(比如地址指到了网页)算 [ModelError.BadResponse]。
+     */
     suspend fun stream(http: OkHttpClient, req: Request, onEvent: (String) -> Unit): RawResponse = suspendCancellableCoroutine { cont ->
         val call = http.newCall(req)
         cont.invokeOnCancellation { call.cancel() }
@@ -58,8 +61,10 @@ internal object HttpSupport {
                         }
                         val source = it.body?.source() ?: throw ModelError.BadResponse("流式响应没有内容")
                         val data = mutableListOf<String>()
+                        var events = 0
                         fun dispatch() {
                             if (data.isNotEmpty()) {
+                                events++
                                 onEvent(data.joinToString("\n"))
                                 data.clear()
                             }
@@ -73,6 +78,8 @@ internal object HttpSupport {
                         }
                         if (cont.isActive) {
                             dispatch()
+                            val eventStream = it.header("Content-Type")?.contains("event-stream", ignoreCase = true) == true
+                            if (events == 0 && !eventStream) throw ModelError.BadResponse("返回的不是流式内容(Content-Type: ${it.header("Content-Type").orEmpty()})")
                             cont.resume(RawResponse(it.code, it.header("retry-after"), ""))
                         }
                     } catch (e: Exception) {

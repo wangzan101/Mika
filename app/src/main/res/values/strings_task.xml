@@ -63,4 +63,5 @@
     <string name="task_not_done">Task not finished</string>
     <string name="task_stopped">Task stopped</string>
     <string name="task_stopped_body">You stopped this task</string>
+    <string name="gate_user_on_page">You’re using the page, so Mika paused</string>
 </resources>

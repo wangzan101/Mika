@@ -241,6 +241,30 @@ class CapsuleModelTest {
         assertEquals(CapsuleKind.Idle, shown(model.update(inputs(mode = CapsuleMode.Always), CapsuleModel.LINGER_MS)).kind)
     }
 
+    @Test fun endedRunStaysGoneThoughStillListed() {
+        // 任务列表没再变时,调用方一直列着那件停掉的任务
+        val a = run("a", TaskState.Cancelled)
+        assertTrue(shown(model.update(inputs(a), 0)).pill)
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a), CapsuleModel.LINGER_MS))
+        // 进 Mika 再出来:不再展开「已停止」
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a, foreground = true), CapsuleModel.LINGER_MS + 1_000))
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a), CapsuleModel.LINGER_MS + 2_000))
+        assertNull(model.nextChangeAt)
+    }
+
+    @Test fun endedWhileHiddenCountsItsTimeToo() {
+        // 在 Mika 里结束、过了 10 秒才回到别的 App:不再出现
+        val a = run("a", TaskState.Succeeded("好了"))
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a, foreground = true), 0))
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a), 60_000))
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a), 60_100))
+        // 熄屏或锁屏时结束的也一样
+        val b = run("b", TaskState.Cancelled)
+        assertEquals(CapsuleView.Hidden, model.update(inputs(b, interactive = false), 100_000))
+        assertEquals(CapsuleView.Hidden, model.update(inputs(b), 200_000))
+        assertEquals(CapsuleView.Hidden, model.update(inputs(b), 200_100))
+    }
+
     @Test fun failedAndCancelledHaveTheirLines() {
         assertEquals(CapsuleKind.Failed, shown(CapsuleModel().update(inputs(run("a", TaskState.Failed("x", FailKind.Model))), 0)).kind)
         val stopped = shown(CapsuleModel().update(inputs(run("a", TaskState.Cancelled)), 0))
@@ -282,6 +306,50 @@ class CapsuleModelTest {
         // 展开前已过的时间照算:收起后只剩 LINGER_MS - 5_000
         assertTrue(!shown(model.update(inputs(), 1_000_000)).pill)
         assertEquals(CapsuleView.Hidden, model.update(inputs(), 1_000_000 + CapsuleModel.LINGER_MS - 5_000))
+    }
+
+    @Test fun idleIconOpensTheIdleCardAfterAResultHasGone() {
+        val a = run("a", TaskState.Cancelled)
+        model.update(inputs(a, mode = CapsuleMode.Always), 0)
+        assertEquals(CapsuleKind.Idle, shown(model.update(inputs(a, mode = CapsuleMode.Always), CapsuleModel.LINGER_MS)).kind)
+        // 调用方还列着那件停掉的任务时点开空闲图标:是空闲卡片,不是那件任务
+        val v = shown(model.update(inputs(a, mode = CapsuleMode.Always, cardOpen = true), CapsuleModel.LINGER_MS + 60_000))
+        assertEquals(CapsuleKind.Idle, v.kind)
+        val idle = CardView.Chat("c-b", title = "订票")
+        assertEquals(idle, CapsuleCards.of(model.cardRuns(), idle = idle))
+    }
+
+    @Test fun deletedConversationsEndedRunsLeaveAtOnce() {
+        val a = run("a", TaskState.Cancelled)
+        val a2 = CapsuleRun("a2", "c-a", TaskState.Succeeded("好了"))
+        val b = run("b", TaskState.Succeeded("好了"))
+        val r = run("r", running("在搜"))
+        model.update(inputs(a, a2, b, r), 0)
+        // 这个对话里已结束的几件都拿掉
+        model.forget("c-a")
+        // 进行中的照旧
+        model.forget("c-r")
+        // 调用方还列着也不回来
+        model.update(inputs(a, a2, b, r), 100)
+        assertEquals(listOf("r", "b"), model.cardRuns().map { it.run.key })
+        model.forget("c-b")
+        // 删的时候还在进行的,之后结束照常显示(删对话等不到它收尾时,它收尾存进的那一轮会把对话重新建起来)
+        val v = shown(model.update(inputs(a, a2, b, run("r", TaskState.Cancelled)), 200))
+        assertEquals(CapsuleKind.Cancelled to "c-r", v.kind to v.conversationId)
+        assertEquals(listOf("r"), model.cardRuns().map { it.run.key })
+    }
+
+    @Test fun deletedConversationLeavesTheOpenCardToo() {
+        val a = run("a", TaskState.Cancelled)
+        model.update(inputs(a), 0)
+        model.update(inputs(a, cardOpen = true), 1_000)
+        // 卡片展开着(停表)时删掉:马上拿掉,收起后也不回来
+        model.forget("c-a")
+        assertTrue(model.cardRuns().isEmpty())
+        model.update(inputs(a, cardOpen = true), 1_100)
+        assertTrue(model.cardRuns().isEmpty())
+        assertEquals(CapsuleView.Hidden, model.update(inputs(a), 5_000))
+        assertNull(model.nextChangeAt)
     }
 
     @Test fun cardRunsActiveByPriorityThenEndedNewestFirst() {

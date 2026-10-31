@@ -17,6 +17,11 @@ sealed class ModelError(message: String, cause: Throwable? = null) : Exception(m
     class ToolsUnsupported(val model: String = "") :
         ModelError(if (model.isEmpty()) "该模型不支持调用工具" else "模型「$model」不支持调用工具")
     class Network(cause: Throwable? = null) : ModelError("网络连接失败", cause)
+    /**
+     * 流式回复还没收尾(没有结束标记,也没有结束原因)连接就关了:多半是途中的网关、代理空闲超时或网络切换把连接掐断。
+     * 回复不完整、不能用,重发同一个请求通常就好;和接口配置无关。
+     */
+    class StreamCut : ModelError("回复还没传完,连接就被断开了")
     class Server(val status: Int) : ModelError("模型服务出错(HTTP $status)")
     class ContentRefused : ModelError("模型拒绝处理该内容")
     /** ChatGPT 套餐给其他 App 用的额度到了上限:不重试,等额度恢复或换模型。 */

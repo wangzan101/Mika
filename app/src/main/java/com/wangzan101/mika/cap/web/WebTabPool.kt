@@ -24,7 +24,10 @@ import com.wangzan101.mika.cap.web.cdp.WebDevtools
 /** 标签池里发生的事:新开、关掉(原因)、崩溃、拦下的跳 App 链接、内存回收后切回时重新加载。 */
 sealed interface PoolEvent {
     data class NewTab(val tabId: String, val taskId: String, val fromPopup: Boolean) : PoolEvent
-    /** [reason]:closed 主动关、limit 超出上限关掉最久没用的、task_end 任务结束、popup_other_site 弹出窗口要去别的网站。 */
+    /**
+     * [reason]:closed 主动关、limit 超出上限关掉最久没用的、task_end 任务结束、popup_other_site 弹出窗口要去别的网站;
+     * 借来的标签([WebTabPool.attachExternal])还回去时是 returned(标签本身没关)。
+     */
     data class Closed(val tabId: String, val reason: String) : PoolEvent
     data class Crashed(val tabId: String) : PoolEvent
     data class ExternalLink(val tabId: String, val link: Link) : PoolEvent
@@ -38,6 +41,8 @@ sealed interface PoolEvent {
  * 页面弹出的新窗口只在用户点了(有手势)时才在池里开新标签,并且只能是同一网站;跳 App 的链接不跳,发 [PoolEvent.ExternalLink]。
  * 渲染进程崩溃:销毁该标签,发 [PoolEvent.Crashed],下一次打开网址开新标签。
  * 系统内存紧张时关掉后台标签只记下地址,切回时重新加载;页面加载完、任务结束、App 进入后台时把 Cookie 写盘,登录不丢。
+ * 借来的标签([attachExternal],用户在浏览器页上看着的那一个):当成任务的当前标签用,但不归池管——不挂到 [host] 上(它在用户的界面里),
+ * 不算上限、不被腾位置或内存回收关掉,池也不接它上面的事(下载、弹窗、登录探查由它原来的主人管);关它、任务结束时只是还回去([detachExternal]),不销毁。
  *
  * 会动到 WebView 的方法([open]、[switchTo]、[close]、[closeAll]、[list]、[onTrimMemory])都在主线程调用;
  * [current]、[isLive]、[crashedTab] 任意线程可调。
@@ -53,8 +58,17 @@ class WebTabPool(
     /** 池里标签的 DevTools 会话入口;默认是进程里那一份。 */
     private val devtools: WebDevtools = WebDevtools.of(context),
 ) : WebTab.Listener, Closeable, TabBudget.Member {
-    /** [background]:读页用的临时后台标签,不当当前标签、不进标签列表、不算上限,读完即关(见 [openBackground])。 */
-    private class Entry(val id: String, val taskId: String, var tab: WebTab?, var url: String?, var title: String, var lastUsed: Long, val background: Boolean = false)
+    /**
+     * [background]:读页用的临时后台标签,不当当前标签、不进标签列表、不算上限,读完即关(见 [openBackground])。
+     * [external]:借来的标签(见 [attachExternal]),不算上限,关的时候只还回去。
+     */
+    private class Entry(
+        val id: String, val taskId: String, var tab: WebTab?, var url: String?, var title: String, var lastUsed: Long,
+        val background: Boolean = false, val external: Boolean = false,
+    ) {
+        /** 算进每任务和全局上限、可以被腾位置关掉的普通标签。 */
+        val counted: Boolean get() = !background && !external
+    }
 
     private val entries = LinkedHashMap<String, Entry>()
     private val currentByTask = HashMap<String, String>()
@@ -112,6 +126,64 @@ class WebTabPool(
 
     @Synchronized
     fun current(taskId: String): WebTab? = currentByTask[taskId]?.let { entries[it]?.tab }
+
+    /**
+     * 把一个不归池管的标签(用户在浏览器页上看着的那一个)借给任务 [taskId],当成它的当前标签:之后网页工具读它、在它上面操作,
+     * 和池里的标签一样。不挂到 [host] 上、不算上限、不接管它的监听;同一个标签已经借进来了就只切过去。
+     * 已关的、崩了的、编号和池里的标签撞了的借不进来,返回 false。主线程。
+     */
+    fun attachExternal(taskId: String, tab: WebTab): Boolean {
+        checkMain()
+        if (tab.destroyed || tab.crashed) return false
+        val entry = synchronized(this) {
+            val existing = entries[tab.id]
+            if (existing != null && (!existing.external || existing.tab !== tab || existing.taskId != taskId)) return false
+            existing ?: Entry(tab.id, taskId, tab, tab.view.url, tab.view.title.orEmpty(), 0, external = true).also {
+                entries[tab.id] = it
+                crashedByTask.remove(taskId)
+            }
+        }
+        makeCurrent(entry)
+        emit(PoolEvent.NewTab(tab.id, taskId, fromPopup = false))
+        return true
+    }
+
+    /**
+     * 还回借来的标签 [tabId]:从池里拿掉,不销毁、不动它的视图;是当前标签时换成本任务最近用过的另一个(没有就没有当前标签)。
+     * 不是借来的返回 false。主线程。
+     */
+    fun detachExternal(tabId: String): Boolean {
+        checkMain()
+        if (synchronized(this) { entries[tabId]?.external != true }) return false
+        remove(tabId, PoolEvent.Closed(tabId, "returned"), force = true)
+        return true
+    }
+
+    /**
+     * 收下一个原来不归池管的标签 [tab] 当任务 [taskId] 的普通标签(借出页面的浏览器页关掉了,页面交给任务接着用):
+     * 接它上面的事、算上限、可被腾位置,任务结束时随别的一起关。[current] 或任务还没有当前标签时切过去、挂到宿主上,否则在后台。
+     * 已关、崩了、编号已在池里的收不下,返回 false。主线程。
+     */
+    fun adopt(taskId: String, tab: WebTab, current: Boolean): Boolean {
+        checkMain()
+        if (tab.destroyed || tab.crashed || synchronized(this) { entries.containsKey(tab.id) }) return false
+        makeRoom(taskId, keep = null)
+        (tab.view.parent as? android.view.ViewGroup)?.removeView(tab.view)
+        tab.ownerTaskId = taskId
+        tab.listener = this
+        val entry = Entry(tab.id, taskId, tab, tab.view.url, tab.view.title.orEmpty(), budget.tick())
+        val makeIt = synchronized(this) {
+            entries[tab.id] = entry
+            current || currentByTask[taskId] == null
+        }
+        if (makeIt) makeCurrent(entry)
+        emit(PoolEvent.NewTab(tab.id, taskId, fromPopup = false))
+        return true
+    }
+
+    /** [tabId] 是借来的标签(见 [attachExternal])。 */
+    @Synchronized
+    fun isExternal(tabId: String): Boolean = entries[tabId]?.external == true
 
     @Synchronized
     fun isLive(tabId: String): Boolean = entries[tabId]?.tab != null
@@ -173,11 +245,11 @@ class WebTabPool(
         WebLogin(WebTab.cookieManager(), WebTab.webStorage(), registry).logoutAll(views, WebViewDatabase.getInstance(context))
     }
 
-    /** 任务结束:关掉它开的全部标签,Cookie 写盘(登录状态不随标签关闭丢失)。 */
+    /** 任务结束:关掉它开的全部标签(借来的还回去),Cookie 写盘(登录状态不随标签关闭丢失)。 */
     fun closeAll(taskId: String) {
         checkMain()
         val ids = synchronized(this) { entries.values.filter { it.taskId == taskId }.map { it.id } }
-        ids.forEach { remove(it, PoolEvent.Closed(it, "task_end")) }
+        ids.forEach { remove(it, PoolEvent.Closed(it, if (isExternal(it)) "returned" else "task_end"), force = isExternal(it)) }
         synchronized(this) { crashedByTask.remove(taskId) }
         flushCookies()
     }
@@ -207,7 +279,7 @@ class WebTabPool(
         if (level >= ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) flushCookies()
         if (!pressure) return
         val victims = synchronized(this) {
-            entries.values.filter { it.tab != null && !it.background && currentByTask[it.taskId] != it.id && it.id !in locked }
+            entries.values.filter { it.tab != null && it.counted && currentByTask[it.taskId] != it.id && it.id !in locked }
         }
         for (e in victims) {
             val tab = e.tab ?: continue
@@ -231,11 +303,11 @@ class WebTabPool(
     // ---------- 全局上限 ----------
 
     @Synchronized
-    override fun tabCount(): Int = entries.values.count { !it.background }
+    override fun tabCount(): Int = entries.values.count { it.counted }
 
     @Synchronized
     override fun oldestSpare(except: String?): Pair<String, Long>? =
-        entries.values.filter { it.id != except && !it.background && it.id !in locked }.minByOrNull { it.lastUsed }?.let { it.id to it.lastUsed }
+        entries.values.filter { it.id != except && it.counted && it.id !in locked }.minByOrNull { it.lastUsed }?.let { it.id to it.lastUsed }
 
     override fun evictForBudget(tabId: String) = remove(tabId, PoolEvent.Closed(tabId, "limit"))
 
@@ -337,7 +409,8 @@ class WebTabPool(
             currentByTask[entry.taskId] = entry.id
             entry.lastUsed = budget.tick()
         }
-        entry.tab?.let { host.attach(it) }
+        // 借来的标签留在用户的界面里;宿主上原来挂着的那个照样留着(在后台照常运行)
+        if (!entry.external) entry.tab?.let { host.attach(it) }
     }
 
     /**
@@ -347,7 +420,7 @@ class WebTabPool(
     private fun makeRoom(taskId: String, keep: String?) {
         while (true) {
             val (own, perTaskFull) = synchronized(this) {
-                val all = entries.values.filter { it.taskId == taskId && !it.background }
+                val all = entries.values.filter { it.taskId == taskId && it.counted }
                 all.filter { it.id != keep && it.id !in locked }.minByOrNull { it.lastUsed } to (all.size >= perTask)
             }
             when {
@@ -359,7 +432,7 @@ class WebTabPool(
         }
     }
 
-    /** 关掉一个标签;接管中(锁住)的不关,除非 [force](渲染进程已经没了)。 */
+    /** 关掉一个标签;接管中(锁住)的不关,除非 [force](渲染进程已经没了、还回借来的标签)。借来的只拿掉,不销毁。 */
     private fun remove(tabId: String, event: PoolEvent, force: Boolean = false) {
         checkMain()
         val (entry, next) = synchronized(this) {
@@ -376,13 +449,13 @@ class WebTabPool(
             }
             e to nextEntry
         }
-        entry.tab?.let {
+        if (!entry.external) entry.tab?.let {
             host.detach(it.view)
             it.destroy()
         }
         next?.let { n ->
-            // 下一个当前标签若被内存回收过,等任务切到它时再重新加载
-            n.tab?.let { host.attach(it) }
+            // 下一个当前标签若被内存回收过,等任务切到它时再重新加载;借来的留在用户那里
+            if (!n.external) n.tab?.let { host.attach(it) }
         }
         emit(event)
     }

@@ -184,6 +184,8 @@ class LoopPoliciesTest {
         assertEquals(1000L, fixed.delayFor(ModelError.Network(), 0))
         assertEquals(1000L, fixed.delayFor(ModelError.Server(503), 0))
         assertEquals(1000L, fixed.delayFor(ModelError.RateLimited(null), 0))
+        assertEquals(1000L, fixed.delayFor(ModelError.StreamCut(), 0))
+        assertEquals("stream_cut", RetryPolicy.label(ModelError.StreamCut()))
         for (e in listOf(ModelError.Server(400), ModelError.Server(404), ModelError.Auth(), ModelError.QuotaExceeded(),
             ModelError.ModelNotFound(), ModelError.ContentRefused(), ModelError.BadResponse(), ModelError.ContextTooLong(), IllegalStateException())) {
             assertNull("$e", fixed.delayFor(e, 0))

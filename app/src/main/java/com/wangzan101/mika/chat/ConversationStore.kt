@@ -34,9 +34,14 @@ class ConversationStore(private val dir: File) {
      */
     val changes: SharedFlow<String> = _changes.asSharedFlow()
 
+    private val _deletions = MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** 删掉的对话编号:[delete] 时发一次([changes] 也照发)。悬浮胶囊据此拿掉这个对话刚结束的任务、卡片不再接着它。 */
+    val deletions: SharedFlow<String> = _deletions.asSharedFlow()
+
     /**
      * 对话列表,最近改过的在前;[ConversationSummary.title] 是标题(用户改的或起好的),没有时是第一句话;
-     * [ConversationSummary.pinnedAt] 是置顶的时间。没有内容的对话不列。
+     * [ConversationSummary.pinnedAt] 是置顶的时间;[ConversationSummary.page] 是从哪一页开始的。没有内容的对话不列。
      */
     @Synchronized
     fun list(): List<ConversationSummary> =
@@ -45,7 +50,7 @@ class ConversationStore(private val dir: File) {
             .mapNotNull { f ->
                 val id = f.name.removeSuffix(".json")
                 val first = turns(id).firstOrNull() ?: return@mapNotNull null
-                ConversationSummary(id, title(id) ?: first.userText, f.lastModified(), pinnedAt(id))
+                ConversationSummary(id, title(id) ?: first.userText, f.lastModified(), pinnedAt(id), pageOrigin(id))
             }
 
     /** 对话起好的标题(见 [ConversationTitler]);没有、读不到为 null。标题放在对话文件旁边的 `.title` 文件里,不动对话文件的格式。 */
@@ -60,16 +65,21 @@ class ConversationStore(private val dir: File) {
     private val deleted = mutableSetOf<String>()
 
     /**
-     * 删掉一个对话存下的一切:对话文件、标题、置顶,以及写到一半的临时文件和挪到一边的损坏文件。删了什么都发一次 [changes]。
+     * 删掉一个对话存下的一切:对话文件、标题、置顶,以及写到一半的临时文件和挪到一边的损坏文件。删了什么都发一次 [changes]
+     * 和 [deletions]。
      * 对话的工作区、定时任务、在跑的任务不归这里管,见 [ConversationDeleter]。
      */
     @Synchronized
     fun delete(conversationId: String) {
         deleted += safe(conversationId)
         val main = file(conversationId).name
-        dir.listFiles { f -> f.isFile && (f.name == main || f.name.startsWith("$main.") || f.name == titleFile(conversationId).name || f.name == pinFile(conversationId).name) }
+        dir.listFiles { f ->
+            f.isFile && (f.name == main || f.name.startsWith("$main.") || f.name == titleFile(conversationId).name || f.name == pinFile(conversationId).name ||
+                f.name == pageFile(conversationId).name)
+        }
             .orEmpty().forEach { it.delete() }
         _changes.tryEmit(conversationId)
+        _deletions.tryEmit(conversationId)
     }
 
     /**
@@ -109,6 +119,28 @@ class ConversationStore(private val dir: File) {
             dir.mkdirs()
             runCatching { f.writeText(at.toString()) }.isSuccess
         } else !f.exists() || f.delete()
+        if (ok) _changes.tryEmit(conversationId)
+        return ok
+    }
+
+    /**
+     * 对话是从哪一页开始的(用户在浏览器页上对着一页问 Mika);不是、读不到为 null。
+     * 放在对话文件旁边的 `.page` 文件里(JSON:url、host、title),不动对话文件的格式;旧对话没有这个文件。
+     */
+    @Synchronized
+    fun pageOrigin(conversationId: String): PageOrigin? = runCatching {
+        val f = pageFile(conversationId).takeIf { it.isFile } ?: return@runCatching null
+        val o = Json.parseToJsonElement(f.readText()) as? JsonObject ?: return@runCatching null
+        PageOrigin(str(o, "url") ?: return@runCatching null, str(o, "host") ?: return@runCatching null, str(o, "title").orEmpty())
+    }.getOrNull()
+
+    /** 记下对话从哪一页开始(之后在同一页上接着问时换成最新的那一页)。删掉的对话不动。写进去了返回 true。 */
+    @Synchronized
+    fun setPageOrigin(conversationId: String, origin: PageOrigin): Boolean {
+        if (safe(conversationId) in deleted) return false
+        dir.mkdirs()
+        val json = buildJsonObject { put("url", origin.url); put("host", origin.host); put("title", origin.title) }
+        val ok = runCatching { pageFile(conversationId).writeText(json.toString()) }.isSuccess
         if (ok) _changes.tryEmit(conversationId)
         return ok
     }
@@ -239,7 +271,11 @@ class ConversationStore(private val dir: File) {
     private fun file(id: String) = File(dir, "${safe(id)}.json")
     private fun titleFile(id: String) = File(dir, "${safe(id)}.title")
     private fun pinFile(id: String) = File(dir, "${safe(id)}.pin")
+    private fun pageFile(id: String) = File(dir, "${safe(id)}.page")
     private fun safe(id: String) = id.filter { it.isLetterOrDigit() || it == '-' || it == '_' }
 }
 
-data class ConversationSummary(val id: String, val title: String, val updatedAt: Long, val pinnedAt: Long? = null)
+data class ConversationSummary(val id: String, val title: String, val updatedAt: Long, val pinnedAt: Long? = null, val page: PageOrigin? = null)
+
+/** 对话从哪一页开始:网址、主机名、页面标题(没有为空串)。 */
+data class PageOrigin(val url: String, val host: String, val title: String = "")

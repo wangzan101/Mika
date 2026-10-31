@@ -50,7 +50,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 class WebTab(
     context: Context,
     val id: String,
-    val ownerTaskId: String,
+    ownerTaskId: String,
     private val assetLoaders: List<WebViewAssetLoader> = emptyList(),
     /** 这个标签的 DevTools 会话入口;默认是进程里那一份。 */
     val devtools: WebDevtools = WebDevtools.of(context),
@@ -64,6 +64,8 @@ class WebTab(
         fun onCreateWindow(tab: WebTab, isUserGesture: Boolean, resultMsg: Message): Boolean = false
         /** 弹出的新标签第一次要去别的网站:标签池关掉它。 */
         fun onPopupRefused(tab: WebTab, url: String) {}
+        /** 页面要关掉自己这个窗口(window.close())。 */
+        fun onCloseWindow(tab: WebTab) {}
         /** 页面触发了下载(只保存,不打开、不安装)。 */
         fun onDownload(tab: WebTab, url: String, userAgent: String, contentDisposition: String?, mime: String?) {}
         /** 页面地址、标题或加载进度变了(给看得见的标签刷新地址栏和进度条)。 */
@@ -83,6 +85,10 @@ class WebTab(
     /** 页面弹了选择框、却没有待交的文件(被取消)的次数。 */
     var choosersRefused: Int = 0
         private set
+
+    /** 这个标签属于哪个任务(用户自己的浏览器页是它自己的编号);用户关掉借给任务的页面、任务收下它时改成那个任务。 */
+    var ownerTaskId: String = ownerTaskId
+        internal set
 
     val view: WebView = WebView(context)
 
@@ -254,6 +260,10 @@ class WebTab(
             override fun onCreateWindow(v: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                 if (resultMsg == null) return false
                 return listener?.onCreateWindow(this@WebTab, isUserGesture, resultMsg) ?: false
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                listener?.onCloseWindow(this@WebTab)
             }
 
             override fun onProgressChanged(v: WebView, newProgress: Int) {

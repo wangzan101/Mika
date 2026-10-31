@@ -32,7 +32,7 @@ Details for each step are in [Quick start](#quick-start) below.
 
 **Option 2: let an AI agent on your computer do it**
 
-Connect the phone to your computer with a USB cable, turn on USB debugging on the phone, and send this sentence to an AI agent on the computer that can run commands:
+Connect the phone to your computer with a USB cable, turn on USB debugging on the phone (don't change other switches in Developer options unless the agent asks you to: some can erase the phone), and send this sentence to an AI agent on the computer that can run commands:
 
 ```
 Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.md to install Mika on the Android phone connected over USB.
@@ -167,9 +167,11 @@ Apps and websites that already have usage knowledge (names as they appear in the
 - Each conversation gets a workspace that can run Python, Node and shell commands, process files you send, and save results to your phone's Download/Mika folder.
 - Offline by default; when needed, turn on "Allow scripts to access the network" (允许脚本联网) under "Files & compute" (文件与计算环境) in Settings. arm64 devices only.
 
-### AI tools on your computer can use it (MCP)
+### AI tools on your computer can use it (CLI / MCP)
 
 With the phone connected to a computer, AI tools there can hand Mika tasks over MCP and get the results back. One command turns it on; USB only and token-protected. A LAN option is in Settings, off by default. See the [computer access guide](docs/mcp.en.md).
+
+You can also install the [computer CLI and Agent Skill](docs/cli.en.md) and use `mika connect`, `mika task run` and `mika task wait`. CLI and MCP are peer entry points into the same phone task service; the CLI requires no MCP configuration. An APK containing task API v1 is required.
 
 ## Quick start
 
@@ -193,7 +195,7 @@ Mika uses accessibility to read the UI and tap. You don't need to turn it on by 
 
 ### 3. Pair wireless debugging (once)
 
-Open "Set up phone control" (设置手机操作) in Settings and follow the checklist: enable Developer options, USB debugging and Wireless debugging, then pair using the 6-digit pairing code.
+Open "Set up phone control" (设置手机操作) in Settings and follow the checklist: enable Developer options, USB debugging and Wireless debugging, then pair using the 6-digit pairing code. In Developer options, don't change switches Mika doesn't mention: some can erase the phone, such as "Boot with 16 KB page size".
 
 First time, stuck on a step, or not sure where the pairing code goes? See the [phone control setup guide](docs/setup-guide.en.md): it covers where to tap for each step, how to tell it worked, and fixes for common snags.
 
@@ -293,12 +295,14 @@ PRs welcome. Start with [`docs/architecture.md`](docs/architecture.md) (written 
 
 ### Build and test
 
+CLI tests also require Python 3.10+; select an interpreter with `-PmikaPython=/path/to/python3`.
+
 Requires JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, or the `ANDROID_HOME` environment variable).
 
 ```bash
 ./gradlew :app:assembleDebug                  # debug build
 ./gradlew :app:assemblePerf                   # build for judging smoothness: precompiled and non-debuggable like release, debug-signed, installs over the debug build
-./gradlew :core:test :app:testDebugUnitTest   # unit tests
+./gradlew :core:test :core:cliTest :app:testDebugUnitTest   # unit tests
 ```
 
 The debug build is not precompiled and its UI is several times slower; use the perf build to judge smoothness.
@@ -338,7 +342,8 @@ The debug build is not precompiled and its UI is several times slower; use the p
 ## Contact
 
 - X: [@wangzan101](https://x.com/wangzan101)
-- WeChat: in the app, open "About Mika" (关于 Mika) in Settings and scan the code to add the author on WeChat, with the note "Mika", to join the beta group.
+- WeChat group: in the app, open "About Mika" › "Join the community" in Settings and scan the code.
+- X group chat: <https://x.com/i/chat/group_join/g2116500883139862983/xP74Qyff3X>
 
 ## License
 

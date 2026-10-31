@@ -1,5 +1,6 @@
 package com.wangzan101.mika.chat
 
+import com.wangzan101.mika.core.cap.web.AttachedPage
 import com.wangzan101.mika.core.model.Author
 import com.wangzan101.mika.core.model.ChatModel
 import com.wangzan101.mika.core.model.Message
@@ -30,7 +31,10 @@ object ConversationTitler {
     }
 
     suspend fun generate(models: List<ChatModel>, first: String, timeoutMs: Long = TIMEOUT_MS): String? {
-        val words = UserScreenMessage.parse(first).words.take(MAX_INPUT)
+        // 网页说明不算第一句话;只带着选中的字、没写话时按选中的字起
+        val page = AttachedPage.parse(first)
+        val said = page.words.ifBlank { page.page?.selection.orEmpty() }
+        val words = UserScreenMessage.parse(said).words.take(MAX_INPUT)
         if (words.isBlank()) return null
         val input = "<message>\n" + words.replace(TAG, "") + "\n</message>"
         val messages = listOf(Message(Role.User, listOf(Part.Text(input)), Author.User))

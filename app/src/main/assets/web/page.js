@@ -184,12 +184,32 @@
     if (inputType(el) === 'password' || hasToken(el, PASSWORD_AUTOCOMPLETE)) { markPassword(el); return true; }
     return !!(seenPassword && I.weakHas(seenPassword, el));
   }
+  // 读屏只报填了几位、不带值的输入框:密码框,以及标着银行卡号、安全码、有效期、一次性验证码的文字输入框和 textarea
+  function hidesValue(el) {
+    return isPassword(el) || (isTextField(el) && hasToken(el, SECRET_AUTOCOMPLETE));
+  }
   // input 的值用文档开始时拿到的原始读取器:页面事后改写 value 读取器也骗不到这里
   function fieldText(el) { return String((lower(el) === 'input' ? I.inputValue(el) : el.value) || ''); }
   function isTextField(el) {
     var tag = lower(el);
     if (tag === 'textarea') return true;
     return tag === 'input' && !!TEXT_INPUTS[inputType(el)];
+  }
+  // 不带值的 textarea 里的文字就是它的值(页面预填的,或页面脚本把打进去的字写回去的),取元素的文字时跳过它。
+  // 元素里没有这种 textarea 时照旧:innerText,取不到用 textContent;plain 为真时直接用 textContent
+  function secretArea(el) { return lower(el) === 'textarea' && hidesValue(el); }
+  function textOf(el, plain) {
+    var ts = secretArea(el) ? [el] : I.querySelectorAll(el, 'textarea[autocomplete]'), hit = false;
+    for (var i = 0; i < ts.length && !hit; i++) hit = secretArea(ts[i]);
+    if (hit) return textSkipping(el);
+    return plain ? el.textContent : el.innerText || el.textContent;
+  }
+  function textSkipping(node) {
+    if (node.nodeType === 3) return node.nodeValue;
+    if (node.nodeType !== 1 || secretArea(node)) return '';
+    var s = '';
+    for (var c = node.firstChild; c; c = c.nextSibling) s += textSkipping(c);
+    return s;
   }
   function editingHost(el) {
     if (!el || !el.isContentEditable) return null;
@@ -254,7 +274,7 @@
     var out = [];
     I.forEach(I.strSplit(collapse(ids), ' '), function (id) {
       var t = root.getElementById ? root.getElementById(id) : el.ownerDocument.getElementById(id);
-      if (t) I.push(out, collapse(t.innerText || t.textContent));
+      if (t) I.push(out, collapse(textOf(t)));
     });
     return collapse(I.join(out, ' '));
   }
@@ -265,23 +285,23 @@
     if ((v = collapse(el.getAttribute('aria-label')))) return v;
     if (el.labels && el.labels.length) {
       var ls = [];
-      for (var i = 0; i < el.labels.length; i++) I.push(ls, collapse(el.labels[i].innerText || el.labels[i].textContent));
+      for (var i = 0; i < el.labels.length; i++) I.push(ls, collapse(textOf(el.labels[i])));
       if ((v = collapse(I.join(ls, ' ')))) return v;
     }
     if ((v = collapse(el.getAttribute('alt')))) return v;
     if ((v = collapse(el.getAttribute('title')))) return v;
     if ((v = collapse(el.getAttribute('placeholder')))) return v;
-    if (role === 'textbox' || role === 'combobox') return '';
+    if (role === 'textbox' || role === 'combobox' || hidesValue(el)) return '';
     var tag = lower(el);
-    if (tag === 'input') return isPassword(el) ? '' : collapse(I.inputValue(el));
-    return collapse(el.innerText || el.textContent);
+    if (tag === 'input') return collapse(I.inputValue(el));
+    return collapse(textOf(el));
   }
   function valueOf(el, role) {
     if (role === 'combobox' && lower(el) === 'select') {
       var o = el.options && el.options[el.selectedIndex];
       return o ? { text: collapse(o.text) } : { text: '' };
     }
-    if (isPassword(el)) return { password: String(I.inputValue(el) || '').length };
+    if (hidesValue(el)) return { password: fieldText(el).length };
     if (role !== 'textbox') return null;
     if (isTextField(el)) return { text: fieldText(el) };
     if (el.isContentEditable) return { text: collapse(el.innerText) };
@@ -627,14 +647,14 @@
       if (node.nodeType === 3) { line += node.nodeValue; return; }
       if (node.nodeType !== 1) return;
       var tag = lower(node);
-      if (READ_SKIP[tag]) return;
+      if (READ_SKIP[tag] || secretArea(node)) return;
       if (root.chrome && isChrome(node)) return;
       var st = styleOf(node);
       if (!st || st.display === 'none' || st.visibility === 'hidden') return;
       var h = /^h([1-6])$/.exec(tag);
       if (h) {
         flush();
-        var t = collapse(node.innerText || node.textContent);
+        var t = collapse(textOf(node));
         if (t) I.push(lines, I.join(new Array(parseInt(h[1], 10) + 1), '#') + ' ' + t);
         return;
       }
@@ -692,8 +712,6 @@
       results[token] = res;
     }
     function step() {
-      // 读页那边已经结束(endLazy 收走了令牌):不再滚
-      if (!I.hasOwn(lazyOrigins, token)) return;
       var bottom = (D.scrollingElement || D.documentElement).scrollHeight;
       if (n < LAZY_SCREENS && W.scrollY + W.innerHeight < bottom - 1) {
         n++;
@@ -760,7 +778,7 @@
   function groupLabel(el) {
     var l = collapse(el.getAttribute('aria-label'));
     if (!l && el.getAttribute('aria-labelledby')) l = textOfIds(el, el.getAttribute('aria-labelledby'));
-    if (!l) { var h = el.querySelector('h1, h2, h3, h4, h5, h6'); if (h) l = collapse(h.textContent); }
+    if (!l) { var h = el.querySelector('h1, h2, h3, h4, h5, h6'); if (h) l = collapse(textOf(h, true)); }
     return cut(l || '', NAME_CHARS);
   }
 
@@ -811,7 +829,7 @@
       if (node.nodeType === 3) { line += node.nodeValue; return; }
       if (node.nodeType !== 1) return;
       var tag = lower(node);
-      if (READ_SKIP[tag]) return;
+      if (READ_SKIP[tag] || secretArea(node)) return;
       if (node !== root.el && isDialog(node)) return;
       var st = styleOf(node);
       if (!st || st.display === 'none' || st.visibility === 'hidden') return;
@@ -834,7 +852,7 @@
       var h = /^h([1-6])$/.exec(tag);
       if (h) {
         flush();
-        var t = collapse(node.innerText || node.textContent);
+        var t = collapse(textOf(node));
         if (t) { I.push(cur, I.join(new Array(parseInt(h[1], 10) + 1), '#') + ' ' + t); total += t.length; }
         var hl = node.querySelectorAll('a[href]');
         for (var k = 0; k < hl.length; k++) addLink(hl[k]);
@@ -989,6 +1007,8 @@
     var o = { x: W.scrollX, y: W.scrollY }, n = 0;
     lazyOrigins[token] = o;
     function step() {
+      // 读页那边已经结束(endLazy 收走了令牌):不再滚
+      if (!I.hasOwn(lazyOrigins, token)) return;
       var bottom = (D.scrollingElement || D.documentElement).scrollHeight;
       if (n < LAZY_SCREENS && W.scrollY + W.innerHeight < bottom - 1) {
         n++;

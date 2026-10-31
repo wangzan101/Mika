@@ -6,10 +6,10 @@ import android.os.Environment
 import android.provider.MediaStore
 import com.wangzan101.mika.R
 
-/** 作者微信二维码(随 App 打包,换群码只换 res/drawable-nodpi/author_wechat_qr.jpg)。 */
+/** 微信交流群二维码(随 App 打包,换群码只换 res/drawable-nodpi/wechat_group_qr.jpg)。 */
 object QrImage {
-    val RES = R.drawable.author_wechat_qr
-    private const val FILE_NAME = "mika-author-wechat.jpg"
+    val RES = R.drawable.wechat_group_qr
+    private const val FILE_NAME = "Mika-wechat-group.jpg"
 
     /**
      * 存进相册的 Pictures/Mika。经 MediaStore 写自己新建的图片不要存储权限(安卓 10 起如此,Mika 最低支持安卓 11)。

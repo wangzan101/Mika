@@ -17,7 +17,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 
 /**
  * 请求时带的 Bearer 令牌。[fresh] 为真表示上一个被拒了(HTTP 401),要先换一个新的;换不到抛 [ModelError]。
@@ -264,7 +263,8 @@ private class ResponsesStream(
     }
 
     fun finish(): ModelReply {
-        val response = final ?: throw ModelError.Network(IOException("流式响应提前结束"))
+        // 没等到 response.completed / response.incomplete 是连接中途被断开
+        val response = final ?: throw ModelError.StreamCut()
         val output = items.ifEmpty { (response["output"] as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty() }
         val reasoning = mutableListOf<JsonObject>()
         val thinking = StringBuilder()

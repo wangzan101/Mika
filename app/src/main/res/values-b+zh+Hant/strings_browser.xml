@@ -64,4 +64,18 @@
     <string name="browser_remove_site">移除%1$s</string>
     <string name="browser_add_favorite">新增常用網站</string>
     <string name="browser_no_recent">還沒有開啟過的網頁</string>
+    <string name="browser_ask_hint">問問 Mika，或讓它在這頁做點什麼…</string>
+    <string name="browser_ask_from_page">從這一頁開始</string>
+    <string name="browser_ask_open_chat">在聊天中打開</string>
+    <string name="browser_ask_continuing">接著「%1$s」</string>
+    <string name="browser_ask_menu">問 Mika</string>
+    <string name="browser_ask_selection">選取的文字</string>
+    <string name="browser_ask_drop_selection">不帶選取的文字</string>
+    <string name="browser_ask_paused">你在操作，Mika 已暫停</string>
+    <string name="browser_ask_paused_card">已暫停</string>
+    <string name="browser_ask_paused_hint">好了點「繼續」，Mika 接著做。</string>
+    <string name="browser_ask_expand">展開對話</string>
+    <string name="browser_ask_web">網頁</string>
+    <string name="browser_ask_app">App</string>
+    <string name="browser_ask_handling">頁面交給你了，處理好了點「處理好了」。</string>
 </resources>

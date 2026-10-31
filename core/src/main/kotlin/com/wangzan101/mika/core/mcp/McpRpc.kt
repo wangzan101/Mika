@@ -1,5 +1,8 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.RemoteAccess
+import com.wangzan101.mika.core.remote.HttpResponse
+import com.wangzan101.mika.core.remote.HttpRequest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -19,7 +22,7 @@ import java.util.Base64
  * MCP 的 JSON-RPC 处理(Streamable HTTP 传输,只回单个 JSON,不开 SSE 流)。两代协议都认:
  * 新一代每个请求自带版本和客户端能力(`_meta` 里的 `io.modelcontextprotocol/…`,并在 HTTP 头里重复一遍,两边要一致),
  * 没有握手和会话;老一代先 `initialize` 握手。服务端不发请求、不发通知,也不发会话编号,所以老一代也是无状态的。
- * 进到这里的请求已经过了 [McpAccess](令牌、来源、限流、路径)。
+ * 进到这里的请求已经过了 [RemoteAccess](令牌、来源、限流、路径)。
  */
 class McpRpc(
     private val tools: McpTaskTools,
@@ -186,6 +189,7 @@ class McpRpc(
         HttpResponse.json(200, buildJsonObject { put("jsonrpc", "2.0"); put("id", id); put("result", result) }.toString())
 
     companion object {
+        const val PATH = "/mcp"
         const val MODERN = "2026-07-28"
         val MODERN_VERSIONS = listOf(MODERN)
         /** 新的在前;握手时对方要的不认就给第一个。 */

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mcp_title">Computer access (MCP)</string>
+    <string name="mcp_title">Computer access (CLI / MCP)</string>
     <string name="mcp_sub">Let AI tools on your computer hand tasks to Mika</string>
-    <string name="mcp_foot">Off by default. When on, Mika listens on Wi-Fi and private networks (never on mobile data), so an MCP client on a computer in the same network can hand Mika tasks; Mika does them here on the phone and you see them as conversations. Every request needs the access token below. Payments, confirmations and steps handed to you can only be done on this phone.</string>
+    <string name="mcp_foot">Off by default. When on, Mika listens on Wi-Fi and private networks (never on mobile data), so a CLI or MCP client on a computer in the same network can hand Mika tasks; Mika does them here on the phone and you see them as conversations. Every request needs the access token below. Payments, confirmations and steps handed to you can only be done on this phone.</string>
     <string name="mcp_status">Status</string>
     <string name="mcp_starting">Starting…</string>
     <string name="mcp_listening">Listening on port %1$d</string>
@@ -18,7 +18,7 @@
     <string name="mcp_regenerate_title">Replace the access token?</string>
     <string name="mcp_regenerate_body">Computers using the old token stop working until you give them the new one.</string>
     <string name="mcp_regenerate_confirm">Replace</string>
-    <string name="mcp_config">Client config</string>
+    <string name="mcp_config">MCP client config</string>
     <string name="mcp_copy_config">Copy config</string>
     <string name="mcp_config_foot">Add this to your MCP client’s server settings. Keep the token private: anyone on the same network who has it can hand Mika tasks.</string>
     <string name="mcp_copied">Copied</string>

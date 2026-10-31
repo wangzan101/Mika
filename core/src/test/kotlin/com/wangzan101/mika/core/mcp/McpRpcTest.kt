@@ -1,5 +1,7 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.HttpResponse
+import com.wangzan101.mika.core.remote.HttpRequest
 import com.wangzan101.mika.core.agent.TaskState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

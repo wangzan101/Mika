@@ -26,9 +26,11 @@ import java.util.concurrent.TimeUnit
 class ReadScriptEnforcementTest {
     companion object {
         private val cases = linkedMapOf<String, Pair<String, JsonObject?>>()
+        private val pages = mutableMapOf<String, String>()
         private lateinit var cache: JsonObject
 
-        private fun case(name: String, code: String, args: JsonObject? = null) { cases[name] = code to args }
+        /** [page]:跑之前页面自己做的事(harness.js 的 pageActions),跑完还原。 */
+        private fun case(name: String, code: String, args: JsonObject? = null, page: String? = null) { cases[name] = code to args; page?.let { pages[name] = it } }
 
         internal fun node(): String? = listOf("node", "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node").firstOrNull { n ->
             runCatching { ProcessBuilder(n, "--version").redirectErrorStream(true).start().let { it.waitFor(10, TimeUnit.SECONDS) && it.exitValue() == 0 } }.getOrDefault(false)
@@ -67,6 +69,16 @@ class ReadScriptEnforcementTest {
             case("selectorFlip", "let n = 0; return document.querySelectorAll({ toString: () => (n++ ? 'input[value^=h]' : 'li') }).length;")
             case("attrFlip", "let n = 0; return document.querySelectorAll('input')[1].getAttribute({ toString: () => (n++ ? 'value' : 'x') });")
             case("textareas", "const [code, note] = document.querySelectorAll('textarea'); return [code.value, code.textLength, code.outerText, code.innerText, code.name, note.value, note.textLength, note.outerText];")
+            case("frameFields", "const f = document.querySelector('iframe').contentDocument.body.children[0]; return [f.children[0].value, f.children[1].value, f.children[0].selectionEnd, f.children[1].type, f.children[2].value];")
+            case("frameHtml", "document.querySelector('iframe').contentDocument.body.innerHTML")
+            case("shadowHtml", "document.querySelector('div').shadowRoot.innerHTML")
+            case("shadowValue", "document.querySelector('div').shadowRoot.childNodes[0].value")
+            case("toggledValue", "document.querySelector('input').value", page = "showPassword")
+            case("toggledHtml", "document.querySelector('form').outerHTML", page = "showPassword")
+            case("templateHtml", "document.querySelector('form').innerHTML")
+            case("svgTemplate", "const h = document.body.innerHTML; return [h.includes('<circle'), h.includes('hunter2'), h.includes('tpl-secret')];")
+            case("attrNode", "const a = document.querySelector('input').attributes; return [a.getNamedItem('value').value, Array.from(a, (x) => x.name + '=' + x.value), Array.from(document.querySelectorAll('input')).find((x) => x.name === 'q').attributes.getNamedItem('value').value];")
+            case("frameAttr", "const f = document.querySelector('iframe').contentDocument.body.children[0].children; return [f[1].attributes[2].name, f[1].attributes[2].value, f[2].attributes[2].value];")
             case("fieldProps", "const xs = document.querySelectorAll('input'); return [xs[3].valueAsNumber, xs[0].selectionEnd, xs[0].type, xs[3].name, xs[0].tagName, xs[2].selectionEnd];")
             case("post", "await fetch('/api', { method: 'POST' })")
             case("body", "await fetch('/api', { body: 'x' })")
@@ -102,7 +114,7 @@ class ReadScriptEnforcementTest {
             val list = File(dir, "cases.json").apply {
                 writeText(buildJsonArray {
                     for ((name, c) in cases) add(buildJsonObject {
-                        put("name", name); put("code", c.first); c.second?.let { put("args", it) }
+                        put("name", name); put("code", c.first); c.second?.let { put("args", it) }; pages[name]?.let { put("page", it) }
                         if (name == "big") put("resultChars", 10)
                     })
                 }.toString())
@@ -156,6 +168,32 @@ class ReadScriptEnforcementTest {
         // 秘密输入框接口上不在白名单里的属性(能算出值或长度的)也是 ***;照读的只有页面定好的设定,别的元素照常
         assertEquals("""["***","***","password","otp","INPUT",5]""", ok("fieldProps"))
         assertEquals("""["***","***","***","***","code","leave at door",13,"leave at door"]""", ok("textareas"))
+    }
+
+    @Test fun framesShadowRootsAndCopiesStayHidden() {
+        // 同源 iframe 里的节点属于那个框架自己的一套接口:按原生 getter 认,值、隐藏字段、量长度的属性照样 ***,普通框照读
+        assertEquals("""["***","***","***","hidden","frame-q"]""", ok("frameFields"))
+        val frame = ok("frameHtml")
+        assertTrue(frame, "tok-frame" !in frame && "frame-q" in frame)
+        // shadow root 的 innerHTML 也打码
+        val shadow = ok("shadowHtml")
+        assertTrue(shadow, "shadow-default" !in shadow && "shadow-token" !in shadow && "password" in shadow)
+        assertEquals("\"***\"", ok("shadowValue"))
+        // 读取世界建起之后才被改成 text 的密码框:值和 HTML 里都还是 ***(打码看原件,副本上没有这份记录)
+        assertEquals("\"***\"", ok("toggledValue"))
+        val toggled = Json.parseToJsonElement(ok("toggledHtml")).jsonPrimitive.content
+        assertTrue(toggled, "hunter2" !in toggled && "type=\"text\"" in toggled)
+        // template 里的输入框也打码;SVG 里同名的元素没有内容,读 HTML 照常
+        val template = ok("templateHtml")
+        assertTrue(template, "tpl-secret" !in template && "<template>" in template)
+        assertEquals("[true,false,false]", ok("svgTemplate"))
+        // 属性节点:秘密输入框的 value 读出来是 ***,普通框照读
+        assertEquals("""["***",["type=password","value=***"],"shoes"]""", ok("attrNode"))
+        assertEquals("""["value","***","frame-q"]""", ok("frameAttr"))
+        // 打码用的副本不建在页面文档里:读 HTML 不会构造页面的自定义元素,原件也不改
+        val html = listOf("formHtml", "frameHtml", "shadowHtml", "toggledHtml", "templateHtml", "svgTemplate")
+        for (n in html) assertEquals(n, 0, r(n).getValue("pageCode").jsonPrimitive.int)
+        for (n in html) assertEquals(n, "false", r(n).s("pageChanged"))
     }
 
     @Test fun valueSelectorsAreRefused() {

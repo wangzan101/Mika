@@ -2,16 +2,13 @@ package com.wangzan101.mika.ui
 
 import org.junit.Rule
 import com.wangzan101.mika.i18n.ChineseTexts
+import com.wangzan101.mika.i18n.ResFileTexts
+import com.wangzan101.mika.i18n.UiText
 import com.wangzan101.mika.about.CheckStatus
 import com.wangzan101.mika.about.ReleaseInfo
 import com.wangzan101.mika.about.UpdateState
-import com.wangzan101.mika.core.shell.BuiltinShellStatus
-import com.wangzan101.mika.settings.AccessibilityState
-import com.wangzan101.mika.settings.Prerequisites
-import com.wangzan101.mika.settings.SystemStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -53,23 +50,13 @@ class AboutCopyTest {
         assertEquals("当前 0.1.0", AboutCopy.updateSub("0.1.0", beta = false, date = null))
     }
 
-    private fun gap(sdk: Int = 34, shell: BuiltinShellStatus = BuiltinShellStatus.Running,
-        a11y: AccessibilityState = AccessibilityState.On, model: Boolean = true, notifications: Boolean = true) =
-        AboutCopy.groupTaskGap(Prerequisites.check(SystemStatus(sdk, shell, a11y, notificationsAllowed = notifications), model))
-
-    /** 让 Mika 发消息入群:要操作微信,模型和手机操作都得好;通知关着不挡。 */
+    /** 交流群面板:中文界面微信群码在前;英文界面 X 群聊在前。 */
     @Test
-    fun groupTaskNeedsModelAndPhone() {
-        assertNull(gap())
-        assertNull(gap(notifications = false))
-        assertEquals(AboutCopy.GroupTaskGap.Model, gap(model = false))
-        assertEquals(AboutCopy.GroupTaskGap.Model, gap(model = false, shell = BuiltinShellStatus.NotPaired))
-        assertEquals(AboutCopy.GroupTaskGap.Phone, gap(shell = BuiltinShellStatus.NotPaired))
-        assertEquals(AboutCopy.GroupTaskGap.Phone, gap(a11y = AccessibilityState.Off))
-        assertEquals(AboutCopy.GroupTaskGap.TooOld, gap(sdk = 30))
-        assertNull(gap(sdk = 31))
-        assertNull(gap(sdk = 32))
-        assertEquals(Fix.AddModel, AboutCopy.GroupTaskGap.Model.fix)
-        assertEquals(Fix.OpenPhoneSetup, AboutCopy.GroupTaskGap.Phone.fix)
+    fun xGroupFirstOnlyInEnglish() {
+        assertFalse(AboutCopy.X_GROUP_FIRST)
+        UiText.source = ResFileTexts.traditional
+        assertFalse(AboutCopy.X_GROUP_FIRST)
+        UiText.source = ResFileTexts.english
+        assertTrue(AboutCopy.X_GROUP_FIRST)
     }
 }

@@ -256,15 +256,13 @@ private class GeminiStream(
     private val calls = mutableListOf<Part.ToolCall>()
     private var usage: Usage? = null
     private var finishReason: String? = null
-    private var seen = false
 
     fun accept(data: String) {
         val root = try { json.parseToJsonElement(data).jsonObject }
         catch (e: Exception) { throw ModelError.BadResponse("流式响应不是合法 JSON", e) }
-        seen = true
         usageOf(root["usageMetadata"])?.let { usage = it }
         val candidate = (root["candidates"] as? JsonArray)?.firstOrNull() as? JsonObject ?: return
-        (candidate["finishReason"] as? JsonPrimitive)?.contentOrNull?.let { finishReason = it }
+        (candidate["finishReason"] as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotEmpty)?.let { finishReason = it }
         val reply = parseChunk(data)
         var chunkCalls = 0
         reply.parts.forEach { part ->
@@ -281,7 +279,8 @@ private class GeminiStream(
     }
 
     fun finish(): ModelReply {
-        if (!seen || finishReason == null) throw ModelError.BadResponse("流式响应提前结束")
+        // Gemini 的流没有单独的结束标记,带 finishReason 的那一帧就是收尾;没等到它是连接中途被断开
+        if (finishReason == null) throw ModelError.StreamCut()
         val parts = buildList<Part> {
             if (thinking.isNotEmpty()) add(Part.Thinking(thinking.toString()))
             if (visible.isNotEmpty()) add(Part.Text(visible.toString()))

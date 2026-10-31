@@ -75,7 +75,7 @@ private enum class AboutSheet { Update, Changelog, Feedback, Group, Diagnostics 
 
 /**
  * 关于 Mika:顶上图标、名字、一句话介绍、版本(Beta 标记、构建编号);下面三组——检查更新与更新记录,
- * 反馈、内测群、关注作者,开源仓库与使用说明;一段数据说明;最底下许可证与作者。
+ * 交流群与反馈,关注作者、开源仓库与使用说明;一段数据说明;最底下许可证与作者。
  * 外部链接都交给 [onOpenUrl](系统浏览器);手动检查的结果到了([UpdateState.manualRounds] 变了)才提示。
  * [diagnostics] 写出诊断信息(反馈面板里「复制诊断信息」点开预览时在后台线程调)。
  */
@@ -89,7 +89,6 @@ fun AboutScreen(
     onCheck: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onSaveQr: () -> Boolean,
-    onAskMikaToJoin: () -> Unit,
     onOpenLicense: () -> Unit,
     onBack: () -> Unit,
     diagnostics: () -> String = { "" },
@@ -135,12 +134,12 @@ fun AboutScreen(
             ListRow(MikaIcons.Lines, AboutCopy.CHANGELOG, AboutCopy.CHANGELOG_SUB, onClick = { sheet = AboutSheet.Changelog }) { RowChevron() }
         }
         GroupCard {
-            ListRow(MikaIcons.Bug, AboutCopy.FEEDBACK, AboutCopy.FEEDBACK_SUB, first = true, onClick = { sheet = AboutSheet.Feedback }) { RowChevron() }
-            ListRow(MikaIcons.Chats, AboutCopy.GROUP, AboutCopy.GROUP_SUB, onClick = { sheet = AboutSheet.Group }) { RowChevron() }
-            ListRow(MikaIcons.XMark, AboutCopy.FOLLOW, AboutCopy.FOLLOW_SUB, onClick = { onOpenUrl(MikaLinks.X) }) { ExternalMark() }
+            ListRow(MikaIcons.Chats, AboutCopy.GROUP, AboutCopy.GROUP_SUB, first = true, onClick = { sheet = AboutSheet.Group }) { RowChevron() }
+            ListRow(MikaIcons.Bug, AboutCopy.FEEDBACK, AboutCopy.FEEDBACK_SUB, onClick = { sheet = AboutSheet.Feedback }) { RowChevron() }
         }
         GroupCard {
-            ListRow(MikaIcons.Code, AboutCopy.REPO, AboutCopy.REPO_SUB, first = true, onClick = { onOpenUrl(MikaLinks.REPO) }) { ExternalMark() }
+            ListRow(MikaIcons.XMark, AboutCopy.FOLLOW, AboutCopy.FOLLOW_SUB, first = true, onClick = { onOpenUrl(MikaLinks.X) }) { ExternalMark() }
+            ListRow(MikaIcons.Code, AboutCopy.REPO, AboutCopy.REPO_SUB, onClick = { onOpenUrl(MikaLinks.REPO) }) { ExternalMark() }
             ListRow(MikaIcons.Book, AboutCopy.GUIDE, AboutCopy.GUIDE_SUB, onClick = { onOpenUrl(MikaLinks.README) }) { ExternalMark() }
         }
 
@@ -176,13 +175,14 @@ fun AboutScreen(
         AboutSheet.Changelog -> ChangelogSheet(update.latest, onOpenAll = { close(); onOpenUrl(MikaLinks.RELEASES) }, onDismiss = close)
         AboutSheet.Feedback -> FeedbackSheet(
             onGitHub = { close(); onOpenUrl(issueUrl) },
-            onWeChat = { sheet = AboutSheet.Group },
-            onX = { close(); onOpenUrl(MikaLinks.X) },
             onDiagnostics = { sheet = AboutSheet.Diagnostics },
+            onGroup = { sheet = AboutSheet.Group },
             onDismiss = close,
         )
         AboutSheet.Diagnostics -> DiagnosticsSheet(diagnostics, onDismiss = close)
-        AboutSheet.Group -> GroupSheet(onSave = saveQr, onAskMika = { close(); onAskMikaToJoin() }, onDismiss = close)
+        AboutSheet.Group -> GroupSheet(
+            xFirst = AboutCopy.X_GROUP_FIRST, onSave = saveQr, onJoinX = { close(); onOpenUrl(MikaLinks.X_GROUP) }, onDismiss = close,
+        )
         null -> Unit
     }
 }
@@ -303,13 +303,13 @@ private fun ChangelogSheet(latest: ReleaseInfo?, onOpenAll: () -> Unit, onDismis
 }
 
 @Composable
-private fun FeedbackSheet(onGitHub: () -> Unit, onWeChat: () -> Unit, onX: () -> Unit, onDiagnostics: () -> Unit, onDismiss: () -> Unit) {
+private fun FeedbackSheet(onGitHub: () -> Unit, onDiagnostics: () -> Unit, onGroup: () -> Unit, onDismiss: () -> Unit) {
     AboutSheetFrame(AboutCopy.FEEDBACK, AboutCopy.FEEDBACK_SHEET_SUB, "feedback-sheet", onDismiss) {
         Column(Modifier.padding(top = 6.dp)) {
             FeedbackOption(MikaIcons.Code, AboutCopy.FEEDBACK_GITHUB, AboutCopy.FEEDBACK_GITHUB_SUB, first = true, onGitHub)
-            FeedbackOption(MikaIcons.Chats, AboutCopy.FEEDBACK_WECHAT, AboutCopy.FEEDBACK_WECHAT_SUB, first = false, onWeChat)
-            FeedbackOption(MikaIcons.XMark, AboutCopy.FEEDBACK_X, AboutCopy.FEEDBACK_X_SUB, first = false, onX)
             FeedbackOption(MikaIcons.Copy, AboutCopy.DIAGNOSTICS, AboutCopy.DIAGNOSTICS_SUB, first = false, onDiagnostics)
+            // 微信群、X 群聊都在交流群面板里,这里只开那个面板
+            FeedbackOption(MikaIcons.Chats, AboutCopy.FEEDBACK_GROUP, AboutCopy.GROUP_SUB, first = false, onGroup)
         }
     }
 }
@@ -321,30 +321,42 @@ private fun FeedbackOption(icon: ImageVector, title: String, sub: String, first:
     }
 }
 
+/**
+ * 交流群面板:微信群二维码(长按或按钮存进相册)和 X 群聊入口。[xFirst] 时(英文界面)X 群聊在上、微信群码在下,
+ * 不然微信在前、X 群聊作为「不用微信？」的去处放在下面。
+ */
 @Composable
-private fun GroupSheet(onSave: () -> Unit, onAskMika: () -> Unit, onDismiss: () -> Unit) {
+internal fun GroupSheet(xFirst: Boolean, onSave: () -> Unit, onJoinX: () -> Unit, onDismiss: () -> Unit) {
     val c = MikaTheme.colors
-    // 点一次就够:连点不会开出第二个一样的任务
-    var asked by remember { mutableStateOf(false) }
     // 二维码最高占屏幕约三分之一,常见手机上不用滚就能看到底下的按钮
     val qrHeight = (LocalConfiguration.current.screenHeightDp * 0.34f).coerceAtMost(280f).dp
     val qr = painterResource(QrImage.RES)
     AboutSheetFrame(AboutCopy.GROUP_SHEET_TITLE, AboutCopy.GROUP_SHEET_SUB, "group-sheet", onDismiss) {
-        Image(
-            qr, contentDescription = AboutCopy.GROUP_SHEET_TITLE,
-            Modifier.padding(top = 12.dp, bottom = 6.dp).align(Alignment.CenterHorizontally)
-                .height(qrHeight).aspectRatio(qr.intrinsicSize.width / qr.intrinsicSize.height)
-                .clip(RoundedCornerShape(12.dp))
-                .pointerInput(Unit) { detectTapGestures(onLongPress = { onSave() }) }
-                .testTag("wechat-qr"),
-        )
-        Text(AboutCopy.GROUP_HINT, Modifier.fillMaxWidth(), style = MikaType.Hint, color = c.ink3, textAlign = TextAlign.Center)
-        MikaButton(AboutCopy.SAVE_QR, onSave, Modifier.fillMaxWidth().padding(top = 14.dp), kind = ButtonKind.Tonal)
-        HorizontalDivider(Modifier.padding(top = 16.dp), color = c.hair)
-        Text(AboutCopy.GROUP_ALREADY_ADDED, Modifier.fillMaxWidth().padding(top = 12.dp), style = MikaType.Hint, color = c.ink3, textAlign = TextAlign.Center)
-        MikaButton(
-            AboutCopy.GROUP_ASK_MIKA, { if (!asked) { asked = true; onAskMika() } },
-            Modifier.fillMaxWidth().padding(top = 8.dp).testTag("group-ask-mika"), enabled = !asked,
-        )
+        val weChat = @Composable {
+            Image(
+                qr, contentDescription = AboutCopy.GROUP_SHEET_TITLE,
+                Modifier.padding(top = 12.dp, bottom = 6.dp).align(Alignment.CenterHorizontally)
+                    .height(qrHeight).aspectRatio(qr.intrinsicSize.width / qr.intrinsicSize.height)
+                    .clip(RoundedCornerShape(12.dp))
+                    .pointerInput(Unit) { detectTapGestures(onLongPress = { onSave() }) }
+                    .testTag("wechat-qr"),
+            )
+            Text(AboutCopy.GROUP_HINT, Modifier.fillMaxWidth(), style = MikaType.Hint, color = c.ink3, textAlign = TextAlign.Center)
+            MikaButton(AboutCopy.SAVE_QR, onSave, Modifier.fillMaxWidth().padding(top = 14.dp), kind = ButtonKind.Tonal)
+        }
+        val x = @Composable { top: Boolean ->
+            // 放在上面时不用「不用微信？」引出,直接给按钮
+            if (!top) Text(AboutCopy.GROUP_NO_WECHAT, Modifier.fillMaxWidth().padding(top = 12.dp), style = MikaType.Hint, color = c.ink3, textAlign = TextAlign.Center)
+            MikaButton(AboutCopy.GROUP_JOIN_X, onJoinX, Modifier.fillMaxWidth().padding(top = if (top) 14.dp else 8.dp).testTag("group-join-x"))
+        }
+        if (xFirst) {
+            x(true)
+            HorizontalDivider(Modifier.padding(top = 16.dp), color = c.hair)
+            weChat()
+        } else {
+            weChat()
+            HorizontalDivider(Modifier.padding(top = 16.dp), color = c.hair)
+            x(false)
+        }
     }
 }

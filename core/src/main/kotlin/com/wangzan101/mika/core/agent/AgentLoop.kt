@@ -175,7 +175,7 @@ class AgentLoop(
     /** 这次的原话给模型时的样子(带着屏幕时换成了说明,见 [UserScreenTurns]);还没开始为 null。判结局、提取记忆按它读。 */
     @Volatile var taskText: String? = null
         private set
-    /** 用户最近一句话(开局原话或插话)里他自己打的字,见 [ownWords];插话里只发了屏幕、只选了字时沿用上一句的。语言提示和回答的语言检查按它。 */
+    /** 用户最近一句话(开局原话或插话)里他自己打的字,见 [ownWords];插话里只发了屏幕、只选了字时沿用上一句的。语言提示和回答的语言检查按它,记忆引文也只收这些字。 */
     private var latestWords = ""
 
     private val _state = MutableStateFlow<TaskState>(TaskState.Idle)
@@ -323,7 +323,7 @@ class AgentLoop(
         earlierGoals = priorTurns.map { it.userText }
         // 之前的轮次只作参考,放在本次任务之前
         val context = Conversation.context(priorTurns)
-        utterances?.add(opening?.words ?: task)
+        utterances?.add(latestWords)
         // 记忆块:对话上文之后、任务原文之前;用到的条目由代码记下
         usedMemory = emptyList()
         // 上次没读出记忆文件(密钥库一时不可用)就再读一次;还读不出就这次不带记忆
@@ -744,7 +744,7 @@ class AgentLoop(
             if (words.isNotBlank()) latestWords = words
             history += Message(Role.User, listOf(Part.Text("$STEER_MARKER\n${shown?.said ?: update.text}")) + shown?.images.orEmpty(), Author.User)
             shown?.details?.forEach { (source, body) -> history += ctx.userScreen(source, body) }
-            utterances?.add(shown?.words ?: update.text)
+            utterances?.add(words)
             emit(RunEvent.State(now(), "steer_received", RunEvent.clip(Redactor.text(update.messageId))))
         }
         return updates.isNotEmpty()

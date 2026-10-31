@@ -3,7 +3,7 @@ package com.wangzan101.mika.core.memory
 import java.text.Normalizer
 
 /**
- * 用户本人在这次任务里说的话:目标原文、追问的回答、接管交回时的备注。
+ * 用户本人在这次任务里说的话:开局和插话里他自己打的字(带的屏幕、浏览器页的页面说明不算)、追问的回答、接管交回时的备注。
  * 记忆的 `quote` 必须是其中某句的子串(全半角统一、去首尾空白后比较)——屏幕、网页、工具结果里的字不算。
  */
 class UserUtterances {

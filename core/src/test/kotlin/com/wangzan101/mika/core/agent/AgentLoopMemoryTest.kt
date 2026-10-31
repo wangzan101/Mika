@@ -41,19 +41,22 @@ class AgentLoopMemoryTest {
         val msgs = model.requests.first().withoutRuntime().map { it.text() }
         assertTrue(msgs[0].startsWith(Conversation.HEADER))
         assertTrue(msgs[1].startsWith("Memories about the user"))
+        // 记忆总量装得下就全量注入:与本次任务词面无关的「公司在张江」也在(以前会被 BM25 检索丢掉)
         assertTrue(msgs[1].contains("用户点外卖不要香菜"))
-        assertFalse(msgs[1].contains("张江"))
+        assertTrue(msgs[1].contains("张江"))
         assertEquals("帮我点个外卖", msgs[2])
     }
 
-    @Test fun noRelevantMemoryNoBlock() {
+    @Test fun unrelatedMemoryStillInjectedInFullMode() {
         val s = store()
         val model = FakeModel(finishReply)
         val loop = AgentLoop(model, toolDispatcher(FakeScreen(), memory = s, utterances = UserUtterances()), "B", memory = s)
         runBlocking { loop.run("看看明天天气") }
-        assertEquals(listOf("看看明天天气"), model.requests.first().withoutRuntime().map { it.text() })
-        assertTrue(loop.usedMemoryIds.isEmpty())
-        assertTrue(s.items.value.all { it.useCount == 0 })
+        val msgs = model.requests.first().withoutRuntime().map { it.text() }
+        assertTrue(msgs[0].startsWith("Memories about the user"))
+        assertEquals("看看明天天气", msgs[1])
+        assertEquals(s.items.value.map { it.id }, loop.usedMemoryIds)
+        assertTrue(s.items.value.all { it.useCount == 1 })
     }
 
     @Test fun usedIdsRecordedAndMarked() {
@@ -61,10 +64,10 @@ class AgentLoopMemoryTest {
         val events = mutableListOf<RunEvent>()
         val loop = AgentLoop(FakeModel(finishReply), toolDispatcher(FakeScreen(), memory = s, utterances = UserUtterances()), "B", sink = object : RunSink { override fun event(e: RunEvent) { events += e } }, memory = s)
         runBlocking { loop.run("帮我点个外卖") }
-        val id = s.items.value.first().id
-        assertEquals(listOf(id), loop.usedMemoryIds)
-        assertEquals(1, s.items.value.first().useCount)
-        assertEquals(listOf(listOf(id)), events.filterIsInstance<RunEvent.MemoryUsed>().map { it.ids })
+        val ids = s.items.value.map { it.id }
+        assertEquals(ids, loop.usedMemoryIds)
+        assertTrue(s.items.value.all { it.useCount == 1 })
+        assertEquals(listOf(ids), events.filterIsInstance<RunEvent.MemoryUsed>().map { it.ids })
     }
 
     @Test fun disabledMeansNoBlockNoTools() {

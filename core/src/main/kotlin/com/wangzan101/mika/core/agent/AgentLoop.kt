@@ -325,7 +325,11 @@ class AgentLoop(
         // 记忆块:对话上文之后、任务原文之前;用到的条目由代码记下
         usedMemory = emptyList()
         // 上次没读出记忆文件(密钥库一时不可用)就再读一次;还读不出就这次不带记忆
-        val block = memory?.takeIf { it.reloadIfNeeded() }?.let { MemoryContext.build(it.items.value, task, priorTurns.lastOrNull()?.userText, tools.legacy::rewrite) }
+        // 产品路径用 Auto:记忆总量装得下就全量注入(不漏检索),装不下才退回检索
+        val block = memory?.takeIf { it.reloadIfNeeded() }?.let {
+            MemoryContext.build(it.items.value, task, priorTurns.lastOrNull()?.userText, tools.legacy::rewrite,
+                mode = MemoryContext.Mode.Auto)
+        }
         if (block?.message != null) {
             usedMemory = block.usedIds
             memory?.markUsed(block.usedIds)

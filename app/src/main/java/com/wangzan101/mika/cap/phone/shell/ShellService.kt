@@ -90,14 +90,32 @@ class ShellService(
     }
 
     override fun createDisplay(surface: Surface, width: Int, height: Int, dpi: Int): Int = try {
-        val vd = displayManager.createVirtualDisplay("mika-agent", width, height, dpi, surface, displayFlags())
+        createVirtualDisplay(surface, width, height, dpi, trusted = true)
+    } catch (t: Throwable) {
+        if (!retryWithoutTrust(t)) {
+            Log.e(TAG, "createDisplay failed", t)
+            -1
+        } else {
+            // 有的模拟器/定制系统里 shell 没有 ADD_TRUSTED_DISPLAY:去掉只对可信屏可用的几项再建一次。
+            // 退回后这块屏没有自己的焦点,自检页读它的标志会报「own focus no」并给出主屏焦点可能受影响的提示(Advice.FocusShared)。
+            Log.w(TAG, "createDisplay without trusted display flags, retrying", t)
+            try {
+                createVirtualDisplay(surface, width, height, dpi, trusted = false)
+            } catch (t: Throwable) {
+                Log.e(TAG, "createDisplay failed", t)
+                -1
+            }
+        }
+    }
+
+    private fun createVirtualDisplay(surface: Surface, width: Int, height: Int, dpi: Int, trusted: Boolean): Int {
+        val vd = displayManager.createVirtualDisplay(
+            "mika-agent", width, height, dpi, surface, displayFlags(Build.VERSION.SDK_INT, trusted),
+        )
         val id = vd.display.displayId
         synchronized(displays) { displays[id] = vd }
         setImePolicy(id)
-        id
-    } catch (t: Throwable) {
-        Log.e(TAG, "createDisplay failed", t)
-        -1
+        return id
     }
 
     /** 只往这个服务自己建的虚拟屏上启动,调用方传错屏号(比如主屏)也不会打扰用户。 */
@@ -981,18 +999,6 @@ class ShellService(
         exitProcess(0)
     }
 
-    private fun displayFlags(): Int {
-        var flags = FLAG_PUBLIC or FLAG_OWN_CONTENT_ONLY or FLAG_SUPPORTS_TOUCH or
-            FLAG_ROTATES_WITH_CONTENT or FLAG_DESTROY_CONTENT_ON_REMOVAL
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            flags = flags or FLAG_TRUSTED or FLAG_OWN_DISPLAY_GROUP or FLAG_ALWAYS_UNLOCKED or FLAG_TOUCH_FEEDBACK_DISABLED
-        }
-        // 只有 OWN_FOCUS 时,虚拟屏上启动 App 或 App 自己开新页面都会让它成为「最上层焦点屏」,
-        // 主屏的焦点窗口随之清空;STEAL_TOP_FOCUS_DISABLED(需同时有 OWN_FOCUS、TRUSTED)让它不抢主屏的焦点
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) flags = flags or FLAG_OWN_FOCUS or FLAG_STEAL_TOP_FOCUS_DISABLED
-        return flags
-    }
-
     /** IWindowManager.setDisplayImePolicy:输入法不弹到用户的主屏。选哪种策略见 IME_POLICY。 */
     @SuppressLint("PrivateApi")
     private fun setImePolicy(displayId: Int) {
@@ -1124,6 +1130,29 @@ class ShellService(
         private const val FLAG_TOUCH_FEEDBACK_DISABLED = 1 shl 13
         private const val FLAG_OWN_FOCUS = 1 shl 14
         private const val FLAG_STEAL_TOP_FOCUS_DISABLED = 1 shl 16
+
+        /**
+         * 建虚拟屏用的标志。[trusted] 为 false 时去掉依赖可信屏的那几项:有的模拟器/定制系统里 shell 没有
+         * ADD_TRUSTED_DISPLAY,带上 TRUSTED 会被系统以 SecurityException 拒绝;OWN_DISPLAY_GROUP、ALWAYS_UNLOCKED
+         * 和 OWN_FOCUS/STEAL_TOP_FOCUS_DISABLED 同样只对可信屏可用。其余几项与可信与否无关,照旧。
+         */
+        internal fun displayFlags(sdk: Int, trusted: Boolean): Int {
+            var flags = FLAG_PUBLIC or FLAG_OWN_CONTENT_ONLY or FLAG_SUPPORTS_TOUCH or
+                FLAG_ROTATES_WITH_CONTENT or FLAG_DESTROY_CONTENT_ON_REMOVAL
+            if (sdk >= Build.VERSION_CODES.TIRAMISU) {
+                flags = flags or FLAG_TOUCH_FEEDBACK_DISABLED
+                if (trusted) flags = flags or FLAG_TRUSTED or FLAG_OWN_DISPLAY_GROUP or FLAG_ALWAYS_UNLOCKED
+            }
+            // 只有 OWN_FOCUS 时,虚拟屏上启动 App 或 App 自己开新页面都会让它成为「最上层焦点屏」,
+            // 主屏的焦点窗口随之清空;STEAL_TOP_FOCUS_DISABLED(需同时有 OWN_FOCUS、TRUSTED)让它不抢主屏的焦点
+            if (sdk >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && trusted) {
+                flags = flags or FLAG_OWN_FOCUS or FLAG_STEAL_TOP_FOCUS_DISABLED
+            }
+            return flags
+        }
+
+        /** 只有缺权限(SecurityException,如 shell 没有 ADD_TRUSTED_DISPLAY)才值得去掉可信标志再试;别的失败照旧报错。 */
+        internal fun retryWithoutTrust(t: Throwable): Boolean = t is SecurityException
 
         // WindowManager.DISPLAY_IME_POLICY_LOCAL = 0, _FALLBACK_DISPLAY = 1, _HIDE = 2。
         // 真机(安卓 14)实测 LOCAL:在虚拟屏聚焦输入框后输入法窗口出现在虚拟屏上,主屏焦点不变,无需 HIDE。

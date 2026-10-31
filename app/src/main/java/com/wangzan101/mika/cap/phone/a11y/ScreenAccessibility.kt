@@ -12,7 +12,6 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import com.wangzan101.mika.core.uistate.ScreenEvent
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,29 +19,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 /** Mika 的无障碍服务:操作和事件转给当前已连接实例,任务持有旧实例时也能在重连后恢复。 */
-@OptIn(ExperimentalCoroutinesApi::class)
 open class ScreenAccessibility : AccessibilityService() {
 
     private class DisplayEvent(val displayId: Int, val event: AccessibilityEvent)
 
-    // 事件只作观察用,订阅方处理不过来时丢最旧的,不阻塞系统回调
-    private val events = MutableSharedFlow<DisplayEvent>(
-        extraBufferCapacity = EVENT_BUFFER,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
-    /** 窗口变了(加上、拿掉、挪动,包括输入法弹出收起):只是个信号,订阅方自己去读窗口。 */
-    private val windowChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
-    private val notifications = MutableSharedFlow<ScreenEvent>(
-        extraBufferCapacity = EVENT_BUFFER,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -79,6 +64,7 @@ open class ScreenAccessibility : AccessibilityService() {
     fun overlays(): OverlayHost = overlayHost ?: OverlayHost(this).also { overlayHost = it }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        if (instance.value !== this) return
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) windowChanges.tryEmit(Unit)
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED && notifications.subscriptionCount.value > 0) {
             val notification = event.parcelableData as? Notification
@@ -179,16 +165,15 @@ open class ScreenAccessibility : AccessibilityService() {
     }
 
     /**
-     * 发生在指定屏上的无障碍事件。断开时停止接收旧实例的事件,重连后已有订阅跟随新实例。
+     * 发生在指定屏上的无障碍事件。通道跨实例保留,只有当前连接的服务发布事件。
      */
     fun eventsFor(displayId: Int): Flow<AccessibilityEvent> =
-        instance.flatMapLatest { it?.events ?: emptyFlow() }
-            .filter { it.displayId == displayId }.map { it.event }
+        events.filter { it.displayId == displayId }.map { it.event }
 
-    fun notificationEvents(): Flow<ScreenEvent> = instance.flatMapLatest { it?.notifications ?: emptyFlow() }
+    fun notificationEvents(): Flow<ScreenEvent> = notifications
 
-    /** 窗口变了的信号(见 [windowChanges]);已有订阅跟随服务重连。 */
-    fun windowChanges(): Flow<Unit> = instance.flatMapLatest { it?.windowChanges ?: emptyFlow() }
+    /** 窗口变了的信号(见 [windowChanges]);通道跨服务实例保留。 */
+    fun windowChanges(): Flow<Unit> = windowChanges
 
     /**
      * 事件所在的屏。API 33 起事件自带屏号;更早的系统按事件的窗口号去各屏窗口里找,
@@ -209,6 +194,19 @@ open class ScreenAccessibility : AccessibilityService() {
         private const val EVENT_BUFFER = 64
         /** 两次截图之间系统要求的间隔(安卓原版是一秒)。 */
         private const val SCREENSHOT_INTERVAL_MS = 1_000L
+
+        // 保持热流:调用方用 UNDISPATCHED 先订阅再操作,不要因服务切换引入异步订阅窗口。
+        // 事件只作观察用,订阅方处理不过来时丢最旧的,不阻塞系统回调
+        private val events = MutableSharedFlow<DisplayEvent>(
+            extraBufferCapacity = EVENT_BUFFER,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+        /** 窗口变了(加上、拿掉、挪动,包括输入法弹出收起):只是个信号,订阅方自己去读窗口。 */
+        private val windowChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+        private val notifications = MutableSharedFlow<ScreenEvent>(
+            extraBufferCapacity = EVENT_BUFFER,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
 
         private val _instance = MutableStateFlow<ScreenAccessibility?>(null)
         /** 已连接的服务实例;服务未开启或已断开时为 null。 */

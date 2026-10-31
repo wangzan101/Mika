@@ -43,7 +43,7 @@ class RetryPolicy(
 
         /** 一时的故障,过一会儿再发同一个请求可能就好了。 */
         fun transient(e: Throwable): Boolean = when (e) {
-            is ModelError.RateLimited, is ModelError.Network -> true
+            is ModelError.RateLimited, is ModelError.Network, is ModelError.StreamTruncated -> true
             is ModelError.Server -> e.status in 500..599
             else -> false
         }
@@ -52,6 +52,7 @@ class RetryPolicy(
         fun label(e: Throwable): String = when (e) {
             is ModelError.RateLimited -> "rate_limited"
             is ModelError.Network -> "network"
+            is ModelError.StreamTruncated -> "stream_truncated"
             is ModelError.Server -> "server_${e.status}"
             else -> e::class.simpleName.orEmpty()
         }

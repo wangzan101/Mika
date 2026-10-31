@@ -17,6 +17,11 @@ sealed class ModelError(message: String, cause: Throwable? = null) : Exception(m
     class ToolsUnsupported(val model: String = "") :
         ModelError(if (model.isEmpty()) "该模型不支持调用工具" else "模型「$model」不支持调用工具")
     class Network(cause: Throwable? = null) : ModelError("网络连接失败", cause)
+    /**
+     * 上游在流正常收尾之前把连接关了(读到 EOF 却没见到结束标记),多半是中间网关的空闲超时。
+     * 这时回复还没进历史、工具也还没执行,重发同一个请求是安全的,所以按一时的故障处理(见 [com.wangzan101.mika.core.agent.RetryPolicy.transient])。
+     */
+    class StreamTruncated : ModelError("模型连接提前断开,回复没有收完")
     class Server(val status: Int) : ModelError("模型服务出错(HTTP $status)")
     class ContentRefused : ModelError("模型拒绝处理该内容")
     /** ChatGPT 套餐给其他 App 用的额度到了上限:不重试,等额度恢复或换模型。 */

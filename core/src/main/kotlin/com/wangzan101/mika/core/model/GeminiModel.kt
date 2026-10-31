@@ -56,7 +56,8 @@ class GeminiModel(
         system: String, messages: List<Message>, tools: List<ToolSpec>, onText: (String) -> Unit,
     ): ModelReply {
         val stream = GeminiStream(onText, ::parse, ::parseUsage)
-        val (status, retryAfter, text) = HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept)
+        val (status, retryAfter, text) =
+            HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept, stream::closed)
         if (status !in 200..299) throw mapError(status, retryAfter, text)
         if (text.isNotEmpty()) return parse(text).also { reply ->
             reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
@@ -256,12 +257,13 @@ private class GeminiStream(
     private val calls = mutableListOf<Part.ToolCall>()
     private var usage: Usage? = null
     private var finishReason: String? = null
-    private var seen = false
+
+    /** 收尾标记到了(`finishReason`)。没到就是上游提前断的,当一时的故障重试。 */
+    fun closed(): Boolean = finishReason != null
 
     fun accept(data: String) {
         val root = try { json.parseToJsonElement(data).jsonObject }
         catch (e: Exception) { throw ModelError.BadResponse("流式响应不是合法 JSON", e) }
-        seen = true
         usageOf(root["usageMetadata"])?.let { usage = it }
         val candidate = (root["candidates"] as? JsonArray)?.firstOrNull() as? JsonObject ?: return
         (candidate["finishReason"] as? JsonPrimitive)?.contentOrNull?.let { finishReason = it }
@@ -281,7 +283,7 @@ private class GeminiStream(
     }
 
     fun finish(): ModelReply {
-        if (!seen || finishReason == null) throw ModelError.BadResponse("流式响应提前结束")
+        if (!closed()) throw ModelError.StreamTruncated()
         val parts = buildList<Part> {
             if (thinking.isNotEmpty()) add(Part.Thinking(thinking.toString()))
             if (visible.isNotEmpty()) add(Part.Text(visible.toString()))

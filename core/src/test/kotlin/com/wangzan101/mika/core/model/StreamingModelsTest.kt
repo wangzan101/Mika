@@ -1,5 +1,6 @@
 package com.wangzan101.mika.core.model
 
+import com.wangzan101.mika.core.agent.RetryPolicy
 import kotlinx.coroutines.test.runTest
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -99,18 +100,28 @@ class StreamingModelsTest {
         assertEquals("/v1beta/models/m:streamGenerateContent?alt=sse", server.takeRequest().path)
     }
 
+    /** 发出去了、收到过一帧、然后上游直接关连接(中间网关空闲超时那一种):不能当回答,且按一时的故障重试。 */
     @Test fun truncatedStreamCannotBecomeFinalAnswer() = runTest {
         server.enqueue(stream("""{"choices":[{"delta":{"content":"半句"}}]}"""))
         val model = OpenAiCompatModel(server.url("/v1").toString().trimEnd('/'), "k", "m", caps, OkHttpClient())
         try {
             model.completeStreaming("s", user, emptyList()) {}
             throw AssertionError("应拒绝不完整响应")
-        } catch (e: ModelError.BadResponse) {
-            assertTrue(e.message.orEmpty().contains("提前结束"))
+        } catch (e: ModelError.StreamTruncated) {
+            assertTrue(RetryPolicy.transient(e))
+            assertEquals("stream_truncated", RetryPolicy.label(e))
         }
     }
 
+    /** 端点给了 finish_reason 却不发 [DONE]:算正常收完,不当断流。 */
+    @Test fun finishReasonWithoutDoneStillCompletes() = runTest {
+        server.enqueue(stream("""{"choices":[{"delta":{"content":"好了"},"finish_reason":"stop"}]}"""))
+        val model = OpenAiCompatModel(server.url("/v1").toString().trimEnd('/'), "k", "m", caps, OkHttpClient())
+        assertEquals(listOf(Part.Text("好了")), model.completeStreaming("s", user, emptyList()) {}.parts)
+    }
+
     @Test fun openAiCompatibleEndpointCanStreamWithoutUsageOption() = runTest {
+        // 第一次的正文里没有 stream_options(MockWebServer 也不自动补结束标记),照旧报断流 —— 这正是要重试的那条路
         server.enqueue(MockResponse().setResponseCode(400).setBody("unknown field stream_options"))
         server.enqueue(stream(
             """{"choices":[{"delta":{"content":"继续"},"finish_reason":"stop"}]}""",

@@ -35,8 +35,14 @@ internal object HttpSupport {
         })
     }
 
-    /** SSE 按事件交付，流断开时由调用者检查结束标记；取消协程会同时取消 HTTP 请求。 */
-    suspend fun stream(http: OkHttpClient, req: Request, onEvent: (String) -> Unit): RawResponse = suspendCancellableCoroutine { cont ->
+    /**
+     * SSE 按事件交付;取消协程会同时取消 HTTP 请求。
+     * 读到 EOF 时看 [done]:收到过结束标记就算正常收完(顺带把最后一个事件交出去),没收到说明上游在收尾前断了
+     * (中间网关的空闲超时、手机切网),抛 [ModelError.StreamTruncated] 让上层重试,不把半截流当成完整回复。
+     */
+    suspend fun stream(
+        http: OkHttpClient, req: Request, onEvent: (String) -> Unit, done: () -> Boolean = { true },
+    ): RawResponse = suspendCancellableCoroutine { cont ->
         val call = http.newCall(req)
         cont.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
@@ -73,6 +79,7 @@ internal object HttpSupport {
                         }
                         if (cont.isActive) {
                             dispatch()
+                            if (!done()) throw ModelError.StreamTruncated()
                             cont.resume(RawResponse(it.code, it.header("retry-after"), ""))
                         }
                     } catch (e: Exception) {

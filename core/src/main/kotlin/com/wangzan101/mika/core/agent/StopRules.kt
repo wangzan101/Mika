@@ -61,6 +61,7 @@ internal fun userReason(e: ModelError): String = when (e) {
     is ModelError.ContentRefused -> "模型拒绝处理该内容,请调整任务描述或换一个模型。"
     is ModelError.RateLimited -> "模型服务限流,重试后仍然请求太频繁。请稍后再试,或检查账户的调用频率限制。"
     is ModelError.Network -> "连接模型服务失败,重试后仍然不通。请检查网络和 Base URL。"
+    is ModelError.StreamTruncated -> "模型服务在回复收完之前断开了连接(多半是中间网关的空闲超时),重试后仍然如此。请稍后再试,或改用直连服务商的 Base URL。"
     is ModelError.Server -> "模型服务出错(HTTP ${e.status}),请稍后再试。"
     is ModelError.BadResponse -> "${e.message}。请检查 Base URL 和接口类型是否匹配。"
     is ModelError.ChatGptLimitReached ->

@@ -17,7 +17,6 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 
 /**
  * 请求时带的 Bearer 令牌。[fresh] 为真表示上一个被拒了(HTTP 401),要先换一个新的;换不到抛 [ModelError]。
@@ -75,7 +74,9 @@ class ResponsesModel(
         while (true) {
             val stream = ResponsesStream(onText, ::errorOf)
             val bearer = token.get(fresh)
-            val (status, retryAfter, text) = HttpSupport.stream(http, request(bearer, system, messages, tools, includeReasoning), stream::accept)
+            val (status, retryAfter, text) = HttpSupport.stream(
+                http, request(bearer, system, messages, tools, includeReasoning), stream::accept, stream::closed,
+            )
             if (status in 200..299) {
                 if (text.isNotEmpty()) return stream.fromBody(text).also { reply ->
                     reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
@@ -263,8 +264,11 @@ private class ResponsesStream(
         return finish()
     }
 
+    /** 收到过 `response.completed` / `response.incomplete`:流正常收尾了。 */
+    fun closed(): Boolean = final != null
+
     fun finish(): ModelReply {
-        val response = final ?: throw ModelError.Network(IOException("流式响应提前结束"))
+        val response = final ?: throw ModelError.StreamTruncated()
         val output = items.ifEmpty { (response["output"] as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty() }
         val reasoning = mutableListOf<JsonObject>()
         val thinking = StringBuilder()

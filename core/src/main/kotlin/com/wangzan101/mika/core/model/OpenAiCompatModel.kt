@@ -61,11 +61,13 @@ class OpenAiCompatModel(
         system: String, messages: List<Message>, tools: List<ToolSpec>, onText: (String) -> Unit,
     ): ModelReply {
         var stream = OpenAiStream(onText, ::parseUsage, ::thinking)
-        var response = HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept)
+        var response = HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept, stream::closed)
         if (response.status == 400 && response.body.contains("stream_options")) {
             // 一些兼容端点能流式生成，却没有用量选项。
             stream = OpenAiStream(onText, ::parseUsage, ::thinking)
-            response = HttpSupport.stream(http, request(system, messages, tools, stream = true, includeUsage = false), stream::accept)
+            response = HttpSupport.stream(
+                http, request(system, messages, tools, stream = true, includeUsage = false), stream::accept, stream::closed,
+            )
         }
         val (status, retryAfter, text) = response
         if (status !in 200..299) {
@@ -305,6 +307,12 @@ private class OpenAiStream(
     private var done = false
     private var chunks = 0
 
+    /**
+     * 流的收尾标记到了:有 `[DONE]`,或端点直接给了 `finish_reason` 却没发 `[DONE]`(这类兼容端点不少)。
+     * 没到就是上游提前断的,交给 [HttpSupport.stream] 当一时的故障重试。
+     */
+    fun closed(): Boolean = done || reason != null
+
     fun accept(data: String) {
         if (data == "[DONE]") { done = true; return }
         val root = try { json.parseToJsonElement(data).jsonObject }
@@ -353,7 +361,7 @@ private class OpenAiStream(
     }
 
     fun finish(): ModelReply {
-        if (!done || chunks == 0) throw ModelError.BadResponse("流式响应提前结束")
+        if (!closed() || chunks == 0) throw ModelError.StreamTruncated()
         val parts = buildList<Part> {
             thinkingVia?.takeIf { thinking.isNotEmpty() }?.let { add(thinkingOf(thinking.toString(), it)) }
             if (visible.isNotEmpty()) add(Part.Text(visible.toString()))

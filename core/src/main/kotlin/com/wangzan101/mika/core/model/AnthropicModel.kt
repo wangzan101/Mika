@@ -50,7 +50,8 @@ class AnthropicModel(
         system: String, messages: List<Message>, tools: List<ToolSpec>, onText: (String) -> Unit,
     ): ModelReply {
         val stream = AnthropicStream(onText, ::parseUsage)
-        val (status, retryAfter, text) = HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept)
+        val (status, retryAfter, text) =
+            HttpSupport.stream(http, request(system, messages, tools, stream = true), stream::accept, stream::closed)
         if (status !in 200..299) throw mapError(status, retryAfter, text)
         if (text.isNotEmpty()) return parse(text).also { reply ->
             reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.takeIf(String::isNotEmpty)?.let(onText)
@@ -217,6 +218,9 @@ private class AnthropicStream(
     private var reason: String? = null
     private var stopped = false
 
+    /** 收尾标记到了(`message_stop`)。没到就是上游提前断的,当一时的故障重试。 */
+    fun closed(): Boolean = stopped
+
     fun accept(data: String) {
         val root = try { json.parseToJsonElement(data).jsonObject }
         catch (e: Exception) { throw ModelError.BadResponse("流式响应不是合法 JSON", e) }
@@ -259,7 +263,7 @@ private class AnthropicStream(
     }
 
     fun finish(): ModelReply {
-        if (!stopped) throw ModelError.BadResponse("流式响应提前结束")
+        if (!closed()) throw ModelError.StreamTruncated()
         val parts = blocks.values.mapNotNull { block ->
             when (block.type) {
                 "text" -> block.text.toString().takeIf(String::isNotEmpty)?.let(Part::Text)

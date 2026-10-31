@@ -135,6 +135,14 @@ class ContextBuilderTest {
         assertEquals(ContextKind.RuntimeState, ContextBuilder.kindOf(b.runtimeState(null, null, null, 1, 60, t0).text))
     }
 
+    // 报错用系统语言:运行时状态带上系统语言,和「用户那句话的语言」分开写
+    @Test fun runtimeStateNamesSystemLanguageForErrorReports() {
+        val b = ContextBuilder(zone = utc, systemLanguage = "zh-Hans-CN")
+        val text = ContextBuilder.bodyOf(Message(Role.User, listOf(b.runtimeState(null, null, null, 1, 60, 0, "open settings")), Author.Mika))!!
+        assertTrue(text, text.contains("\nSystem language: zh-Hans-CN"))
+        assertTrue(text, text.contains("\nWrite to the user in the language of their latest message: \"open settings\""))
+    }
+
     // 用户最近一句话的开头摆在生成处:模型照这句话的语言写给用户,读到的内容是别的语言也不跟着换
     @Test fun runtimeStateQuotesUserWordsForReplyLanguage() {
         val b = ContextBuilder(zone = utc)

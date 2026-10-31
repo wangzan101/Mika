@@ -29,6 +29,7 @@ class LazyPhoneScreen(
     private val height: Int,
     private val listApps: suspend () -> List<Pair<String, String>>,
     private val appCopies: suspend () -> List<AppCopy> = { emptyList() },
+    override val appAccess: com.wangzan101.mika.core.access.AppAccessPolicy = com.wangzan101.mika.core.access.AppAccessPolicy.ALLOW,
     private val acquire: suspend () -> ScreenPort,
 ) : ScreenPort {
     private val lock = Mutex()
@@ -52,7 +53,10 @@ class LazyPhoneScreen(
 
     private fun unavailable() = ActionResult.Failed(PHONE_UNAVAILABLE, lastProblem)
 
-    override suspend fun openApp(packageName: String, cold: Boolean): ActionResult = built()?.openApp(packageName, cold) ?: unavailable()
+    override suspend fun openApp(packageName: String, cold: Boolean): ActionResult {
+        appAccess.current().denial(packageName)?.let { throw it }
+        return built()?.openApp(packageName, cold) ?: unavailable()
+    }
     override suspend fun openAppCopy(packageName: String, userId: Int, cold: Boolean): ActionResult =
         built()?.openAppCopy(packageName, userId, cold) ?: unavailable()
     override suspend fun openLink(action: String?, uri: String?, packageName: String?): ActionResult =
@@ -64,6 +68,10 @@ class LazyPhoneScreen(
 
     // ---------- 没接上之前:还没有打开的 App ----------
 
+    override suspend fun checkAppAccess() {
+        if (!appAccess.current().available) throw com.wangzan101.mika.core.access.AppAccessDenied("app_access_unavailable", null)
+        port?.checkAppAccess()
+    }
     override suspend fun snapshot(): ScreenSnapshot = port?.snapshot() ?: empty()
     override suspend fun peek(): ScreenSnapshot = port?.peek() ?: empty()
     override suspend fun screenshotPng(): ByteArray? = port?.screenshotPng()

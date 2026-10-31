@@ -311,6 +311,14 @@ class TaskService : Service() {
             } catch (e: RemoteException) {
                 run.shellDied = true
                 TaskState.Failed(SHELL_DIED, FailKind.Environment)
+            } catch (e: com.wangzan101.mika.core.access.AppAccessDenied) {
+                val reason = when (e.code) {
+                    "app_blocked" -> tr(R.string.task_app_blocked, e.packageName ?: tr(R.string.task_app_this_app))
+                    "app_access_unavailable" -> tr(R.string.task_app_access_unavailable)
+                    "app_access_protected" -> tr(R.string.task_app_protected)
+                    else -> tr(R.string.task_app_unverified)
+                }
+                TaskState.Failed(reason, FailKind.Environment)
             } catch (e: Exception) {
                 TaskState.Failed(tr(R.string.task_error, e.message ?: e::class.simpleName), FailKind.Environment)
             }

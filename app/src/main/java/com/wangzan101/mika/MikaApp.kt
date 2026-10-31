@@ -173,6 +173,10 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
     /** 全局的询问 / 自主:整个进程一份,设置页和各任务共用。 */
     val approvals: ApprovalStore by lazy { ApprovalStore(java.io.File(filesDir, "approvals.json")) }
 
+    val appAccess: com.wangzan101.mika.settings.AppAccessStore by lazy {
+        com.wangzan101.mika.settings.AppAccessStore(java.io.File(filesDir, "app-access.json"))
+    }
+
     /** 全局的询问 / 自主和各任务自己的那一份;开发者选项里的「自主模式」经它改。 */
     val approvalControl: ApprovalControl by lazy { ApprovalControl(approvals) }
 
@@ -259,6 +263,10 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEVELOPMENT) {
+            com.wangzan101.mika.ui.OnboardingState(this).markModelSetupDone()
+            phone.setupPrompt.markGuideSeen()
+        }
         // 界面以外的文字(通知、服务、悬浮胶囊)按 App 语言取
         AppLanguage.applyDefaultLocale(this)
         UiText.source = ResourceTexts { AppLanguage.resources(this) }

@@ -439,6 +439,7 @@ class TaskRun(
                 val learnedNotes = legacyNames().let { legacy -> memoryRuntime.appKnowledge().notes().mapValues { it.value.copy(text = legacy.rewrite(it.value.text)) } }
                 KnowledgeStore(KnowledgeStore.loadBundled(), userNotes, learnedNotes) to GuideCatalog.loadBundled()
             }
+            val appAccess = (service.application as MikaApp).appAccess
             val metrics = mainScreenMetrics()
             // 在 App 里操作的节奏(设置 › 干活时);评测、真机验收按钩子覆盖
             val pace = env.evalHooks.operatingPace ?: FeatureFlags.get(service).operatingPace()
@@ -482,7 +483,8 @@ class TaskRun(
                         create()
                     }.also { d ->
                         _displayId.value = d.displayId
-                        side.launch { d.frames.collect { if (dispatcher?.surface != WEB) _frames.value = it } }
+                        side.launch { d.frames.collect { if (dispatcher?.surface != WEB) _frames.value = if (phone?.screen?.previewAllowed() == true) it else null } }
+                        side.launch { appAccess.state.collect { if (dispatcher?.surface != WEB && phone?.screen?.previewAllowed() != true) _frames.value = null } }
                     }
                 }
                 val screen = AndroidScreen(
@@ -497,6 +499,7 @@ class TaskRun(
                     handedOver = { handoverRef?.handedOver == true },
                     // 打字一段一段出来;App 知识说限制浏览快慢的 App 打得更慢
                     typing = { pkg -> pace.typing(PlacePace.of(pkg?.let(skills::appPace))) },
+                    appAccess = appAccess,
                 )
                 val audio = recovery.audioMute(shell, key).also { mute = it }
                 val side0 = PhoneSide(shell, a11y, screen, agentDisplay, audio)
@@ -505,6 +508,7 @@ class TaskRun(
                 return screen
             }
             val phoneScreen = LazyPhoneScreen(metrics.widthPixels, metrics.heightPixels,
+                appAccess = appAccess,
                 listApps = { withContext(Dispatchers.IO) { launchableApps(service.packageManager, service.packageName) } },
                 // 另一份用户里的 App 要问内置助手:助手已经连着才问,不为它去接
                 appCopies = {
@@ -602,6 +606,10 @@ class TaskRun(
             }
             // 这个对话里用户发来的屏幕(跟着对话存在工作区里)
             val userScreens = (service.application as MikaApp).userScreens.source(conversationId)
+            // 报错按系统语言写,不跟用户那句话的语言走;取不到时不加这一行
+            val systemLanguage = runCatching {
+                android.content.res.Resources.getSystem().configuration.locales[0].toLanguageTag()
+            }.getOrNull()
             val runSpec = RunSpec(RunId(key), goal, conversationId,
                 priorTurns,
                 provenance, if (conditionCheck) setOf("web", "sandbox") else null, readOnly = conditionCheck)
@@ -618,7 +626,7 @@ class TaskRun(
                     AgentLoop(model, childTools, SystemPrompt.identity(), maxSteps = childSpec.stepBudget ?: AgentLoop.UNLIMITED_STEPS,
                         // 子任务跟着询问 / 自主;询问时它也过关卡,子任务里花钱的一步一律不做
                         confirmations = runApproval.gate(), approvals = runApproval, autonomous = runApproval.startedAutonomous,
-                        reviewFinalAnswer = false, flags = speed, outwardPacing = OutwardPacing.human())
+                        reviewFinalAnswer = false, flags = speed, outwardPacing = OutwardPacing.human(), systemLanguage = systemLanguage)
                 },
                 store = (service.application as MikaApp).childRuns,
                 ownerAlive = { job?.isActive == true },
@@ -692,6 +700,7 @@ class TaskRun(
                 userScreens = userScreens,
                 // 同一网站、App 里连着联系别人、提交:两次之间隔一段随机的时间
                 outwardPacing = OutwardPacing.human(),
+                systemLanguage = systemLanguage,
             )
             loop = agent
             liveFeed = agent.events.subscribe(liveEvents)

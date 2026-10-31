@@ -42,6 +42,10 @@
     <string name="err_payment">付款要你来</string>
     <string name="err_no_evidence">结果缺少依据</string>
     <string name="err_double_click">不支持双击</string>
+    <string name="err_app_blocked">应用已被禁用</string>
+    <string name="err_app_unverified">无法确认是哪个应用</string>
+    <string name="err_app_unavailable">应用访问设置不可用</string>
+    <string name="err_app_protected">受保护的应用不能自动操作</string>
     <string name="verify_passed">核查通过</string>
     <string name="verify_unverified">没能核实</string>
     <string name="verify_none">没有核查</string>

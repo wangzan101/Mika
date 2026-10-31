@@ -280,6 +280,10 @@ class RunTimelineViewModel(
             "payment_requires_takeover" to tr(R.string.err_payment),
             "finish_missing_evidence" to tr(R.string.err_no_evidence),
             "double_click_unsupported" to tr(R.string.err_double_click),
+            "app_blocked" to tr(R.string.err_app_blocked),
+            "app_access_unverified" to tr(R.string.err_app_unverified),
+            "app_access_unavailable" to tr(R.string.err_app_unavailable),
+            "app_access_protected" to tr(R.string.err_app_protected),
         )
 
         private fun verifierTag(verdict: String) = when (verdict) {

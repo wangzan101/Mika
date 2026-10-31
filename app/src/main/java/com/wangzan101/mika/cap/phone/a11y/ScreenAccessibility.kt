@@ -76,6 +76,8 @@ open class ScreenAccessibility : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) windowChanges.tryEmit(Unit)
+        val access = (application as com.wangzan101.mika.MikaApp).appAccess.current()
+        if (access.denial(event.packageName?.toString()) != null) return
         if (event.eventType == AccessibilityEvent.TYPE_NOTIFICATION_STATE_CHANGED && notifications.subscriptionCount.value > 0) {
             val notification = event.parcelableData as? Notification
             val title = notification?.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()

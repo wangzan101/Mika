@@ -94,6 +94,12 @@ internal class Interfaces(
     }
     private val gateView = GateView()
 
+    suspend fun checkAppAccess(tool: AgentTool?) {
+        if (tool == null || tool.offScreen || tool.capability !in sessions) return
+        if (tool.verb in setOf(Verb.LaunchApp, Verb.ListApps, Verb.OpenLink, Verb.ShareText, Verb.SetAlarm, Verb.SetTimer, Verb.ShowAlarms, Verb.AddCalendarEvent)) return
+        sessionFor(tool).checkAppAccess()
+    }
+
     /** 此刻在操作的那块屏的读屏状态。 */
     val session: ScreenSession get() = sessions.getValue(focus.current.id)
 
@@ -142,12 +148,22 @@ internal class Interfaces(
     }
 
     override suspend fun around(tool: AgentTool, args: JsonObject, inlineScreen: Boolean, body: suspend (reportsEffect: Boolean) -> ToolExecution): ToolExecution {
+        if (tool.offScreen || tool.verb == Verb.ListApps) return body(false)
+        if (tool.verb in setOf(Verb.LaunchApp, Verb.OpenLink, Verb.ShareText, Verb.SetAlarm, Verb.SetTimer, Verb.ShowAlarms, Verb.AddCalendarEvent)) {
+            val prep = try { prepare(tool, args) } catch (_: com.wangzan101.mika.core.access.AppAccessDenied) { null }
+            val raw = body(prep?.reportsEffect == true)
+            session.checkAppAccess()
+            return if (prep != null) finish(tool, args, prep, raw, inlineScreen) else raw
+        }
         val prep = prepare(tool, args)
-        return finish(tool, args, prep, body(prep.reportsEffect), inlineScreen)
+        val result = finish(tool, args, prep, body(prep.reportsEffect), inlineScreen)
+        session.screen.checkAppAccess()
+        return result
     }
 
     private suspend fun prepare(tool: AgentTool, o: JsonObject): Prep {
         val session = this.session
+        session.checkAppAccess()
         gateView.capture = if (captureTargets && tool.routable) gateView.captureTarget(session, tool.verb, o) else null
         // 改变界面的动作:动作前先看一眼(元素表 + 画面),动作后比出实际效果
         val probe = if (tool.reportsEffect) session.probe(o.argStr("snapshotId")) else null
@@ -211,6 +227,7 @@ internal class Interfaces(
         val verb = tool?.verb
         if (verb != Verb.Tap && verb != Verb.TypeText) return null
         val session = tool.capability?.let(sessions::get) ?: return null
+        session.checkAppAccess()
         val text = args.argStr(DESCRIBED_ELEMENT)
         if (text == null) {
             if (DESCRIBED_ROLE in args) return Described.Failed(fail("invalid_arguments", "$DESCRIBED_ROLE: only used together with $DESCRIBED_ELEMENT"))
@@ -221,7 +238,7 @@ internal class Interfaces(
         }
         val role = args.argStr(DESCRIBED_ROLE)?.trim()?.ifEmpty { null }
         // 内部读的一屏:模型没看到,不算它读过(不清掉「手里那屏已过时」);这一屏留给接着的动作当「动作前」
-        val snap = try { session.snapshot(internal = true) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        val snap = try { session.snapshot(internal = true) } catch (denied: com.wangzan101.mika.core.access.AppAccessDenied) { throw denied } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return Described.Failed(fail("screen_unavailable", Feedback["screen_unavailable"]))
         }
         // 页面弹框挂着:页面停着,什么都点不到
@@ -321,7 +338,7 @@ internal class Interfaces(
 
     /** 等最近操作的那块屏稳定,最多 [timeoutMs];读不到状态也照常返回。 */
     override suspend fun settle(timeoutMs: Long) {
-        try { session.screen.waitStable(timeoutMs) } catch (e: CancellationException) { throw e } catch (e: Exception) { }
+        try { session.screen.waitStable(timeoutMs) } catch (denied: com.wangzan101.mika.core.access.AppAccessDenied) { throw denied } catch (e: CancellationException) { throw e } catch (e: Exception) { }
     }
 
     /** 最近操作的那块屏此刻的一帧(原图)和它的画面编号,登记进回看;受保护页面、付款页不截,截不到为 null。 */

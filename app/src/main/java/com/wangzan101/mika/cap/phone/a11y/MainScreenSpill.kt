@@ -89,6 +89,14 @@ internal object MainScreenSpill {
      */
     fun needsUser(passwordField: Boolean, readable: Boolean, secureWindow: Boolean): Boolean = passwordField || (!readable && secureWindow)
 
+    /**
+     * 这个包的这个页面是不是账号认证器的登录、加账号、验证、验证码一类:认证器[authenticators]里的包,
+     * 页面不是它的启动页[launcher](比如 Gmail 的收件箱、邮箱 App 的首页)。这类页面本身就要用户亲手做,
+     * 整屏、没有密码框也不能挪到 Mika 的屏上。纯逻辑。
+     */
+    fun authenticatorUi(pkg: String, activity: String?, authenticators: Set<String>, launcher: String?): Boolean =
+        pkg in authenticators && activity != null && (launcher == null || launcher != activity)
+
     private fun verdict(a: Arrival, since: Long, windowMs: Long, topBefore: Int, excluded: Set<String>, userTaps: List<Tap>): Verdict? {
         if (a.at < since || a.at > since + windowMs) return null
         val pkg = a.packageName ?: return null

@@ -23,6 +23,22 @@
         <!-- 对话框样式的页面:重现登录验证一类要用户在主屏点确认的弹窗 -->
         <activity android:name="com.wangzan101.mika.cap.phone.a11y.DialogSpillTestActivity" android:exported="true"
             android:theme="@android:style/Theme.Material.Dialog" />
+        <!-- 账号认证器包的整屏登录页,和普通 App 页面形状一样;还有它自己的启动页作对照 -->
+        <activity android:name="com.wangzan101.mika.cap.phone.a11y.FullScreenAuthTestActivity" android:exported="true" />
+        <activity android:name="com.wangzan101.mika.cap.phone.a11y.TestLauncherActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- 测试包登记成账号认证器:用来验证账号认证器的登录页留在主屏 -->
+        <service android:name="com.wangzan101.mika.cap.phone.a11y.TestAuthenticatorService" android:exported="true">
+            <intent-filter>
+                <action android:name="android.accounts.AccountAuthenticator" />
+            </intent-filter>
+            <meta-data android:name="android.accounts.AccountAuthenticator"
+                android:resource="@xml/test_authenticator" />
+        </service>
         <service android:name="com.wangzan101.mika.cap.phone.a11y.SpillLaunchService" android:process=":spill" android:exported="false" />
         <!-- 外壳对照测试的探针页:startApp 走启动入口(INFO,不进桌面),startView 走自定义链接 -->
         <activity android:name="com.wangzan101.mika.shell.ShellProbeActivity" android:exported="true">

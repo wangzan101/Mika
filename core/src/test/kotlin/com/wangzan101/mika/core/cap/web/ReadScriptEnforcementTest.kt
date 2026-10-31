@@ -69,6 +69,23 @@ class ReadScriptEnforcementTest {
             case("selectorFlip", "let n = 0; return document.querySelectorAll({ toString: () => (n++ ? 'input[value^=h]' : 'li') }).length;")
             case("attrFlip", "let n = 0; return document.querySelectorAll('input')[1].getAttribute({ toString: () => (n++ ? 'value' : 'x') });")
             case("textareas", "const [code, note] = document.querySelectorAll('textarea'); return [code.value, code.textLength, code.outerText, code.innerText, code.name, note.value, note.textLength, note.outerText];")
+            case("areaText", "const [code, note] = document.querySelectorAll('textarea'); const c = code.firstChild, n = note.firstChild; return [c.data, c.nodeValue, c.textContent, c.wholeText, c.length, c.substringData(0, 3), code.childNodes.length, n.data, n.substringData(0, 5)];")
+            case("areaCdata", "const c = document.querySelector('iframe').contentDocument.body.children[0].children[3].firstChild; return [c.nodeType, c.data, c.nodeValue, c.textContent, c.wholeText, c.length];")
+            case("areaContainers", "const f = document.querySelector('form'); const b = document.body.textContent; return [f.textContent, f.innerText, b.includes('otp-in-textarea'), b.includes('leave at door'), document.querySelector('div').shadowRoot.textContent, document.querySelector('iframe').contentDocument.body.textContent];")
+            // 拿着子文本节点、value 属性节点先不读,等页面换掉字、删掉属性(节点脱离文档)以后再读
+            case("holdArea", "state.area = document.querySelector('div').shadowRoot.childNodes[2].firstChild; return 1;")
+            case("heldArea", "const n = state.area; return [n.parentNode === null, n.data, n.nodeValue, n.textContent, n.wholeText, n.length, n.substringData(0, 3)];", page = "typeBack")
+            case("holdAreaIter", "for (const n of document.querySelector('div').shadowRoot.childNodes[2].childNodes) state.area2 = n; return 1;")
+            case("heldAreaIter", "const n = state.area2; return [n.parentNode === null, n.data, n.textContent];", page = "typeBack")
+            case("holdAttr", "state.attr = document.querySelector('input').attributes.getNamedItem('value'); return 1;")
+            case("heldAttr", "const a = state.attr; return [a.ownerElement === null, a.value, a.nodeValue, a.textContent];", page = "dropValue")
+            case("areaDesc", "const a = document.querySelector('a'), s = document.querySelector('select'), o = s.options[1]; return [a.text, o.text, o.label, o.value, s.value, s.selectedIndex, s.options[0].value];")
+            case("areaShown", "const p = document.querySelector('p'), s = document.querySelector('select'); return [p.innerText, p.outerText, p.textContent, s.innerText, s.options[1].innerText];")
+            case("areaDesc2", "const s = document.querySelectorAll('select')[1], o = s.options[0], out = document.querySelector('output'); return [s.value, o.value, o.text, o.label, out.value, out.defaultValue];")
+            case("noSelection", "const s = document.querySelector('select'); return [s.selectedIndex, s.value];", page = "unselect")
+            // 拿到节点时框还不是秘密的(先读得出),页面随后把框变成秘密、把字写进这个节点,节点再脱离文档
+            case("holdLate", "state.late = document.querySelectorAll('textarea')[1].firstChild; state.lateAttr = document.querySelectorAll('input')[2].attributes.getNamedItem('value'); return [state.late.data, state.lateAttr.value];")
+            case("heldLate", "const n = state.late, a = state.lateAttr; return [n.parentNode === null, n.data, n.textContent, a.ownerElement === null, a.value, a.nodeValue];", page = "lateSecret")
             case("frameFields", "const f = document.querySelector('iframe').contentDocument.body.children[0]; return [f.children[0].value, f.children[1].value, f.children[0].selectionEnd, f.children[1].type, f.children[2].value];")
             case("frameHtml", "document.querySelector('iframe').contentDocument.body.innerHTML")
             case("shadowHtml", "document.querySelector('div').shadowRoot.innerHTML")
@@ -194,6 +211,32 @@ class ReadScriptEnforcementTest {
         val html = listOf("formHtml", "frameHtml", "shadowHtml", "toggledHtml", "templateHtml", "svgTemplate")
         for (n in html) assertEquals(n, 0, r(n).getValue("pageCode").jsonPrimitive.int)
         for (n in html) assertEquals(n, "false", r(n).s("pageChanged"))
+    }
+
+    @Test fun secretTextareaTextStaysHidden() {
+        // 秘密 textarea 里的字是它的初始值:子文本节点(含 CDATA 段)读出来是 ***;外层元素、shadow root、同源 iframe 里的 textContent,
+        // 没渲染出来的外层元素的 innerText,都在副本上打码再取;普通 textarea 的字照读
+        assertEquals("""["***","***","***","***","***","***",1,"leave at door","leave"]""", ok("areaText"))
+        assertEquals("""[4,"***","***","***","***","***"]""", ok("areaCdata"))
+        assertEquals("""["***leave at doorcard","***leave at doorcard",false,true,"***","***"]""", ok("areaContainers"))
+        // 拿在手里的子文本节点、value 属性节点:页面换掉字、删掉属性以后节点脱离文档,字还在上面,读出来也是 ***
+        assertEquals("""[true,"***","***","***","***","***","***"]""", ok("heldArea"))
+        assertEquals("""[true,"***","***"]""", ok("heldAreaIter"))
+        assertEquals("""[true,"***","***","***"]""", ok("heldAttr"))
+        // 拿到节点时框还不是秘密的:框后来变成秘密、字写进同一个节点、节点脱离文档以后,按那个框算
+        assertEquals("""["leave at door","shoes"]""", ok("holdLate"))
+        assertEquals("""[true,"***","***",true,"***","***"]""", ok("heldLate"))
+        // a、option 的 text 一类按子孙的文字算;select 的 value 按页面上选中的那一项取
+        assertEquals("""["Link ***","Card ***","Card ***","Card ***","Card ***",1,"One"]""", ok("areaDesc"))
+        // option 带 value 属性时 value 是那个属性;output 的 value、defaultValue 也按子孙的文字算;没有选中项时 select 的 value 是空的
+        assertEquals("""["v-attr","v-attr","Pick ***","Pick ***","Out ***","Out ***"]""", ok("areaDesc2"))
+        assertEquals("""[-1,""]""", ok("noSelection"))
+        // 排版出来的元素的 innerText 不含 textarea 里的字,照原样给;选项按自己的 text 写出来,这时在副本上取
+        assertEquals("""["Code: ","Code: ","Code: ***","OneCard ***","Card ***"]""", ok("areaShown"))
+        for (n in listOf("areaText", "areaCdata", "areaContainers", "heldArea", "heldAreaIter", "heldAttr", "heldLate", "areaDesc", "areaDesc2", "noSelection", "areaShown")) {
+            assertEquals(n, 0, r(n).getValue("pageCode").jsonPrimitive.int)
+            assertEquals(n, "false", r(n).s("pageChanged"))
+        }
     }
 
     @Test fun valueSelectorsAreRefused() {

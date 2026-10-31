@@ -692,8 +692,6 @@
       results[token] = res;
     }
     function step() {
-      // 读页那边已经结束(endLazy 收走了令牌):不再滚
-      if (!I.hasOwn(lazyOrigins, token)) return;
       var bottom = (D.scrollingElement || D.documentElement).scrollHeight;
       if (n < LAZY_SCREENS && W.scrollY + W.innerHeight < bottom - 1) {
         n++;
@@ -989,6 +987,8 @@
     var o = { x: W.scrollX, y: W.scrollY }, n = 0;
     lazyOrigins[token] = o;
     function step() {
+      // 读页那边已经结束(endLazy 收走了令牌):不再滚
+      if (!I.hasOwn(lazyOrigins, token)) return;
       var bottom = (D.scrollingElement || D.documentElement).scrollHeight;
       if (n < LAZY_SCREENS && W.scrollY + W.innerHeight < bottom - 1) {
         n++;

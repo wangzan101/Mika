@@ -177,7 +177,16 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   const getterOf = (C, k) => { const d = C && getDesc(C.prototype, k); return d && d.get; };
   const nodeTypeOf = getterOf(G.Node, 'nodeType'), localNameOf = getterOf(Elem, 'localName'), shadowHostOf = getterOf(G.ShadowRoot, 'host');
   const native = (g, x) => { if (!g || x === null || typeof x !== 'object') return undefined; try { return apply(g, x, []); } catch (e) { return undefined; } };
-  const tagOf = (x) => (native(nodeTypeOf, x) === 1 ? native(localNameOf, x) : undefined);
+  // 节点类型按对象记下来(同一个对象的类型不会变):读属性前多半要先认一次类型,不是节点的对象(集合、矩形、样式一类)上
+  // nodeType 的原生 getter 每次都抛错,同一个对象只认一次
+  const kinds = new WeakMap();
+  const typeOf = (x) => {
+    if (x === null || typeof x !== 'object') return undefined;
+    let t = kinds.get(x);
+    if (t === undefined) { t = native(nodeTypeOf, x) || 0; kinds.set(x, t); }
+    return t || undefined;
+  };
+  const tagOf = (x) => (typeOf(x) === 1 ? native(localNameOf, x) : undefined);
   const secretNow = (el) => {
     const tag = tagOf(el);
     if (tag === 'input') {
@@ -211,7 +220,7 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
     const todo = [node];
     const inner = (t) => { const c = tagOf(t) === 'template' && native(contentOf, t); if (c) todo.push(c); };
     for (let i = 0; i < todo.length; i++) {
-      const n = todo[i], find = QSA[native(nodeTypeOf, n)];
+      const n = todo[i], find = QSA[typeOf(n)];
       inner(n);
       if (find) for (const x of apply(find, n, ['input, textarea, template'])) { if (tagOf(x) === 'template') inner(x); else out.push(x); }
     }
@@ -223,7 +232,7 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   let inert = null;
   // 打好码的副本;v 里没有秘密输入框时为 null,副本和原件对不上时为 MASK
   const masked = (v) => {
-    const root = native(nodeTypeOf, v) !== 1;
+    const root = typeOf(v) !== 1;
     const orig = fields(v, root ? [] : [v]);
     let hit = false;
     for (const x of orig) if (secret(x)) { hit = true; break; }
@@ -251,7 +260,7 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   const DESC = new Map([['text', new Set(['a', 'option'])], ['label', new Set(['option'])], ['value', new Set(['option', 'output'])], ['defaultValue', new Set(['output'])]]);
   // v 里带字的秘密 textarea:没有为 0,有为 1,有在 option 里的为 2
   const areasIn = (v) => {
-    const find = QSA[native(nodeTypeOf, v)];
+    const find = QSA[typeOf(v)];
     let hit = 0;
     if (find) for (const a of apply(find, v, ['textarea'])) if (secret(a) && native(textOf, a)) { hit = 1; if (closest && apply(closest, a, ['option'])) return 2; }
     return hit;
@@ -273,7 +282,7 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   const substringData = G.CharacterData && G.CharacterData.prototype.substringData;
   const holds = (v) => {
     if (held.has(v)) return true;
-    const t = native(nodeTypeOf, v);
+    const t = typeOf(v);
     let p;
     if (t === 3 || t === 4) { p = native(parentOf, v); if (tagOf(p) !== 'textarea') p = undefined; }
     else if (t === 2) { if (String(v.name).toLowerCase() !== 'value') return false; p = v.ownerElement; }
@@ -286,7 +295,7 @@ ${SelectorPolicy.JS}  const DENIED = new Set(${js(DENIED_PROPS)});
   const readProp = (v, k) => {
     if (typeof k === 'string') {
       if (DENIED.has(k)) deny('reading ' + k);
-      if ((k === 'outerHTML' || k === 'innerHTML') && (native(nodeTypeOf, v) === 1 || (k === 'innerHTML' && native(shadowHostOf, v) !== undefined))) return html(v, k);
+      if ((k === 'outerHTML' || k === 'innerHTML') && (typeOf(v) === 1 || (k === 'innerHTML' && native(shadowHostOf, v) !== undefined))) return html(v, k);
       if (SECRET_TEXT.has(k) && secret(v)) { const x = rget(v, k, v); return x ? MASK : x; }
       if (!FIELD_SAFE.has(k) && fieldApi(v, k) && secret(v)) { const x = rget(v, k, v); return typeof x === 'function' ? x : MASK; }
       if (HELD_TEXT.has(k) && holds(v)) { const x = rget(v, k, v); return x ? MASK : x; }

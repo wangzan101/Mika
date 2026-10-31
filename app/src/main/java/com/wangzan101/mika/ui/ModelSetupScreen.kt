@@ -197,7 +197,7 @@ fun ModelSetupContent(ui: ModelSetupUi, onboarding: Boolean, actions: ModelSetup
                 // 上手时先连服务商再选模型;设置里先看用途
                 if (onboarding) {
                     ProvidersSection(ui, actions)
-                    RolesSection(ui, onPick, actions.setReasoningEffort, actions.setModelContext)
+                    RolesSection(ui, onPick, actions.setReasoningEffort)
                     FooterNote(ModelSetupCopy.ONBOARDING_NOTE)
                 } else {
                     RolesSection(ui, onPick, actions.setReasoningEffort, actions.setModelContext)
@@ -435,7 +435,7 @@ internal object ChatGptPage {
 /** 用途:主模型、看图模型、轻量模型各一张卡,点开是选择页。 */
 @Composable
 private fun RolesSection(ui: ModelSetupUi, onPick: (ModelRole) -> Unit, onReasoning: (ModelRole, String?) -> Unit,
-    onContext: (String, String, ModelContextSettings) -> Boolean,
+    onContext: ((String, String, ModelContextSettings) -> Boolean)? = null,
 ) {
     GroupLabel(ModelsCopy.ROLES)
     GroupCard {
@@ -444,7 +444,7 @@ private fun RolesSection(ui: ModelSetupUi, onPick: (ModelRole) -> Unit, onReason
                 onPick(role)
             }
             ReasoningControl(ui, role) { onReasoning(role, it) }
-            ModelContextControl(ui, role, onContext)
+            if (onContext != null) ModelContextControl(ui, role, onContext)
         }
     }
 }

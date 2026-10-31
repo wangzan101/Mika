@@ -46,17 +46,20 @@ class ModelContextScreenTest {
         val config = ProviderConfig("c", provider.kind, provider.baseUrl, "example-model",
             Capabilities(true, true, 500_000, true), provider.name, provider.id)
         var saved: ModelContextSettings? = null
+        var onboarding by mutableStateOf(true)
         compose.setContent {
             var state by remember { mutableStateOf(ModelSetupUi(AddForm.of(ProviderPresets.all.first()),
                 providers = listOf(provider), configs = listOf(config), roles = RoleChoices(main = "c"))) }
             MikaTheme {
-                ModelSetupContent(state, false, ModelSetupActions(setModelContext = { pid, model, value ->
+                ModelSetupContent(state, onboarding, ModelSetupActions(setModelContext = { pid, model, value ->
                     saved = value
                     state = state.copy(providers = listOf(provider.copy(contextSettings = mapOf(model to value))))
                     pid == provider.id
                 }), {})
             }
         }
+        compose.onNodeWithTag("context-main").assertDoesNotExist()
+        compose.runOnIdle { onboarding = false }
         compose.onNodeWithTag("context-main").performScrollTo().performClick()
         compose.onNodeWithTag("context-window").performTextReplacement("1000000")
         compose.onNodeWithTag("context-threshold").performTextReplacement("80")

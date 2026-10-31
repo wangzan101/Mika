@@ -78,6 +78,8 @@ data class ContextBudget(
 class ContextBuilder(
     private val budget: ContextBudget = ContextBudget(),
     private val zone: ZoneId = ZoneId.systemDefault(),
+    /** 系统语言(如 zh-Hans-CN):报错时用它,不跟用户那句话的语言走。 */
+    private val systemLanguage: String? = null,
 ) {
     /** 开局的上下文:[messages] 依次放进历史;[knowledge] 是实际给出的参考资料(链接按它放行)。 */
     class Start(val messages: List<Message>, val knowledge: List<KnowledgeEntry>)
@@ -156,7 +158,8 @@ class ContextBuilder(
         val at = Instant.ofEpochMilli(nowMs).atZone(zone)
         val time = TIME.format(at) + " " + WEEKDAYS[at.dayOfWeek.value - 1]
         val language = userWords?.let(::excerpt)?.let { "\nWrite to the user in the language of their latest message: \"$it\"" }.orEmpty()
-        return Part.Text(envelope(ContextKind.RuntimeState, "runtime", "Current place: $surface\nStep: $steps\nLocal time: $time$language"))
+        val system = systemLanguage?.takeIf { it.isNotBlank() }?.let { "\nSystem language: $it" }.orEmpty()
+        return Part.Text(envelope(ContextKind.RuntimeState, "runtime", "Current place: $surface\nStep: $steps\nLocal time: $time$system$language"))
     }
 
     private fun knowledgePiece(e: KnowledgeEntry, note: String, withLinks: Boolean): Piece {

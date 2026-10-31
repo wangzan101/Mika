@@ -33,6 +33,11 @@
     <string name="task_no_phone_helper">Phone control isn’t ready. Finish “Set up phone control” in Mika (turn on Wireless debugging and pair once). Web and file tasks aren’t affected.</string>
     <string name="task_no_a11y">Mika’s accessibility service is off. Turn on Mika under Accessibility in system settings.</string>
     <string name="task_error">Task error: %1$s</string>
+    <string name="task_app_blocked">“%1$s” is disabled, so Mika can’t read or operate it. Allow it in Settings › Application access and try again.</string>
+    <string name="task_app_this_app">This app</string>
+    <string name="task_app_access_unavailable">Application access settings can’t be read. Reset them in Settings › Application access and try again.</string>
+    <string name="task_app_protected">This screen needs you to handle it yourself; Mika can’t automate it.</string>
+    <string name="task_app_unverified">Couldn’t confirm which app is in front, so nothing more was done. Try again, or open the target app first.</string>
     <string name="task_condition_interrupted">Condition check interrupted</string>
     <string name="task_check_unfinished">Scheduled check didn’t finish: %1$s</string>
     <string name="task_may_make_sound">This app may make sound</string>

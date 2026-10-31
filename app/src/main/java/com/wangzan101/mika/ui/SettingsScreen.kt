@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 设置里能进入的子页面;[Home] 是设置首页。 */
-private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, ComputerAccess, Developer, RunStats }
+private enum class SettingsPage { Home, AppAccess, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, ComputerAccess, Developer, RunStats }
 
 /**
  * 设置页:总状态卡 + 基本 / 隐私与数据 / 高级 / 关于四组。各子页面在这里切换(返回键先回首页),
@@ -156,6 +156,7 @@ fun SettingsScreen(
             onBack = onBack, onProblem = onProblem, onOpenModels = onOpenModels,
             usageTokens = usageWeek, onOpenUsage = { page = SettingsPage.Usage },
             onOpenPhoneOps = { page = SettingsPage.PhoneOps },
+            onOpenAppAccess = { page = SettingsPage.AppAccess },
             onOpenDuringWork = { page = SettingsPage.DuringWork },
             capsuleMode = capsuleMode, onOpenCapsule = { page = SettingsPage.Capsule },
             onOpenNotifications = { notificationsFrom = SettingsPage.Home; page = SettingsPage.Notifications },
@@ -169,6 +170,7 @@ fun SettingsScreen(
             showDeveloper = showDeveloper, onOpenDeveloper = { page = SettingsPage.Developer },
             versionName = BuildConfig.VERSION_NAME, updateVersion = updateVersion, onOpenAbout = onOpenAbout,
         )
+        SettingsPage.AppAccess -> AppAccessScreen(onBack = toHome)
         SettingsPage.Usage -> UsageScreen(usage, store.providers, onBack = toHome)
         SettingsPage.PhoneOps -> PhoneOpsScreen(
             status, androidRelease, onProblem,
@@ -239,6 +241,7 @@ fun SettingsContent(
     usageTokens: Long? = null,
     onOpenUsage: () -> Unit = {},
     onOpenPhoneOps: () -> Unit = {},
+    onOpenAppAccess: () -> Unit = {},
     onOpenDuringWork: () -> Unit = {},
     /** 悬浮胶囊此刻的选择,写在「悬浮胶囊」一行的右边。 */
     capsuleMode: CapsuleMode = CapsuleMode.DEFAULT,
@@ -285,6 +288,7 @@ fun SettingsContent(
                 PhoneOpsPill(status)
                 RowChevron()
             }
+            ListRow(MikaIcons.Phone, "应用访问", "按应用设置黑名单和屏幕分享许可", onClick = onOpenAppAccess) { RowChevron() }
             ListRow(MikaIcons.Moon, stringResource(R.string.settings_during_work), stringResource(R.string.settings_during_work_sub), onClick = onOpenDuringWork) { RowChevron() }
             ListRow(MikaIcons.Message, CapsuleSettingsCopy.TITLE, CapsuleSettingsCopy.SUBTITLE, onClick = onOpenCapsule) {
                 RowValue(CapsuleSettingsCopy.label(capsuleMode))

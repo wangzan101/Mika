@@ -32,6 +32,11 @@
     <string name="task_no_phone_helper">手機操作還沒準備好:請在 Mika 裡完成「設定手機操作」(開啟無線偵錯並配對一次)。網頁和檔案類的事不受影響。</string>
     <string name="task_no_a11y">Mika 的無障礙服務沒有開啟:請在系統設定的無障礙裡開啟 Mika。</string>
     <string name="task_error">任務出錯:%1$s</string>
+    <string name="task_app_blocked">「%1$s」已被設為禁用，Mika 不能自動讀取或操作它。到 設定 › 應用訪問 裡允許後再試。</string>
+    <string name="task_app_this_app">該應用</string>
+    <string name="task_app_access_unavailable">應用訪問設定無法讀取。請到 設定 › 應用訪問 裡重置後再試。</string>
+    <string name="task_app_protected">這個介面需要你親自操作，Mika 不能自動處理。</string>
+    <string name="task_app_unverified">沒能確認目前是哪個應用，這次沒有繼續操作。請重試，或先開啟目標應用。</string>
     <string name="task_condition_interrupted">條件檢查中斷</string>
     <string name="task_check_unfinished">定時檢查未完成：%1$s</string>
     <string name="task_may_make_sound">該 App 可能會出聲</string>

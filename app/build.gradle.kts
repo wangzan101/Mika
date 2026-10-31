@@ -23,6 +23,7 @@ android {
         buildConfigField("String", "GIT_HASH", "\"$gitHash\"")
         // 关于页版本号后的 Beta 标记;出正式版时改成 false
         buildConfigField("boolean", "BETA", "true")
+        buildConfigField("boolean", "DEVELOPMENT", "false")
     }
 
     // 沙箱程序只有 arm64 版本(jniLibs/arm64-v8a);APK 不限 ABI,别的设备照常安装、显示「此设备不支持沙箱」。
@@ -40,6 +41,13 @@ android {
     sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("eval/tasks"))
 
     buildTypes {
+        create("development") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".development"
+            versionNameSuffix = "-dev"
+            matchingFallbacks += "debug"
+            buildConfigField("boolean", "DEVELOPMENT", "true")
+        }
         // 看流畅度用的包:和发布版一样不可调试(调试包不做预先编译,界面慢好几倍,手感不作数),
         // 用本机调试签名,能直接覆盖调试包、保留数据;可被性能工具采样。./gradlew :app:assemblePerf
         create("perf") {

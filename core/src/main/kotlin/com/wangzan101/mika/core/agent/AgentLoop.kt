@@ -18,6 +18,7 @@ import com.wangzan101.mika.core.action.FollowUp
 import com.wangzan101.mika.core.action.Origin
 import com.wangzan101.mika.core.action.Presented
 import com.wangzan101.mika.core.action.Refusals
+import com.wangzan101.mika.core.access.AppAccessDenied
 import com.wangzan101.mika.core.model.Author
 import com.wangzan101.mika.core.gate.ConfirmationGate
 import com.wangzan101.mika.core.knowledge.ChannelAdvisor
@@ -136,6 +137,8 @@ class AgentLoop(
     private val memory: MemoryStore? = null,
     /** 运行时状态里的本地时间按这个时区写。 */
     private val zone: ZoneId = ZoneId.systemDefault(),
+    /** 系统语言(如 zh-Hans-CN):报错时用它,不跟用户那句话的语言走。 */
+    private val systemLanguage: String? = null,
     /** 模型调用遇到一时的故障(限流、5xx、网络)时的重试。 */
     retry: RetryPolicy = RetryPolicy(),
     /** 不带调用的回复收下当最终回答之前问一次(见 [BeforeAccept]);默认照收。步数用完后的最后一轮不问。 */
@@ -378,7 +381,7 @@ class AgentLoop(
         interruptedStep = 0
         var note = ""
         // 除用户原话以外的上下文都经它生成:统一外壳、统一预算
-        ctx = ContextBuilder(zone = zone)
+        ctx = ContextBuilder(zone = zone, systemLanguage = systemLanguage)
         val installed = try { installedApps() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
         val labels = installed.toMap()
         val matched = knowledge?.matchTask(task, Int.MAX_VALUE, installed).orEmpty()
@@ -633,6 +636,11 @@ class AgentLoop(
                     guards.stop?.let {
                         recordReply(Redactor.args(tools.verb(first.name), first.argsJson, secretField = true))
                         return StopRules.guard(it)
+                    }
+                    // 应用权限拒绝已经由执行入口作为工具结果交给模型:不结束任务,让模型换路线或向用户说明
+                    if (AppAccessDenied.isAppAccessCode(action.code)) {
+                        track.after(tools.verb(first.name), ok = false, guard = false, changed = null, recovery = false, app = null)
+                        continue
                     }
                     // 模型单步只会被守卫叫停、被确认关卡拦下或因作用在 Mika 自己身上不做;别的拒绝说明执行入口和这里对不上
                     check(action.hit != null || action.code == Refusals.OWN_APP) { "unexpected refusal ${action.code} for ${first.name}" }

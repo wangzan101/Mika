@@ -41,10 +41,11 @@ internal object ListApps : PhoneTool {
         val apps = ctx.phone.screen.listApps()
         // 也装在分身、工作资料一类的另一份用户里的:每一份单列一项,带上打开它要用的 user
         val copies = ctx.phone.screen.appCopies().groupBy { it.packageName }
+        val access = ctx.phone.screen.appAccess.current()
         return ok {
             put("packages", JsonArray(apps.map { JsonPrimitive(it.first) }))
             put("apps", JsonArray(apps.flatMap { (p, l) ->
-                listOf(buildJsonObject { put("package", p); put("label", l) }) +
+                listOf(buildJsonObject { put("package", p); put("label", l); put("blocked", p in access.blocked); put("screenShareAllowed", p in access.shareAllowed) }) +
                     copies[p].orEmpty().map { c -> buildJsonObject { put("package", p); put("label", c.label(l)); put("user", c.userId) } }
             }))
         }

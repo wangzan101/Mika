@@ -178,6 +178,11 @@ sealed interface ActionResult {
 
 /** Agent 观察和操作手机屏幕的唯一入口,由 Android 模块实现。 */
 interface ScreenPort {
+    val appAccess: com.wangzan101.mika.core.access.AppAccessPolicy get() = com.wangzan101.mika.core.access.AppAccessPolicy.ALLOW
+
+    /** 仅核对窗口归属,不读取屏幕内容。空屏可用;有窗口但归属未知时拒绝。 */
+    suspend fun checkAppAccess() {}
+
     suspend fun snapshot(): ScreenSnapshot
 
     /** 读一屏但不登记编号(模型手里的 ref 不受影响);不可逆判定用。 */

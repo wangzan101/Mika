@@ -44,4 +44,10 @@
     <string name="appaccess_category_media">影音内容</string>
     <string name="appaccess_category_other">其他</string>
     <string name="appaccess_category_unknown">未分类</string>
+
+    <string name="appaccess_share_title">分享 %1$s 的屏幕</string>
+    <string name="appaccess_share_body">此应用已禁用。屏幕分享许可只用于你主动分享，自动读取和操作仍然禁止。</string>
+    <string name="appaccess_share_allow">允许仅分享屏幕</string>
+    <string name="appaccess_share_unblock">移出黑名单</string>
+    <string name="appaccess_share_cancel">取消分享</string>
 </resources>

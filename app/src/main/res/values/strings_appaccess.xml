@@ -44,4 +44,10 @@
     <string name="appaccess_category_media">Media</string>
     <string name="appaccess_category_other">Other</string>
     <string name="appaccess_category_unknown">Uncategorized</string>
+
+    <string name="appaccess_share_title">Share the screen of %1$s</string>
+    <string name="appaccess_share_body">This app is blocked. Screen sharing lets you share it on purpose; automatic reading and operation stay blocked.</string>
+    <string name="appaccess_share_allow">Allow screen sharing only</string>
+    <string name="appaccess_share_unblock">Remove from blocked</string>
+    <string name="appaccess_share_cancel">Cancel sharing</string>
 </resources>

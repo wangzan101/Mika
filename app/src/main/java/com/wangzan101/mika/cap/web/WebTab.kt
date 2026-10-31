@@ -64,6 +64,8 @@ class WebTab(
         fun onCreateWindow(tab: WebTab, isUserGesture: Boolean, resultMsg: Message): Boolean = false
         /** 弹出的新标签第一次要去别的网站:标签池关掉它。 */
         fun onPopupRefused(tab: WebTab, url: String) {}
+        /** 页面要关掉自己这个窗口(window.close())。 */
+        fun onCloseWindow(tab: WebTab) {}
         /** 页面触发了下载(只保存,不打开、不安装)。 */
         fun onDownload(tab: WebTab, url: String, userAgent: String, contentDisposition: String?, mime: String?) {}
         /** 页面地址、标题或加载进度变了(给看得见的标签刷新地址栏和进度条)。 */
@@ -254,6 +256,10 @@ class WebTab(
             override fun onCreateWindow(v: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message?): Boolean {
                 if (resultMsg == null) return false
                 return listener?.onCreateWindow(this@WebTab, isUserGesture, resultMsg) ?: false
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                listener?.onCloseWindow(this@WebTab)
             }
 
             override fun onProgressChanged(v: WebView, newProgress: Int) {

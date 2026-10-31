@@ -69,6 +69,8 @@ class UserBrowser private constructor(private val app: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val wrapper = MutableContextWrapper(app)
     private var tab: WebTab? = null
+    /** 页面弹出的窗口开着时([tab] 是弹窗),打开它的那一页;没有弹窗为 null。 */
+    private var opener: WebTab? = null
     private val hosts = PageHosts<ViewGroup, Context>()
     private var probe: Runnable? = null
     /** 「给 Mika 登录」要登录的网站;平常浏览为 null。标签的版本规则在后台线程也会读。 */
@@ -176,10 +178,10 @@ class UserBrowser private constructor(private val app: Context) {
         refresh()
     }
 
-    /** 系统返回键:网页能后退就后退,不能就关掉网页回到起始页。没有打开的网页时返回 false。 */
+    /** 系统返回键:网页能后退就后退,不能时开着弹窗就关掉弹窗,否则关掉网页回到起始页。没有打开的网页时返回 false。 */
     fun systemBack(): Boolean {
         val v = tab?.view ?: return false
-        if (v.canGoBack()) v.goBack() else closePage()
+        if (v.canGoBack()) v.goBack() else if (!closePopup()) closePage()
         return true
     }
 
@@ -188,6 +190,8 @@ class UserBrowser private constructor(private val app: Context) {
         probe?.let(main::removeCallbacks)
         probe = null
         loginHost = null
+        opener?.destroy()
+        opener = null
         tab?.let { t ->
             tab = null
             t.destroy()
@@ -347,31 +351,37 @@ class UserBrowser private constructor(private val app: Context) {
         }
 
         /**
-         * 页面要开新窗口(target=_blank、window.open):只认用户点出来的,在当前页打开。
-         * 借一个临时标签接下这个窗口,等它第一次要去哪个网址([WebTab.popupOpener] 设成空,任何网址都会经
-         * [WebTab.Listener.onPopupRefused] 报上来),拿到网址就关掉它,在当前页打开那个网址。
+         * 页面要开新窗口(target=_blank、window.open):只认用户点出来的,只开一层。新窗口盖在当前页上显示,
+         * 当前页留着([opener]):「用 Google 登录」这类弹窗登录完要把结果交回打开它的页面,页面没了就停在白屏。
+         * 弹窗关掉自己,或在弹窗里退无可退时,回到打开它的那一页。
          */
         override fun onCreateWindow(tab: WebTab, isUserGesture: Boolean, resultMsg: Message): Boolean {
-            if (!isUserGesture) return false
+            if (!isUserGesture || tab !== this@UserBrowser.tab || opener != null) return false
             val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
-            val popup = WebTab(app, "browser-popup", OWNER)
-            popup.popupOpener = ""
-            popup.listener = object : WebTab.Listener {
-                override fun onPopupRefused(tab: WebTab, url: String) {
-                    if (popup.destroyed) return
-                    main.post {
-                        if (popup.destroyed) return@post
-                        popup.destroy()
-                        open(url)?.let { _notice.value = it }
-                    }
-                }
-            }
+            val popup = newTab()
             transport.webView = popup.view
             resultMsg.sendToTarget()
-            // 一直没去任何网址(空白窗口):过一会儿收掉
-            main.postDelayed({ if (!popup.destroyed) popup.destroy() }, POPUP_WAIT_MS)
+            (tab.view.parent as? ViewGroup)?.removeView(tab.view)
+            opener = tab
+            this@UserBrowser.tab = popup
+            place()
             return true
         }
+
+        override fun onCloseWindow(tab: WebTab) {
+            if (tab === this@UserBrowser.tab) closePopup()
+        }
+    }
+
+    /** 关掉弹出的窗口,回到打开它的那一页;没有弹窗时返回 false。 */
+    private fun closePopup(): Boolean {
+        val o = opener ?: return false
+        opener = null
+        tab?.destroy()
+        tab = o
+        place()
+        refresh()
+        return true
     }
 
     /**
@@ -426,7 +436,6 @@ class UserBrowser private constructor(private val app: Context) {
         const val OWNER = "user-browser"
         private const val PROBE_DELAY_MS = 1_500L
         private const val PROBE_RETRIES = 3
-        private const val POPUP_WAIT_MS = 10_000L
         private const val CONFIRM_WAIT_MS = 2_500L
         /** 收下的网站图标至少这么大,存的时候至多这么大(像素)。 */
         private const val MIN_ICON_PX = 16

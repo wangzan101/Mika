@@ -34,6 +34,9 @@ python3 tools/sandbox/build-runtime.py --check     # 重新生成并与仓库里
 
 `build-runtime.py` 里的 `WANT` 必须与 core 的 `SANDBOX_PACKAGES` 一致(`BundledRuntimeTest` 核对)。
 
+运行环境包含 `tzdata`。每次启动命令时,`ProcRunner.env` 都把手机当前的 IANA 时区写入 `TZ`,
+让命令行、Python 和 Node 的本地时间与手机一致,并保留夏令时和历史偏移规则;手机切换时区后,下一条命令随之更新。
+
 ## 文件
 
 - `sources.lock`:每行 `名称 版本 下载地址 SHA-256`。编译和打源码包都只用这里列出的源码包,下载后先核对 SHA-256。

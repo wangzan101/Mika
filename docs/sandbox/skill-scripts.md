@@ -38,5 +38,5 @@
 
 ## 运行环境
 
-沙箱基于 Alpine 3.22,`SANDBOX_PACKAGES`(`core/.../cap/sandbox/SandboxPackages.kt`)列出随 APK 自带的软件包:python3、nodejs、py3-pillow、py3-pypdf。其中 py3-pypdf 供 PDF 取字脚本用;py3-pillow 现在没有内置技能脚本用到,包本身先留着。
+沙箱基于 Alpine 3.22,`SANDBOX_PACKAGES`(`core/.../cap/sandbox/SandboxPackages.kt`)列出随 APK 自带的软件包:python3、nodejs、py3-pillow、py3-pypdf、tzdata。其中 py3-pypdf 供 PDF 取字脚本用;py3-pillow 现在没有内置技能脚本用到,包本身先留着;tzdata 让命令按手机当前时区处理本地时间。
 这些包在构建时装进随 APK 自带的运行环境(`tools/sandbox/build-runtime.py`,见 `tools/sandbox/README.md`);包有变化时,运行环境的版本随之改变,手机上启动时会自动重新解包。

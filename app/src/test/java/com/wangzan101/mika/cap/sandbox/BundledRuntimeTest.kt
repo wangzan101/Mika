@@ -57,7 +57,8 @@ class BundledRuntimeTest {
             procReadable = { true }, prepareDev = {}, clientScript = { "#!/bin/sh\n".toByteArray() },
         ).install { _, _ -> }
         assertEquals(SandboxStatus.Ready(network = false), state.status.value)
-        for (p in listOf("bin/sh", "usr/bin/python3", "usr/bin/node", "usr/local/bin/mika", "etc/apk/world")) {
+        for (p in listOf("bin/sh", "usr/bin/python3", "usr/bin/node", "usr/local/bin/mika", "etc/apk/world",
+            "usr/share/zoneinfo/Asia/Shanghai", "usr/share/zoneinfo/America/New_York", "usr/share/zoneinfo/Asia/Kathmandu")) {
             assertTrue(p, Files.exists(File(dirs.rootfs, p).toPath(), LinkOption.NOFOLLOW_LINKS))
         }
         val installed = File(dirs.rootfs, "lib/apk/db/installed").readText()

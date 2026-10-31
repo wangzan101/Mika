@@ -3,6 +3,7 @@ package com.wangzan101.mika.cap.sandbox
 import com.wangzan101.mika.core.workspace.SandboxPaths
 import java.io.File
 import java.io.InputStream
+import java.time.ZoneId
 
 /** 一次进程运行的原始结果;[timedOut] 只表示 Kotlin 侧的兜底时限到了。 */
 internal class ProcOutcome(val exitCode: Int, val output: ByteArray, val droppedBytes: Long, val timedOut: Boolean, val durationMs: Long)
@@ -39,6 +40,9 @@ object ProcRunner {
         put("PATH", PATH)
         put("LANG", "C.UTF-8")
         put("TMPDIR", "/tmp")
+        // 每次启动都读取手机当前时区;Alpine 的 libc 不会读取 Android 的系统时区。
+        // IANA 名称由运行环境自带的 tzdata 解析,保留历史偏移与夏令时规则。
+        put("TZ", ZoneId.systemDefault().id)
         bridgeName?.let { put("MIKA_BRIDGE", it) }
         token?.let { put("MIKA_TOKEN", it) }
         put("MIKA_CONVERSATION", conversationId)

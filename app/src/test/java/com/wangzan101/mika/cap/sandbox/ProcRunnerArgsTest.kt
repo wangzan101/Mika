@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.util.TimeZone
 
 class ProcRunnerArgsTest {
     private val dirs = SandboxDirs(File("/data/m/files/sandbox"), File("/data/m/cache/proot-tmp"), File("/data/app/lib/arm64"), JVM_GATE, SandboxTree())
@@ -39,12 +40,24 @@ class ProcRunnerArgsTest {
 
     @Test fun envIsMinimal() {
         val env = ProcRunner.env(dirs, null, null, "conv1")
-        assertEquals(setOf("PROOT_LOADER", "PROOT_TMP_DIR", "HOME", "PATH", "LANG", "TMPDIR", "MIKA_CONVERSATION"), env.keys)
+        assertEquals(setOf("PROOT_LOADER", "PROOT_TMP_DIR", "HOME", "PATH", "LANG", "TMPDIR", "TZ", "MIKA_CONVERSATION"), env.keys)
         assertEquals("/data/app/lib/arm64/libproot_loader.so", env["PROOT_LOADER"])
         assertEquals("/data/m/cache/proot-tmp", env["PROOT_TMP_DIR"])
         assertTrue(env.keys.none { it == "LD_PRELOAD" || it.startsWith("ANDROID_") })
         val bridged = ProcRunner.env(dirs, "mika-bridge-x", "tok", "conv1")
         assertEquals("mika-bridge-x", bridged["MIKA_BRIDGE"]); assertEquals("tok", bridged["MIKA_TOKEN"])
+    }
+
+    @Test fun envReadsPhoneTimezoneForEveryCommand() {
+        val original = TimeZone.getDefault()
+        try {
+            for (zone in listOf("Asia/Shanghai", "America/New_York", "Asia/Kathmandu", "UTC")) {
+                TimeZone.setDefault(TimeZone.getTimeZone(zone))
+                assertEquals(zone, ProcRunner.env(dirs, null, null, "conv1")["TZ"])
+            }
+        } finally {
+            TimeZone.setDefault(original)
+        }
     }
 
     @Test fun oddConversationIdsStayInsideWork() {

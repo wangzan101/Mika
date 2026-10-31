@@ -1,5 +1,5 @@
 {
- "version": "3.22.7-c0ea8846e28a",
+ "version": "3.22.7-8bd269ccbe0c",
  "alpine": "3.22.7",
  "packages": [
   {
@@ -400,12 +400,12 @@
   },
   {
    "name": "nodejs",
-   "version": "22.23.2-r0",
+   "version": "22.23.4-r0",
    "license": "MIT",
    "origin": "nodejs",
    "url": "https://nodejs.org/",
    "repo": "main",
-   "commit": "c788155709094e82d9e696656aef7a837ad11765"
+   "commit": "90f35cc6d20e6cb4410bf575de91bada52191009"
   },
   {
    "name": "openjpeg",
@@ -550,6 +550,15 @@
    "url": "https://gitlab.com/libtiff/libtiff",
    "repo": "main",
    "commit": "a19ba329cabf74e010b845cae4368898ba6dbc03"
+  },
+  {
+   "name": "tzdata",
+   "version": "2026e-r0",
+   "license": "Public-Domain",
+   "origin": "tzdata",
+   "url": "https://www.iana.org/time-zones",
+   "repo": "main",
+   "commit": "b108a146c5784aebc105d9b871bbcb5b19126c89"
   },
   {
    "name": "xz-libs",

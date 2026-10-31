@@ -34,6 +34,37 @@ class AndroidSandboxDeviceTest {
         assertFalse(r.network)
     }
 
+    @Test fun commandTimezoneFollowsPhone() {
+        val zone = java.time.ZoneId.systemDefault()
+        assertEquals(zone.id, sh("printf '%s' \"\$TZ\"").output)
+        checkTimezone(zone, "")
+    }
+
+    @Test fun bundledTimezonesSupportDstAndFractionalOffsets() {
+        for (id in listOf("Asia/Shanghai", "America/New_York", "Asia/Kathmandu", "UTC")) {
+            checkTimezone(java.time.ZoneId.of(id), "export TZ='$id'; ")
+        }
+    }
+
+    private fun checkTimezone(zone: java.time.ZoneId, prefix: String) {
+        // 冬夏各测一次:不能把手机此刻的 UTC 偏移写死成全年偏移。
+        for (date in listOf("2026-01-15T04:08:50Z", "2026-07-15T04:08:50Z")) {
+            val instant = java.time.Instant.parse(date)
+            val seconds = instant.epochSecond
+            val expected = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss Z")
+                .format(instant.atZone(zone))
+            val shell = sh(prefix + "date -d '@$seconds' '+%Y-%m-%d %H:%M:%S %z'")
+            assertEquals(shell.output, 0, shell.exitCode)
+            assertEquals(expected, shell.output.trim())
+            val python = sh(prefix + "python3 -c \"import time; print(time.strftime('%Y-%m-%d %H:%M:%S %z', time.localtime($seconds)))\"")
+            assertEquals(python.output, 0, python.exitCode)
+            assertEquals(expected, python.output.trim())
+            val node = sh(prefix + "node -e \"console.log(-new Date(${seconds}000).getTimezoneOffset()*60)\"")
+            assertEquals(node.output, 0, node.exitCode)
+            assertEquals(zone.rules.getOffset(instant).totalSeconds, node.output.trim().toInt())
+        }
+    }
+
     @Test fun exitCodeAndOutput() {
         val r = sh("echo out; echo err >&2; pwd; exit 3")
         assertEquals(r.output, 3, r.exitCode)

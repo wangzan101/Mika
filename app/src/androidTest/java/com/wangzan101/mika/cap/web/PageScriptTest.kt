@@ -330,6 +330,27 @@ class PageScriptTest {
     }
 
     @Test
+    fun cardAndCodeValuesNeverExposed() = runBlocking<Unit> {
+        open("export.html")
+        val raw = page.tree()
+        assertFalse(raw.contains("card-secret-6"))
+        assertFalse(raw.contains("otp-secret-4"))
+        assertEquals("已填 13 位", byId("card")!!.str("n"))
+        assertEquals("已填 12 位", byId("otp")!!.str("n"))
+        // textarea 里的字就是它的值:名字、读页、摘要里都不带(包着它的 label 没有别的字)
+        assertFalse(raw.contains("otp-area-secret-9"))
+        assertEquals("已填 17 位", byId("otparea")!!.str("n"))
+        val read = page.readPage(12_000, 0, scroll = false)
+        assertTrue(read, read.contains("正文一段"))
+        assertFalse(read, read.contains("otp-area-secret-9"))
+        val digest = page.digest()!!.toString()
+        assertTrue(digest, digest.contains("正文一段"))
+        assertFalse(digest, digest.contains("otp-area-secret-9"))
+        // 打字后的核对照旧读值比对(只在 App 里,不交给模型)
+        assertEquals(FieldValue.Text("card-secret-6"), page.fieldValue(refOf("card")))
+    }
+
+    @Test
     fun lateInjectionRotatesBridgePerDocument() = runBlocking<Unit> {
         val late = PageScript(tab, useDocumentStart = false)
         assertTrue(tab.load(fixture("host.html")))

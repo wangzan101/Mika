@@ -22,8 +22,9 @@
   <select name="city"><option value="bj">北京</option><option value="sh" selected>上海</option></select>
   <input type="checkbox" name="agree" checked>
   <textarea name="note">备注内容</textarea>
-  <input name="card" autocomplete="cc-number" value="card-secret-6">
-  <input name="otp" autocomplete="one-time-code" value="otp-secret-4">
+  <input id="card" name="card" autocomplete="cc-number" value="card-secret-6">
+  <input id="otp" name="otp" autocomplete="one-time-code" value="otp-secret-4">
+  <label><textarea id="otparea" name="otparea" autocomplete="one-time-code">otp-area-secret-9</textarea></label>
   <input id="pw2" name="pw2" type="text" autocomplete="current-password" value="pw-secret-5">
 </form>
 <iframe id="pwframe" src="frame-pw.html" style="width:200px;height:60px;border:0"></iframe>

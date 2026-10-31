@@ -152,7 +152,7 @@ On the phone, open Settings › Computer connection (MCP) and turn on “Allow r
 
 Call `mika_unlock_device` before starting a task. Proceed when `status` is `unlocked` and `device.ready` is true. Existing tasks waiting for unlock resume automatically after Android confirms it. An `awake` result only means the screen is on.
 
-PINs must have 4–16 digits. Passwords support 4–64 printable ASCII characters. Pattern locks, SIM PINs and unrecognized vendor credential screens are not entered (`unsupported_keyguard`). Phone control and accessibility must be available; some Xiaomi devices also require permission for debugging input injection.
+PINs must have 4–16 digits. Passwords support 4–64 printable ASCII characters. Pattern locks, SIM PINs and unrecognized vendor credential screens are not entered (`unsupported_keyguard`). Entering a PIN or password requires Android 13 or later: keys are delivered only to the system lock screen, and Android rejects them if another window (an app shown over the lock screen, an incoming call) has focus, so the credential cannot reach another app. On Android 12 only swipe/no-credential locks can be dismissed. Phone control and accessibility must be available; some Xiaomi devices also require permission for debugging input injection.
 
 Credentials are encrypted locally and never sent to models, computers or logs. These tools reject all arguments. A credential attempt is persisted before input: failure, timeout, cancellation or process interruption blocks subsequent attempts (`attempt_blocked`) until the credential is checked and saved again on the phone. Toggling permission or restarting the app does not reset this protection.
 

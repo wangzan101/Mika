@@ -2,6 +2,7 @@ package com.wangzan101.mika.device
 
 import android.app.KeyguardManager
 import android.content.Context
+import android.os.Build
 import android.os.PowerManager
 import android.os.UserManager
 import android.text.InputType
@@ -39,8 +40,12 @@ internal class AndroidDeviceAccessPort(context: Context, private val helper: () 
     override suspend fun wake(): Boolean = withContext(Dispatchers.IO) { runCatching { helper()?.wakeDevice() == true }.getOrDefault(false) }
     override suspend fun dismiss(): Boolean = withContext(Dispatchers.IO) { runCatching { helper()?.dismissDeviceKeyguard() == true }.getOrDefault(false) }
 
-    /** 只认主屏 SystemUI 中唯一、类型匹配的密码框。SIM PIN/无法识别的厂商页不尝试。 */
+    /**
+     * 只认主屏 SystemUI 中唯一、类型匹配的密码框。SIM PIN/无法识别的厂商页不尝试。
+     * 凭据按键要只投给 SystemUI 的窗口,靠安卓 13 起的定向注入;更早的系统在占位之前就报不支持,不留下暂停。
+     */
     override suspend fun credentialReady(kind: CredentialKind): Boolean = withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@withContext false
         if (!power.isInteractive || !keyguard.isKeyguardLocked || !keyguard.isDeviceLocked) return@withContext false
         val service = ScreenAccessibility.instance.value ?: return@withContext false
         val fields = mutableListOf<AccessibilityNodeInfo>()

@@ -17,7 +17,7 @@
 
 ```sh
 ./gradlew :core:test :app:testDebugUnitTest \
-  :app:assembleDebug :app:assembleDebugAndroidTest -PdevInstall
+  :app:assembleDebug :app:assembleDebugAndroidTest
 ```
 
 最终结果：core 2416 项、app JVM 977 项，无失败、无错误；core 中 2 项原有测试跳过。涵盖依赖方向、文档一致性、中英文资源、原有回归及新增功能测试。
@@ -26,7 +26,7 @@
 
 ## Redmi K70 / Android 16 真机
 
-通过独立的 Mika Dev（应用标识 `com.wangzan101.mika.dev`）验证，原发行版及其数据保留。开发版 USB MCP 使用独立端口 18765；没有复制原版模型 Key 或其他私有数据。
+通过独立的 Mika Dev（应用标识 `com.wangzan101.mika.dev`，本地改了应用标识的调试包，不在本次改动内）验证，原发行版及其数据保留。开发版 USB MCP 使用独立端口 18765；没有复制原版模型 Key 或其他私有数据。
 
 用户只在手机上配置真实锁屏凭据，测试脚本未读取或输出凭据。记录只包含以下非秘密状态：
 
@@ -48,7 +48,8 @@ Redmi 的 `pinEntry` 是 `com.android.keyguard.PasswordTextView`，不声明 edi
 - 真机验证使用用户现有 PIN；没有更改手机的锁屏类型。因此无密码/滑动和密码场景有自动测试覆盖，尚未在该真机上单独切换验证。
 - 密码支持 4–64 位可打印 ASCII 字符，PIN 为 4–16 位数字；不支持图案、SIM PIN 或未知的厂商凭据页。
 - 不支持重启后首次解锁前启动现有 Mika MCP。
+- 上面的真机记录早于「凭据按键只定向投给 SystemUI 窗口」（`ShellService.injectTo`）这一改动；改动后需在真机上重跑 PIN 解锁，并验证锁屏上方有其他窗口时返回 `input_failed` 且不输入。
 - 没有故意向真机提交错误 PIN；失败后停止重试由自动测试核验。
 - 没有变更原有任务付款/确认策略，也没有为验证配置模型或执行对外 App 任务。
 
-开发验收包可并排安装：`./gradlew :app:assembleDebug -PdevInstall`。不带这个属性时，原应用标识和默认构建行为保持不变。手机使用步骤见 [电脑连接说明](../mcp.md)。
+手机使用步骤见 [电脑连接说明](../mcp.md)。

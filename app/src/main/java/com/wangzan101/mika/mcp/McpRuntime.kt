@@ -9,6 +9,7 @@ import com.wangzan101.mika.core.mcp.McpActivity
 import com.wangzan101.mika.core.mcp.McpHost
 import com.wangzan101.mika.core.mcp.McpUsb
 import com.wangzan101.mika.core.shell.HelperHandoff
+import com.wangzan101.mika.device.AndroidDeviceAccess
 import com.wangzan101.mika.core.mcp.RemoteTasks
 import com.wangzan101.mika.settings.McpSettings
 import com.wangzan101.mika.settings.McpUsbSettings
@@ -33,7 +34,7 @@ sealed interface McpServerState {
  */
 class McpRuntime(
     private val context: Context, val settings: McpSettings, val usb: McpUsbSettings, private val tasks: RemoteTasks,
-    val device: com.wangzan101.mika.device.AndroidDeviceAccess,
+    val device: AndroidDeviceAccess,
 ) {
     private val _state = MutableStateFlow<McpServerState>(McpServerState.Off)
     val state: StateFlow<McpServerState> = _state.asStateFlow()

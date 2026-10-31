@@ -40,23 +40,20 @@
 
 它会检查手机、下载安装、打开需要的权限，需要你在手机上点的时候会停下来告诉你。API Key 由你自己在 Mika 里填，不经过它。
 
-**手机装好之后：从电脑使用 Mika**
+**CLI 与 Agent Skill**
 
-| 入口 | 适合谁 | 安装与维护 |
-| --- | --- | --- |
-| CLI | 终端、Shell 脚本 | [安装、升级、回退和卸载](docs/computer-install.md) |
-| Skill | Codex、Claude Code 等 Agent | [安装位置、启用、升级和卸载](docs/computer-install.md#skill安装)；自带 CLI 脚本 |
-| MCP | 已有 MCP 客户端 | [电脑连接配置](docs/mcp.md) |
+在终端、脚本、Codex 或 Claude Code 中使用 Mika,见[电脑端 CLI / Skill 的安装、升级和卸载](docs/computer-install.md)。Skill 自带 CLI 脚本;手机 APK 仍需单独安装和设置。
 
-CLI 和 Skill 从 v0.1.23 起提供。APK、CLI、Skill 分别安装;使用 Skill 不要求额外安装全局 CLI。准备好 Python、Git、pipx 后,可直接安装一个固定版本：
+**装好之后：让电脑上的 AI 工具直接用 Mika（MCP）**
 
-```bash
-pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
-mika --version
-mika devices --json
+手机用数据线连着电脑，在电脑上运行：
+
+```
+adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
+adb forward tcp:8765 tcp:8765
 ```
 
-然后按[完整指南](docs/computer-install.md#首次连接手机)运行 `connect` / `doctor`,或选择安装对应 Agent 的 Skill。CLI 自动管理 ADB 转发和连接令牌,无需配置 MCP。要让 AI 助手代装,把[电脑端安装指南](docs/computer-install.md)交给它,说明要装 CLI、Skill 还是两者,以及你使用的 Agent。
+第一条会打开 Mika 的电脑连接，并打印连接信息（地址 `http://127.0.0.1:8765/mcp` 和令牌）；把它们填进电脑上 AI 工具的 MCP 配置，它就能给 Mika 派任务、查进度、拿结果。手机上不用点；只经数据线连接、要令牌，Wi-Fi 上连不到；付款这类确认只能在手机上点。用方式二安装时，AI 助手会顺手帮你接好。详见[电脑连接说明](docs/mcp.md)。
 
 > **English summary**
 >

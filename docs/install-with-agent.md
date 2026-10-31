@@ -233,17 +233,9 @@ adb shell settings get secure enabled_accessibility_services
 
 ## 第 10 步（可选）：从电脑使用 Mika（CLI / Skill / MCP）
 
-仅在用户要求从电脑使用 Mika 时执行本步;已明确选择的入口直接沿用,只要求安装手机 APK 时不自动安装电脑工具。
+仅在用户要求电脑访问时执行,沿用用户已指定的入口和安装范围。选择 CLI 或 Skill 时,按[安装指南](computer-install.md)安装并完成连接检查,然后跳过下面的 MCP 手工配置。只有用户要求真实任务验收时才提交测试任务。
 
-### CLI 或 Skill
-
-按[电脑端安装指南](computer-install.md)完成对应安装。CLI 使用 pipx;Skill 安装给用户指定的 Agent 和范围,自带脚本,无需再装全局命令。指南覆盖依赖、Windows、固定版本、升级和卸载。官方 APK 从 v0.1.23 提供 API v1;自编译包以 `connect` 的兼容性检查为准。
-
-安装后验证 `--version`、`devices`、`connect --device SERIAL` 和 `doctor --device SERIAL`。只装 Skill 时用其实际目录里的随附脚本替代 `mika`。这条路径自动管理端口和令牌,不执行下面的 MCP 手工配置步骤。只有用户已经要求真实任务验收时才提交测试任务;`doctor` 通过不等于业务任务通过。
-
-### MCP 客户端
-
-用户选择 MCP 时继续下面的步骤。手机服务在回环地址监听,电脑经 ADB 转发连接;详细说明见[电脑连接（MCP）](mcp.md)。
+选择 MCP 客户端时继续下面的步骤。手机在回环地址监听,电脑经 ADB 转发连接;详见[电脑连接（MCP）](mcp.md)。
 
 1. 打开。手机助手（第 7 步）没在运行的话，这条命令也会启动它：
 

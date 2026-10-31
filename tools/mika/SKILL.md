@@ -9,9 +9,9 @@ Mika runs its own agent on Android. Give it the user's complete goal, target and
 
 ## Run the bundled client
 
-Resolve this skill's directory and invoke `python3 <skill-directory>/scripts/mika_cli.py`. It is self-contained and requires Python 3.10+. Prefer the bundled script so it stays with this Skill version; use an installed `mika` command only when its release is intentionally managed separately. On Windows, use `py -3` instead of `python3`. ADB mode additionally requires Android platform-tools and a phone already connected through USB or paired wireless debugging. The APK must include task API v1 (first shipped in Mika v0.1.23); an older MCP-only APK is insufficient. Open Mika once on the phone before connecting so it can create its bootstrap script.
+Resolve this skill's directory and invoke `python3 <skill-directory>/scripts/mika_cli.py`. It is self-contained and requires Python 3.10+. Use the installed `mika` command instead if available. ADB mode additionally requires Android platform-tools and a phone already connected through USB or paired wireless debugging. The APK must include task API v1; an older MCP-only APK is insufficient.
 
-In the examples below, `mika` is shorthand for the bundled Python invocation, or the installed command if you explicitly chose it.
+In the examples below, `mika` is shorthand for that bundled Python invocation when no command is installed.
 
 ```bash
 python3 <skill-directory>/scripts/mika_cli.py devices --json

@@ -1,25 +1,19 @@
 # Install, update and remove the computer CLI / Skill
 
-[简体中文](computer-install.md) · [Task commands and API](cli.en.md) · [MCP configuration](mcp.en.md)
-
-## Choose what you need
+[简体中文](computer-install.md) · [Connection and task commands](cli.en.md) · [MCP configuration](mcp.en.md)
 
 | Goal | What to install |
 | --- | --- |
 | Run Mika on Android | Install the APK from [Releases](https://github.com/wangzan101/Mika/releases) and complete [phone setup](setup-guide.en.md). |
-| Run `mika` from a terminal or script | Install the CLI below. |
-| Use Mika from Codex, Claude Code or another agent | Install the Skill below. It includes a CLI script and works on its own. |
-| Use an existing MCP client | Follow the [MCP guide](mcp.en.md); CLI and Skill installation is optional. |
+| Submit tasks from a terminal or script | Install the CLI and use `mika`. |
+| Use Mika from Codex or Claude Code | Install the Skill; its bundled CLI script works without a global command. |
+| Use an existing MCP client | Follow the [MCP guide](mcp.en.md). |
 
-The APK, CLI and Skill are separate installations. The computer CLI/Skill shipped in **Mika v0.1.23** and require task API v1 on the phone. This guide pins examples to `v0.1.23`. Before installing or updating, choose a stable release and replace the tag in the commands with that release. Do not choose a tag older than v0.1.23. For custom APK builds, rely on the API compatibility check in `connect`.
-
-The Python package is named `mika-phone-cli`; its command is `mika`. The CLI version (`0.1.0` in the v0.1.23 source) and APK version are numbered separately. `mika --version` does not report the phone version. `mika connect` checks API compatibility.
+The APK, CLI and Skill are separate installations. Official APKs provide task API v1 starting in **v0.1.23**; for custom builds, rely on the compatibility check in `connect`. Examples pin `v0.1.23`; you can substitute a newer stable tag from Releases.
 
 ## CLI: install
 
-### Prerequisites
-
-The CLI requires Python 3.10+. For a new setup, use Python 3.11+ to meet current pipx requirements. Install Git and [pipx](https://pipx.pypa.io/latest/how-to/install-pipx.html). ADB connections also need [Android platform-tools](https://developer.android.com/tools/releases/platform-tools).
+The CLI requires Python 3.10+, Git and [pipx](https://pipx.pypa.io/latest/how-to/install-pipx.html); Python 3.11+ is recommended for a new environment. ADB connections also require [Android platform-tools](https://developer.android.com/tools/releases/platform-tools).
 
 **macOS (Homebrew):**
 
@@ -37,20 +31,18 @@ sudo apt install python3 python3-venv pipx git adb
 pipx ensurepath
 ```
 
-For other Linux distributions, follow pipx's installation guide and install Git and ADB using your distribution's package manager.
+For other Linux distributions, follow pipx's instructions and use your distribution's package manager for dependencies.
 
-**Windows (PowerShell):** Install [Python](https://www.python.org/downloads/windows/) with its `py` launcher and [Git](https://git-scm.com/downloads/win). Extract Windows platform-tools and add its directory to PATH, then run:
+**Windows (PowerShell):** Install [Python](https://www.python.org/downloads/windows/) with the `py` launcher and [Git](https://git-scm.com/downloads/win). Extract Windows platform-tools and add its directory to PATH, then run:
 
 ```powershell
 py -m pip install --user pipx
 py -m pipx ensurepath
 ```
 
-Close and reopen your terminal. Check `pipx --version`, `git --version` and `adb version`. Check Python with `python3 --version` on macOS/Linux or `py -3 --version` on Windows. `pipx ensurepath` adds your user command directory to PATH; `sudo pipx` is unnecessary.
+Reopen the terminal and check `pipx --version`, `git --version` and `adb version`. Check Python with `python3 --version`, or `py -3 --version` on Windows.
 
-### Install and verify
-
-Run from any directory in a macOS/Linux shell or Windows PowerShell:
+With dependencies ready, install and verify from any directory (also works in PowerShell):
 
 ```bash
 pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
@@ -59,13 +51,11 @@ mika --help
 pipx list
 ```
 
-The list should show `mika-phone-cli` and its `mika` command. pipx fetches the source; you do not need to keep a Mika checkout. GitHub is the current distribution source. Do not shorten the command to `pipx install mika-phone-cli`: the project is not published on PyPI and has no Mika Homebrew or WinGet package.
-
-Use `pipx environment` to find installation directories. Locate the executable with `command -v mika` on macOS/Linux or `(Get-Command mika).Source` in PowerShell.
+The list should show package `mika-phone-cli` and command `mika`. pipx fetches the source from GitHub; you do not need to keep a checkout. No PyPI package is currently published. The CLI's own version (`0.1.0` in this tag) is numbered separately from the APK and does not report the phone version.
 
 ## CLI: update, roll back and uninstall
 
-Check the current source tag with `pipx list --json` and choose a target tag from Releases. To switch a pinned source reliably, remove this package with pipx and install the target. This example installs or restores v0.1.23:
+Record the current source tag with `pipx list --json`, then choose a target from Releases. To switch a pinned source, uninstall with pipx and install again, replacing the tag below with the target:
 
 ```bash
 pipx uninstall mika-phone-cli
@@ -74,120 +64,83 @@ mika --version
 pipx list --json
 ```
 
-To update, substitute the newer tag; to roll back, use a previously working tag that still supports API v1. Several APK releases may contain the same CLI version number, so also check the installation source in `pipx list --json`. A pinned tag does not follow the next release, and `pipx upgrade mika-phone-cli` does not change that tag.
+Use the newer tag to update or the previous tag to roll back; both must support API v1. Check the tag in the installation source because the CLI version may not change with each APK release. `pipx upgrade mika-phone-cli` does not switch to the next tag. If installation fails, restore the recorded previous tag.
 
-For a local source installation, use the same uninstall step followed by `pipx install ./tools/mika` from the target version's repository root, or switch to a release tag using the GitHub URL above. If the new installation fails, install the recorded previous tag to restore the CLI. If you previously installed with pip in a virtual environment, run `python -m pip uninstall mika-phone-cli` in that environment to remove the old copy and avoid PATH selecting it.
+For local source installations, use the same steps but install with `pipx install ./tools/mika` from the repository root.
 
-Uninstall by **package name**, not command name:
+To uninstall only, use the package name and confirm it is no longer listed:
 
 ```bash
 pipx uninstall mika-phone-cli
 pipx list
 ```
 
-The package should no longer appear. If `mika` still runs, locate the executable as described above and remove that other installation using its original installer. Do not delete the entire pipx directory.
-
 ## Skill: install
 
-### Use the skills tool
+The Skill's bundled script needs Python 3.10+, plus platform-tools for ADB connections. Use an installer or copy the folder manually; neither requires a global `mika` command.
 
-[skills](https://github.com/vercel-labs/skills) is a separate Agent Skill manager. This method also needs Node.js 22.20+ (including npm/npx) and Git. Running Mika's bundled script still requires Python and ADB as described above, but no globally installed `mika` command.
+### Use the skills installer
 
-Choose your agent and install at **user scope** (available across projects):
+The [skills tool](https://github.com/vercel-labs/skills) additionally requires Node.js 22.20+ (including npm/npx) and Git. This installs for Codex at **user scope**, available across projects:
 
 ```bash
-# Codex
 npx skills add https://github.com/wangzan101/Mika/tree/v0.1.23/tools/mika --skill mika --agent codex --global --copy
-
-# Claude Code (choose this if you only use Claude Code)
-npx skills add https://github.com/wangzan101/Mika/tree/v0.1.23/tools/mika --skill mika --agent claude-code --global --copy
+npx skills list --global --agent codex
 ```
 
-`--copy` installs a complete copy, so you do not need to keep the download directory. To install for both agents, use `--agent codex claude-code`. For a project installation, run from the project root and omit `--global`; use the same scope when listing, updating or removing it. On first use, npx may ask to download the skills tool.
-
-Installation directories (`~` means your user directory, including on Windows):
+For Claude Code, replace `--agent codex` with `--agent claude-code`; use `--agent codex claude-code` for both. `--copy` installs complete copies without retaining the download directory. For project scope, run from the project root and omit `--global`; use that same scope when listing, updating and removing it.
 
 | Agent | User scope | Project scope |
 | --- | --- | --- |
 | Codex | `~/.agents/skills/mika/` | `.agents/skills/mika/` |
 | Claude Code | `~/.claude/skills/mika/` | `.claude/skills/mika/` |
 
-Verify installation:
+Check that the directory contains `SKILL.md` and `scripts/mika_cli.py`, then run the bundled script. For Codex at user scope:
 
 ```bash
-npx skills list --global --agent codex
 python3 ~/.agents/skills/mika/scripts/mika_cli.py --version
 ```
 
-For Claude Code, replace `codex` with `claude-code` and use `~/.claude/skills/mika/`. For a project installation, omit `--global` and remove the leading `~/` from the script path. In PowerShell, invoke the user-scoped script with:
+On Windows PowerShell:
 
 ```powershell
 py -3 "$env:USERPROFILE\.agents\skills\mika\scripts\mika_cli.py" --version
 ```
 
-The installed directory must contain both `SKILL.md` and `scripts/mika_cli.py`; copying only the Markdown file is insufficient. In Codex, select `mika` from the skill picker or invoke `$mika`; in Claude Code, use `/mika`. If it does not appear, start a new agent session and check the selected user/project scope. See the [Codex](https://developers.openai.com/codex/skills/) and [Claude Code](https://code.claude.com/docs/en/skills) documentation for discovery rules.
+Use the `.claude` path for Claude Code. For project scope, remove the leading `~/` (use the current project's path on Windows). In Codex, select `mika` from the skill picker or use `$mika`; in Claude Code, use `/mika`. If it does not appear, restart the session and check the installation scope. See the official [Codex](https://developers.openai.com/codex/skills/) and [Claude Code](https://code.claude.com/docs/en/skills) discovery rules.
 
-### Without Node.js: install manually
+### Manual installation (no Node.js needed)
 
-Download **Source code (zip)** from the chosen release and extract it. Copy the **complete** `tools/mika` folder to the `mika` directory in the table above, or copy it from a Git checkout of that tag. The result should be `…/skills/mika/SKILL.md`, not `…/skills/mika/mika/SKILL.md`. If the destination exists, follow the update procedure below instead of merging folders. Run the same bundled-script check and verify discovery in your agent.
-
-Manual copies have no source version recorded by the installer. Even if skill listings discover them, use folder-based updates and removal for this method.
+Download **Source code (zip)** from the selected release, extract it and copy the complete `tools/mika` folder to a destination from the table. The result should be `…/skills/mika/SKILL.md`, without an extra nested `mika` folder. If the destination exists, back it up and replace it as described below instead of merging folders. Verify the script and agent discovery as above.
 
 ## Skill: update, roll back and uninstall
 
-**Managed by skills:** Choose a release tag and repeat `skills add` for the same agent and scope. It replaces that `mika` copy. If you edited the installed Skill, back up your changes outside the skill directories first. This example installs or restores v0.1.23 for Codex at user scope:
+**Installer-managed copies:** Repeat the original `skills add` command with the target tag in its URL, keeping the same agent and scope. Use a newer tag to update or the previous tag to roll back, then repeat the `skills list` and script checks. Back up any edits outside the skill directories first. Automation can add `--yes` to confirm replacing the skill.
 
-```bash
-npx skills add https://github.com/wangzan101/Mika/tree/v0.1.23/tools/mika --skill mika --agent codex --global --copy
-npx skills list --global --agent codex
-```
-
-Replace the tag to update or roll back, then recheck the bundled script and agent skill list. Change pinned releases with an explicit `add` URL instead of relying on an update command to infer the next stable release. In automation, add `--yes` to skip installer prompts only when you intend to overwrite that skill.
-
-Remove Mika from the selected scope, including its copies for other agents in that scope:
+For a complete uninstall, specify the skill name and installation scope:
 
 ```bash
 npx skills remove mika --global --yes
 npx skills list --global
 ```
 
-For project installations, omit `--global` and run from the original project root. This removes Mika for all agents in that scope; other skills are retained. Use `npx skills list --global` (or `npx skills list` for the project) to confirm Mika is gone. Agent directories may share a canonical copy, so do not treat removal of an agent-specific link as a complete uninstall.
+For project scope, omit `--global` and run from the original project root. This removes Mika's copies for all agents in that scope while retaining other skills. Mika should no longer appear in the list.
 
-**Manual copies:** To update or roll back, move the old `mika` folder outside the skill directories as a backup, then copy the complete folder from the target tag. To uninstall, delete only the `mika` folder you installed. Do not remove all of `.agents/skills` or `.claude/skills`. Start a new agent session and confirm Mika is gone.
+**Manual copies:** To update or roll back, move the old `mika` folder outside the skill directories as a backup, then copy the complete folder from the target tag. To uninstall, delete only that `mika` folder. Restart the agent session to confirm the result. Manual copies have no installer-recorded source version; manage their updates and removal as folders.
 
-## Connect your phone for the first time
+## Connection check after installation
 
-Install Mika v0.1.23 or a newer compatible APK on the phone, **open Mika once** to generate the connection script, and configure its model. The phone must be listed by ADB over USB or paired wireless debugging. The computer CLI does not need a model API key; keep it in Mika on the phone.
+Open Mika once on the phone so it creates its connection script. Follow [Connect](cli.en.md#connect) to run `devices`, `connect` and `doctor`; with only the Skill installed, use its bundled script instead of `mika`. `doctor` checks connectivity; see [Tasks](cli.en.md#tasks) to verify task execution separately.
 
-```bash
-mika devices --json
-mika connect --device SERIAL --json
-mika doctor --device SERIAL --json
-```
-
-Replace `SERIAL` with the device identifier from the first command. With only the Skill installed, substitute `python3 <actual-skill-directory>/scripts/mika_cli.py` for `mika` (`py -3` on Windows). `connect` enables computer access. The CLI manages temporary forwarding automatically; there is no MCP configuration or token copying step. `doctor` checks connectivity, not whether a model task succeeds.
-
-Submit a task only when the user has requested one. A harmless goal can verify the complete flow:
-
-```bash
-mika --device SERIAL task run --goal 'Compute 37 + 58. Reply with the result; do not operate apps or change data.' --json
-mika --device SERIAL task wait TASK_ID --timeout 45 --json
-```
-
-Replace `TASK_ID` with the returned ID. If still running, check it or wait again within a bounded interval. Report completion only after observing `done` and checking the answer. See [task commands](cli.en.md) for questions, failures and cancellation.
-
-Removing the computer CLI/Skill does not uninstall the APK, erase phone data or disable computer access. To stop remote access, turn off the relevant USB/LAN switch under Settings > Computer access on the phone.
+Removing the computer tools does not erase phone data or disable computer access. To stop remote access, turn off the relevant switch under Settings > Computer access on the phone.
 
 ## Troubleshooting
 
 | Symptom | Action |
 | --- | --- |
-| `pipx` or `mika` not found | Run `pipx ensurepath` and reopen the terminal. On Windows, use `py -m pipx ensurepath` if pipx is not on PATH yet. Check `pipx environment` and the actual executable location. |
-| `externally-managed-environment` | Install pipx with your system package manager, then install Mika with pipx instead of forcing it into system Python. |
-| Git, ADB or Python not found | Install the prerequisites and make them available to the agent's environment too. The CLI accepts an absolute ADB path with `--adb`. |
-| Skill is listed but its script fails | Check the bundled script and Python version; use `py -3` on Windows. Installing only `SKILL.md` is insufficient. |
-| Old Skill content after updating | Check for both user and project copies or another skill with the same name. Inspect the loaded path and start a new session. |
-| `incompatible_api` | Update the phone APK to one with API v1, open Mika and run `connect` again. |
-| Connection script missing on the phone | Confirm the APK is installed and has been opened at least once, then run `connect`. |
-| Multiple devices, `unauthorized` or `offline` | Select `--device`, approve ADB on the phone or restore its connection. Do not guess another device. |
-| GitHub download fails | Download the release's source zip manually, extract it and run `pipx install ./tools/mika` from its root, or install the Skill manually. |
+| `pipx` or `mika` not found | Run `pipx ensurepath` and reopen the terminal; on Windows, use `py -m pipx ensurepath` if needed. Use `pipx environment` to find installation directories. |
+| `mika` still runs after uninstall | Locate other copies with `command -v mika` (`(Get-Command mika).Source` in PowerShell) and remove them with their original installer. For pip installations, run `python -m pip uninstall mika-phone-cli` inside that virtual environment. |
+| `externally-managed-environment` | Install pipx through your system package manager, then install Mika with pipx instead of forcing it into system Python. |
+| Skill is missing or still outdated | Check user/project scope, the loaded path and duplicate names. Confirm that scripts were copied, then restart the session. |
+| ADB, connection script or API unavailable | Check that ADB is on PATH, the APK has been opened and it supports API v1. Select and authorize the phone using the [connection guide](cli.en.md#connect). |
+| GitHub download fails | Download the release source zip manually, run `pipx install ./tools/mika` from its extracted root, or copy the Skill manually. |

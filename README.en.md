@@ -40,23 +40,20 @@ Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.m
 
 It checks the phone, downloads and installs Mika, turns on the permissions it needs, and stops to tell you whenever something needs a tap on the phone. You enter your API key in Mika yourself; it never goes through the agent.
 
-**After phone setup: use Mika from your computer**
+**CLI and Agent Skill**
 
-| Entry point | For | Installation and maintenance |
-| --- | --- | --- |
-| CLI | Terminals and shell scripts | [Install, update, roll back and uninstall](docs/computer-install.en.md) |
-| Skill | Codex, Claude Code and other agents | [Locations, activation, updates and removal](docs/computer-install.en.md#skill-install); includes a CLI script |
-| MCP | Existing MCP clients | [Computer access configuration](docs/mcp.en.md) |
+For terminals, scripts, Codex or Claude Code, see [installing, updating and removing the computer CLI / Skill](docs/computer-install.en.md). The Skill includes its own CLI script; phone APK setup is separate.
 
-CLI and Skill support shipped in v0.1.23. The APK, CLI and Skill are separate installations; the Skill works without a globally installed CLI. With Python, Git and pipx ready, install a pinned release:
+**After installing: let AI tools on your computer use Mika (MCP)**
 
-```bash
-pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
-mika --version
-mika devices --json
+With the phone connected by USB, run on the computer:
+
+```
+adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
+adb forward tcp:8765 tcp:8765
 ```
 
-Then follow the [full guide](docs/computer-install.en.md#connect-your-phone-for-the-first-time) to run `connect` / `doctor`, or install the Skill for your agent. The CLI manages ADB forwarding and connection tokens without MCP configuration. To delegate setup, give your agent the [computer installation guide](docs/computer-install.en.md), specify CLI, Skill or both, and name the agent you use.
+The first command turns on Mika's computer access and prints the connection info (URL `http://127.0.0.1:8765/mcp` and a token). Add them to your AI tool's MCP config, and it can hand Mika tasks, check progress and get results. No tapping on the phone; USB only and token-protected, not reachable over Wi-Fi; confirmations such as payments can only be approved on the phone. With option 2, the AI agent can set this up for you. See the [computer access guide](docs/mcp.en.md).
 
 > **Language**
 >

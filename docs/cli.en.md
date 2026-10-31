@@ -24,17 +24,9 @@ flowchart LR
 
 ## Installation and maintenance
 
-Use the [CLI / Skill installation guide](computer-install.en.md) to choose a terminal CLI or agent Skill. It covers prerequisites on macOS, Linux and Windows, verification, pinned updates/rollback, removal and troubleshooting. The phone needs task API v1, first shipped in Mika v0.1.23.
+See the [CLI / Skill installation guide](computer-install.en.md) for dependencies, installation, updates, rollback and removal. The phone must support task API v1, first shipped in official APK v0.1.23.
 
-With Python, Git and pipx ready, install the CLI from a fixed release in any directory:
-
-```bash
-pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
-mika --version
-mika --help
-```
-
-The Skill's bundled script works without a global CLI installation. In that case, `mika` below means `python3 <actual-skill-directory>/scripts/mika_cli.py` (`py -3` on Windows).
+With only the Skill installed, `mika` below means `python3 <actual-skill-directory>/scripts/mika_cli.py` (`py -3` on Windows).
 
 ## Connect
 

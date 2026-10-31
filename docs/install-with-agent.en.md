@@ -233,17 +233,9 @@ Open Settings and tell me the Android version
 
 ## Step 10 (optional): Use Mika from the computer (CLI / Skill / MCP)
 
-Run this step only when the user wants computer access. Follow an already specified entry point; a request to install only the APK does not imply installing computer tools.
+Do this only when the user wants computer access, following any entry point and installation scope they already specified. For CLI or Skill, use the [installation guide](computer-install.en.md) and its connection checks, then skip the manual MCP steps below. Submit a test task only if the user requested task verification.
 
-### CLI or Skill
-
-Follow the [computer installation guide](computer-install.en.md). Use pipx for the CLI, or install the Skill for the user's chosen agent and scope. The Skill includes its own script and does not require a global CLI. The guide covers dependencies, Windows, pinned versions, updates and removal. Official APKs provide API v1 starting in v0.1.23; use the compatibility check in `connect` for custom builds.
-
-Verify `--version`, `devices`, `connect --device SERIAL` and `doctor --device SERIAL`. For a Skill-only installation, use its actual bundled script path instead of `mika`. This path manages forwarding and tokens automatically; skip the manual MCP configuration below. Submit a test task only if the user has already requested task verification. A successful `doctor` does not prove task execution.
-
-### MCP client
-
-Continue below when the user chooses MCP. The service listens on the phone's loopback address and the computer connects through ADB forwarding. See [computer access (MCP)](mcp.en.md) for details.
+For an MCP client, continue below. The phone listens on its loopback address; the computer connects through ADB forwarding. Details: [Computer access (MCP)](mcp.en.md).
 
 1. Turn it on. This also starts the phone helper from step 7 if it isn't running:
 
@@ -315,9 +307,7 @@ Tell the user:
 
 ## Finally: a short summary for the user
 
-If computer tools were installed, include the CLI/Skill source tag, actual installation directory and scope, and the checks that passed. For CLI/Skill maintenance, link the [installation guide](computer-install.en.md); reconnect after a phone reboot with `connect`. The manual-forwarding and token-update instructions below apply to MCP clients.
-
 When everything is done, tell the user in their language:
 
-- **What was done**: which version was installed; whether notifications, accessibility and the battery allowlist are set; how the phone helper was started and whether it is ready. Say honestly if a step failed or was skipped.
-- **What the user still needs to do**: add a model in Settings › Model (if not done yet); pair wireless debugging (if they chose A but haven't finished); if only B was used, remind them to run that command again from the computer after a phone restart; then send a simple task to try it out. If the MCP option in step 10 was used: whether Mika was added to your MCP configuration, and that `adb forward` must be run again after replugging the cable, and the step 10 command after a phone restart.
+- **What was done**: which APK version was installed; for CLI/Skill, the source tag, installation scope and checks that passed; whether notifications, accessibility and the battery allowlist are set; how the phone helper was started and whether it is ready. Say honestly if a step failed or was skipped.
+- **What the user still needs to do**: add a model in Settings › Model (if not done yet); pair wireless debugging (if they chose A but haven't finished); if only B was used, remind them to run that command again from the computer after a phone restart; then send a simple task to try it out. For CLI/Skill, link the [maintenance guide](computer-install.en.md) and explain that phone reboots require `connect` again. For MCP, report whether configuration is complete and explain forwarding after replugging and token renewal after reboot.

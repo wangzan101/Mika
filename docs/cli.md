@@ -24,17 +24,9 @@ flowchart LR
 
 ## 安装与维护
 
-从 [CLI / Skill 安装指南](computer-install.md)选择终端 CLI 或 Agent Skill。指南包含 macOS、Linux、Windows 的依赖、安装检查、固定版本升级/回退、卸载和故障排查;手机需要 Mika v0.1.23 起提供的任务 API v1。
+依赖、安装、升级、回退和卸载见 [CLI / Skill 安装指南](computer-install.md)。手机需要 task API v1,官方 APK 从 v0.1.23 提供。
 
-已准备好 Python、Git 和 pipx 时,可在任意目录安装固定 release 的 CLI：
-
-```bash
-pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
-mika --version
-mika --help
-```
-
-只装 Skill 也能使用其随附脚本,无需另外安装全局命令。下面的 `mika` 在这种情况下代表 `python3 <实际Skill目录>/scripts/mika_cli.py`（Windows 用 `py -3`）。
+只装 Skill 时,下面的 `mika` 代表 `python3 <实际Skill目录>/scripts/mika_cli.py`（Windows 用 `py -3`）。
 
 ## 连接手机
 

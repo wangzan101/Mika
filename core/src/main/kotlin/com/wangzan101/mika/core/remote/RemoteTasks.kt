@@ -14,7 +14,11 @@ data class RemoteTask(
     val goal: String,
     val createdAtMs: Long,
     val state: TaskState?,
+    val steers: List<RemoteSteer> = emptyList(),
 )
+
+/** 只报告电脑追加的消息;joined 表示进入当前任务上下文,不是执行成功。 */
+data class RemoteSteer(val messageId: String, val state: String)
 
 sealed interface StartOutcome {
     data class Started(val task: RemoteTask) : StartOutcome
@@ -32,6 +36,8 @@ interface RemoteTasks {
     fun list(limit: Int): List<RemoteTask>
     /** 只在任务正等着回答追问时调用;交给任务时返回 true。 */
     fun answer(id: String, text: String): Boolean
+    /** 原子确认消息进入当前任务的收件箱;不能转成新任务。返回消息编号,拒绝为 null。 */
+    fun steer(id: String, text: String): String?
     fun cancel(id: String): Boolean
 }
 
@@ -110,5 +116,8 @@ object RemoteStatus {
             null, TaskState.Idle, TaskState.Cancelled -> Unit
         }
         put("answerable", s is TaskState.WaitingInput)
+        if (t.steers.isNotEmpty()) putJsonArray("steers") {
+            t.steers.forEach { add(buildJsonObject { put("message_id", it.messageId); put("state", it.state) }) }
+        }
     }
 }

@@ -42,4 +42,18 @@ class SteerJoinTest {
         assertEquals(listOf("光合作用是……的过程。", null), after.map { it.finished })
         assertEquals(listOf(null, null), after.map { it.interrupted })
     }
+
+    @Test fun remoteStatusExcludesLocalMessagesAndDistinguishesReceiptConsumptionAndDiscard() {
+        val local = SteerNote("local", "phone-only text", SteerState.Joined)
+        val remote = SteerNote("remote", "only today", SteerState.Received, remote = true)
+        assertEquals(listOf(com.wangzan101.mika.core.remote.RemoteSteer("remote", "received")), remoteSteers(listOf(local, remote)))
+        val joined = SteerJoin().joined(listOf(local, remote), "remote")
+        assertEquals(listOf(com.wangzan101.mika.core.remote.RemoteSteer("remote", "joined")), remoteSteers(joined))
+        assertEquals(listOf(com.wangzan101.mika.core.remote.RemoteSteer("remote", "not_applied")),
+            remoteSteers(listOf(remote.copy(state = SteerState.Cancelled))))
+        assertEquals(listOf(com.wangzan101.mika.core.remote.RemoteSteer("remote", "not_applied")),
+            remoteSteers(listOf(local, remote), finished = true))
+        assertEquals(listOf(com.wangzan101.mika.core.remote.RemoteSteer("remote", "joined")),
+            remoteSteers(joined, finished = true))
+    }
 }

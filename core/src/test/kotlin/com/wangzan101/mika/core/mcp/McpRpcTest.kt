@@ -120,7 +120,7 @@ class McpRpcTest {
         assertEquals("mika", result["_meta"]!!.jsonObject[McpRpc.META_SERVER]!!.jsonObject["name"]!!.jsonPrimitive.content)
 
         val l = post("""{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{${modernMeta()}}}""", modernHeaders("tools/list"))
-        assertEquals(6, l.json()["result"]!!.jsonObject["tools"]!!.jsonArray.size)
+        assertEquals(7, l.json()["result"]!!.jsonObject["tools"]!!.jsonArray.size)
     }
 
     @Test fun modernToolCallChecksMirroredHeaders() {

@@ -301,11 +301,29 @@ class TaskRun(
         }
     }
 
-    /** 收尾时还没交给模型的插话:作为这个对话的下一件事;停止了([cancelled])就一起作废。 */
+    /** 远程追加只归当前任务;与状态发布互斥,收件箱再原子核对是否已经结束/取消。 */
+    fun steerRemote(text: String): String? = synchronized(publishLock) delivery@{
+        if (ended || stopPressed || mcpExternalId == null || _state.value !is TaskState.Running) return@delivery null
+        if (loop?.state?.value?.let { it !is TaskState.Running } == true) return@delivery null
+        val id = UUID.randomUUID().toString()
+        synchronized(service.taskState.shownLock) {
+            // 先记消息,再唤醒模型;消费事件可能紧跟着发生,不能把 Joined 改回 Received。
+            _steers.value = _steers.value + SteerNote(id, text, SteerState.Received, remote = true)
+            if (inbox.steerCurrent(id, text) != InputReceipt.Accepted) {
+                _steers.value = _steers.value.filterNot { it.id == id }
+                return@delivery null
+            }
+            id
+        }
+    }
+
+    /** 手机插话可转下一任务;远程插话只能用于当前任务,未消费的一律作废,不改变来源和权限。 */
     fun handoffUnconsumed(cancelled: Boolean = stopPressed) {
         val left = inbox.handoffUnconsumed()
-        markSteers(left.map { it.messageId }.toSet(), if (cancelled) SteerState.Cancelled else SteerState.Next)
-        if (!cancelled) left.forEach { service.deferMessage(conversationId, it.text) }
+        val (discard, next) = left.partition { cancelled || it.currentTaskOnly }
+        markSteers(discard.map { it.messageId }.toSet(), SteerState.Cancelled)
+        markSteers(next.map { it.messageId }.toSet(), SteerState.Next)
+        next.forEach { service.deferMessage(conversationId, it.text) }
     }
 
     /** 已交给这个任务的插话,随这一轮存进对话。 */

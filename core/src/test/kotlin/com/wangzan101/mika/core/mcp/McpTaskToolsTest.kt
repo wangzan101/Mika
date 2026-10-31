@@ -53,9 +53,9 @@ class McpTaskToolsTest {
 
     private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.content
 
-    @Test fun toolListHasTheSixHighLevelTools() {
+    @Test fun toolListHasTheSevenHighLevelTools() {
         val names = tools.definitions().map { it.jsonObject.str("name") }
-        assertEquals(listOf("mika_run_task", "mika_task_status", "mika_wait_task", "mika_answer", "mika_cancel_task", "mika_list_tasks"), names)
+        assertEquals(listOf("mika_run_task", "mika_task_status", "mika_wait_task", "mika_answer", "mika_steer_task", "mika_cancel_task", "mika_list_tasks"), names)
         tools.definitions().forEach { t ->
             val schema = t.jsonObject["inputSchema"]!!.jsonObject
             assertEquals("object", schema.str("type"))
@@ -227,5 +227,23 @@ class McpTaskToolsTest {
         assertFalse(McpTaskTools.isConversation("mcp-"))
         assertFalse(McpTaskTools.isConversation("mcp-3F2C1D7E-0000-4000-8000-000000000000"))
         assertFalse(McpTaskTools.isConversation(JsonPrimitive("x").content))
+    }
+
+    @Test fun steeringIsAMutatingToolAndUsesTheSharedValidation() = runTest {
+        val definition = tools.definitions().first { it.jsonObject.str("name") == McpTaskTools.STEER }.jsonObject
+        assertFalse(definition["annotations"]!!.jsonObject["readOnlyHint"]!!.jsonPrimitive.boolean)
+        assertTrue(definition["annotations"]!!.jsonObject["openWorldHint"]!!.jsonPrimitive.boolean)
+        call(McpTaskTools.RUN, args("goal" to "read"))
+        fake.set("t1", TaskState.Running(1, "reading"))
+        rejects(McpTaskTools.STEER, args("task_id" to "t1", "text" to 2), "text must be a string")
+        rejects(McpTaskTools.STEER, args("task_id" to "t1", "text" to " "), "text")
+        val r = call(McpTaskTools.STEER, args("task_id" to "t1", "text" to "only today"))
+        assertEquals("t1", r.str("task_id"))
+        assertEquals("s1", r.str("message_id"))
+        assertEquals("true", r.str("accepted"))
+        assertEquals("received", call(McpTaskTools.STATUS, args("task_id" to "t1"))["steers"]!!.jsonArray.single().jsonObject.str("state"))
+        fake.set("t1", TaskState.WaitingTakeover("payment", "Use phone"))
+        rejects(McpTaskTools.STEER, args("task_id" to "t1", "text" to "approve"), "cannot be answered over MCP")
+        assertEquals(1, fake.steered.size)
     }
 }

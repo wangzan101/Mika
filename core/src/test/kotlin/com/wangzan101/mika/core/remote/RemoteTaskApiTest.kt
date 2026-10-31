@@ -81,6 +81,44 @@ class RemoteTaskApiTest {
         }
     }
 
+    @Test fun httpAndMcpSteerTheSameTaskAndReportReceiptSeparatelyFromConsumption() {
+        val info = request("/api/v1").second
+        assertTrue(info["capabilities"]!!.jsonArray.any { it.jsonPrimitive.content == "task_steer" })
+        assertEquals(RemoteTaskService.MAX_STEER, info["limits"]!!.jsonObject["max_steer"]!!.jsonPrimitive.int)
+        request("/api/v1/tasks", "POST", """{"goal":"read"}""")
+        tasks.set("t1", TaskState.Running(1, "reading"))
+        val (code, ack) = request("/api/v1/tasks/t1/steer", "POST", """{"text":"only today"}""")
+        assertEquals(202, code)
+        assertTrue(ack["accepted"]!!.jsonPrimitive.boolean)
+        assertEquals("s1", ack["message_id"]!!.jsonPrimitive.content)
+        assertNull(ack["status"])
+        val viaMcp = mcp("mika_steer_task", buildJsonObject { put("task_id", "t1"); put("text", "only read") })["structuredContent"]!!.jsonObject
+        assertEquals("s2", viaMcp["message_id"]!!.jsonPrimitive.content)
+        val task = tasks.get("t1")!!
+        assertEquals(listOf("t1" to "only today", "t1" to "only read"), tasks.steered)
+        tasks.tasks["t1"] = task.copy(steers = listOf(RemoteSteer("s1", "joined"), RemoteSteer("s2", "received")))
+        val status = request("/api/v1/tasks/t1").second
+        assertEquals(status, mcp("mika_task_status", buildJsonObject { put("task_id", "t1") })["structuredContent"]!!.jsonObject)
+        assertEquals(listOf("joined", "received"), status["steers"]!!.jsonArray.map { it.jsonObject["state"]!!.jsonPrimitive.content })
+        assertEquals(1, tasks.tasks.size)
+    }
+
+    @Test fun rejectedSteersNeverDeliverOrStartNewTasks() {
+        request("/api/v1/tasks", "POST", """{"goal":"read"}""")
+        tasks.set("t1", TaskState.Running(1, "reading"))
+        for (body in listOf("{}", """{"text":7}""", """{"text":" "}""", """{"text":"more","approve":true}""")) {
+            assertEquals(400, request("/api/v1/tasks/t1/steer", "POST", body).first)
+        }
+        assertEquals(404, request("/api/v1/tasks/local-task/steer", "POST", """{"text":"more"}""").first)
+        assertEquals(405, request("/api/v1/tasks/t1/steer").first)
+        tasks.set("t1", TaskState.WaitingTakeover("payment", "Use phone"))
+        assertEquals(409, request("/api/v1/tasks/t1/steer", "POST", """{"text":"approve"}""").first)
+        tasks.set("t1", TaskState.Cancelled)
+        assertEquals(409, request("/api/v1/tasks/t1/steer", "POST", """{"text":"continue"}""").first)
+        assertTrue(tasks.steered.isEmpty())
+        assertEquals(1, tasks.tasks.size)
+    }
+
     @Test fun malformedInputNeverStartsATaskAndMissingTasksAre404() {
         for (body in listOf("[]", "bad", "{}", """{"goal":7}""", """{"goal":"x","read_only":true}""",
             """{"goal":"x","conversation":"local-id"}""")) {

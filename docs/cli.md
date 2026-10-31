@@ -66,6 +66,7 @@ mika --device SERIAL task run --goal-file task.txt --json
 mika --device SERIAL task status TASK_ID --json
 mika --device SERIAL task wait TASK_ID --timeout 45 --json
 mika --device SERIAL task answer TASK_ID --text-file answer.txt --json
+mika --device SERIAL task steer TASK_ID --text "补充一下，只整理今天的消息" --json
 mika --device SERIAL task cancel TASK_ID --json
 mika --device SERIAL task list --limit 10 --json
 ```
@@ -73,6 +74,10 @@ mika --device SERIAL task list --limit 10 --json
 简单文本也可用 `--goal` / `--text`;文件参数为 `-` 时读取标准输入。`run --conversation CONVERSATION_ID` 创建同一远程对话中的下一项任务,`answer` 只回答当前追问。保留现有对话的 mcp- 前缀以兼容已经发出的 ID;这个历史前缀不代表 CLI 走 MCP 协议。
 
 `run` 返回任务 ID 即结束。`wait` 一次最多等待 50 秒,状态变化或任务结束时返回;如果已经在等回答或手机接管,立即交回。预算用完仍返回当前状态,不判失败、不取消、不重新提交。取消返回的 `accepted` 只表示请求已交给任务服务;必须查询到 cancelled 才能报告已经取消。
+
+`steer` 向 `running` 的远程任务追加要求,保留同一个任务 ID 和上下文;也支持 `--text-file`(文件或 `-` 标准输入)。最多 4000 字符。返回 `accepted: true` 与 `message_id` 只表示收件箱已接收;用 `status` 查询 `steers` 中这条消息的 `state`: `received` 为已收到,`joined` 为已加入当前任务上下文,`not_applied` 为结束或取消前未用上。`joined` 不表示要求已经执行成功。正在执行的动作会先做完,追加要求不会撤销已做的事。
+
+排队、暂停、追问、手机接管和终态任务拒绝追加(409);追问用 `answer`,接管/审批在手机上处理。任务结束竞态也不会把追加要求转成新任务。响应丢失时不要重复发送;查询同一任务,没有收到消息编号且无法确认时照实报告不确定。此入口需要 APK 的 `task_steer` 能力;旧 APK 会提示升级,不回退成新任务。
 
 `--json` 将成功结果和错误都作为单个 JSON 对象写入 stdout;默认输出缩进 JSON,错误写入 stderr。连接选项和 `--json` 可以写在命令前后。可用 `--request-timeout` 调整 HTTP 超时;等待请求的读取预算至少是任务等待时间加 5 秒。
 
@@ -101,6 +106,7 @@ mika --device SERIAL task list --limit 10 --json
 | GET /tasks/ID | 当前任务状态。 |
 | POST /tasks/ID/wait | timeout_s 范围 1–50,默认 30;返回状态与 changed。 |
 | POST /tasks/ID/answer | text;返回 task_id 与 accepted。 |
+| POST /tasks/ID/steer | text;202 返回 task_id、message_id 与 accepted。只接受 running 任务。 |
 | POST /tasks/ID/cancel | 空对象;接受时 202,终态任务 200,返回 accepted。 |
 
 业务校验失败为 400,任务不存在为 404,当前状态不能回答为 409,任务服务拒绝启动为 503。认证、来源和限流策略与 `/mcp` 共用。两种入口使用同一远程任务索引;持有同一访问权限的客户端可以跨入口查询和操作远程任务,仍不能访问手机本地发起的任务。

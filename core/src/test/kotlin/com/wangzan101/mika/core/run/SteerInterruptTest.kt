@@ -68,6 +68,29 @@ class SteerInterruptTest {
 
     private fun List<Message>.results() = flatMap { m -> m.parts.filterIsInstance<Part.ToolResult>() }
 
+    @Test fun remoteInstructionReachesTheExistingLoopAndEmitsItsMessageId() = runTest {
+        val inbox = RunInbox()
+        val entered = CompletableDeferred<Unit>()
+        val events = mutableListOf<RunEvent>()
+        val model = Scripted { n ->
+            if (n == 1) { entered.complete(Unit); awaitCancellation() }
+            else answerReply("只整理今天的消息")
+        }
+        val run = spec().copy(provenance = RunProvenance(RunOrigin.Mcp, Attendance.Reachable))
+        val agent = AgentLoop(model, toolDispatcher(FakeScreen()), "BASE", sink = object : RunSink {
+            override fun event(e: RunEvent) { events += e }
+        })
+        val running = async { agent.run(run, inbox) }
+        entered.await()
+        assertEquals(InputReceipt.Accepted, inbox.steerCurrent("remote-1", "只整理今天"))
+        assertTrue(running.await() is TaskState.Succeeded)
+        assertEquals(2, model.requests.size)
+        assertTrue(model.requests.last().steerIndex("只整理今天") >= 0)
+        assertTrue(events.filterIsInstance<RunEvent.State>().any { it.name == "steer_received" && it.detail == "remote-1" })
+        assertTrue(inbox.handoffUnconsumed().isEmpty())
+        assertEquals(InputReceipt.Closed, inbox.steerCurrent("late", "不要另起任务"))
+    }
+
     @Test fun steerDuringModelCallCancelsItAndReasksAfterTheUntouchedHistory() = runTest {
         val inbox = RunInbox()
         val entered = CompletableDeferred<Unit>()

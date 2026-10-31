@@ -10,6 +10,7 @@ class FakeRemoteTasks : RemoteTasks {
     val tasks = LinkedHashMap<String, RemoteTask>()
     val answers = mutableListOf<Pair<String, String>>()
     val cancelled = mutableListOf<String>()
+    val steered = mutableListOf<Pair<String, String>>()
     var refuse: String? = null
     private var next = 0
 
@@ -31,6 +32,14 @@ class FakeRemoteTasks : RemoteTasks {
     override fun cancel(id: String): Boolean {
         cancelled += id
         return true
+    }
+
+    override fun steer(id: String, text: String): String? {
+        val task = tasks[id]?.takeIf { it.state is TaskState.Running } ?: return null
+        steered += id to text
+        val messageId = "s${steered.size}"
+        tasks[id] = task.copy(steers = task.steers + com.wangzan101.mika.core.remote.RemoteSteer(messageId, "received"))
+        return messageId
     }
 
     fun set(id: String, state: TaskState?) {

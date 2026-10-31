@@ -126,6 +126,7 @@ curl -s http://192.168.1.23:8765/mcp \
 | `mika_task_status` | `task_id` | The task's state now: status, latest progress, what it is waiting for, and the answer when done. |
 | `mika_wait_task` | `task_id`, `timeout_s` (optional, default 30, at most 50) | Waits until the status changes (for example Mika starts waiting for an answer, or finishes) or time runs out, then returns the state. Progress notes alone don't count, so it doesn't return on every step. |
 | `mika_answer` | `task_id`, `text` | Answers the question Mika asked in this task. |
+| `mika_steer_task` | `task_id`, `text` | Adds instructions to a running task (up to 4000 characters), keeping its ID and context. Returns accepted and message_id, not proof of execution. |
 | `mika_cancel_task` | `task_id` | Stops the task. |
 | `mika_list_tasks` | `limit` (optional, default 10) | The most recent tasks handed over from computers, newest first. |
 
@@ -141,6 +142,8 @@ Statuses:
 - `cancelled`: stopped.
 
 Suggested flow: `mika_run_task` → `mika_wait_task` repeatedly → on `waiting_for_answer`, reply with `mika_answer` → until `done` / `failed` / `cancelled`.
+
+After steering, use `mika_task_status` to find the `message_id` in `steers`: `received` means queued, `joined` means added to the context, and `not_applied` means unused when the task ended or was cancelled. An action already executing finishes first; past actions are not undone. Queued/paused, question/approval/handoff-waiting and terminal tasks reject steering. Unconsumed remote instructions never start a new task. Do not automatically resend after a lost response. Older APKs do not list `mika_steer_task`; update the phone app first.
 
 ## Remote wake and unlock
 

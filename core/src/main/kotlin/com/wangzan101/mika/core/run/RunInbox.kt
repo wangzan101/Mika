@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 /** 运行中的输入唯一入口;用户原话无限排队且逐字保留,停止信号直接送达。 */
 class RunInbox {
-    data class UserSteer(val messageId: String, val text: String)
+    data class UserSteer(val messageId: String, val text: String, val currentTaskOnly: Boolean = false)
 
     internal interface Handler {
         suspend fun answer(text: String, askId: String?): Boolean
@@ -36,10 +36,19 @@ class RunInbox {
     val wasCancelled: Boolean get() = stopRequested
 
     fun cancel(): InputReceipt {
-        if (closed) return InputReceipt.Closed
-        stopRequested = true
-        handler?.cancel()
+        val to = synchronized(lock) {
+            if (closed) return InputReceipt.Closed
+            stopRequested = true
+            handler
+        }
+        to?.cancel()
         return InputReceipt.Accepted
+    }
+
+    /** 远程追加只属于当前任务;与关闭、取消互斥,拒绝时不转成下一任务。 */
+    fun steerCurrent(messageId: String, text: String): InputReceipt = synchronized(lock) {
+        if (closed || stopRequested) InputReceipt.Closed
+        else enqueue(UserSteer(messageId, text, currentTaskOnly = true))
     }
 
     suspend fun send(input: RunInput): InputReceipt = when (input) {
@@ -55,12 +64,14 @@ class RunInbox {
     }
 
     private fun queue(id: String, text: String): InputReceipt = synchronized(lock) {
-        if (closed) InputReceipt.NextTask else {
-            steers += UserSteer(id, text)
-            pending.value = true
-            redirects.trySend(Unit)
-            InputReceipt.Accepted
-        }
+        if (closed) InputReceipt.NextTask else enqueue(UserSteer(id, text))
+    }
+
+    private fun enqueue(steer: UserSteer): InputReceipt {
+        steers += steer
+        pending.value = true
+        redirects.trySend(Unit)
+        return InputReceipt.Accepted
     }
 
     /** 有没有还没交给模型的插话;只看不取(批量执行在子步之间据此停下)。 */

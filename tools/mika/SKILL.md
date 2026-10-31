@@ -1,6 +1,6 @@
 ---
 name: mika
-description: Delegate tasks to Mika on a connected Android phone, follow progress, answer task questions, and retrieve results through the bundled CLI. Use when the user wants Mika to operate phone apps, browse, or work with phone files.
+description: Delegate tasks to Mika on a connected Android phone, follow progress, add instructions to running tasks, answer task questions, and retrieve results through the bundled CLI. Use when the user wants Mika to operate phone apps, browse, or work with phone files.
 ---
 
 # Mika on your phone
@@ -45,10 +45,13 @@ Keep the returned task ID and conversation ID. A successful submission only mean
 
 ```bash
 mika --device SERIAL task answer TASK_ID --text-file /path/to/answer.txt --json
+mika --device SERIAL task steer TASK_ID --text-file /path/to/additional-instructions.txt --json
 mika --device SERIAL task cancel TASK_ID --json
 ```
 
 Cancellation's `accepted: true` is an acknowledgement, not evidence of a cancelled terminal state. Query the same task to see its final state. `answer` only answers an open question; it does not redirect a running goal. To continue a completed conversation, submit a new task with `task run --conversation CONVERSATION_ID`.
+
+Use `steer` only when the user adds or corrects requirements for the same `running` task. It keeps the task ID and context; `accepted: true` and `message_id` mean inbox receipt, not execution. Query `status` for that message's entry in `steers`: `received` (queued), `joined` (added to context), or `not_applied` (unused at completion/cancellation). An in-flight action finishes first and past actions are not undone. Steering cannot answer a question, approve payment, resume a pause or finish handoff. Other states reject it; do not turn the rejection into a new task. It requires an APK advertising `task_steer`; update the phone app if unsupported. Text may come from `--text`, a UTF-8 file or stdin (`--text-file -`), up to 4000 characters.
 
 ## Handle uncertain outcomes
 

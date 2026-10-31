@@ -19,7 +19,7 @@ SKILL = Path(__file__).resolve().parents[1]
 SCRIPT = SKILL / "scripts/mika_cli.py"
 TOKEN = "unit-test-connection-token"
 SNAPSHOT = {"task_id": "t1", "status": "running", "conversation": "mcp-test", "goal": "example"}
-DISCOVERY = {"api_version": 1, "server_version": "test", "capabilities": ["tasks"]}
+DISCOVERY = {"api_version": 1, "server_version": "test", "capabilities": ["tasks", "task_steer"]}
 
 
 @contextlib.contextmanager
@@ -160,6 +160,36 @@ else:
             result, body = self.invoke("task", "answer", "t1", "--text", "answer", server=server)
             self.assertEqual(4, result.returncode)
             self.assertEqual("t1", body["error"]["task_id"])
+
+    def test_steer_sends_unicode_once_and_returns_message_id(self):
+        text = '补充要求\n只读，不发送 "消息" 👋'
+        ack = {"task_id": "t1", "message_id": "s1", "accepted": True}
+        for file_input in [False, True]:
+            with self.subTest(file_input=file_input), api(lambda method, path, body: (202, ack, {}) if path.endswith("/steer") else None) as server:
+                source = self.directory / "steer.txt"
+                source.write_text(text, encoding="utf-8")
+                args = ["--text-file", str(source)] if file_input else ["--text-file", "-"]
+                result, body = self.invoke("task", "steer", "t1", *args, server=server, stdin=None if file_input else text)
+                self.assertEqual(0, result.returncode)
+                self.assertEqual(ack, body)
+                self.assertEqual([("GET", "/api/v1", None), ("POST", "/api/v1/tasks/t1/steer", {"text": text})], server.calls)
+
+    def test_steer_requires_capability_and_never_falls_back_to_run(self):
+        old = {**DISCOVERY, "capabilities": ["tasks"]}
+        with api(lambda *_: (200, old, {})) as server:
+            result, body = self.invoke("task", "steer", "t1", "--text", "more", server=server)
+            self.assertEqual(2, result.returncode)
+            self.assertEqual("incompatible_api", body["error"]["code"])
+            self.assertEqual([("GET", "/api/v1", None)], server.calls)
+
+    def test_uncertain_steer_is_not_repeated(self):
+        for reply in ["drop", (202, {"task_id": "t1", "accepted": True}, {})]:
+            with self.subTest(reply=reply), api(lambda method, path, body: reply if method == "POST" else None) as server:
+                result, body = self.invoke("task", "steer", "t1", "--text", "more", server=server)
+                self.assertEqual(4, result.returncode)
+                self.assertEqual("outcome_unknown", body["error"]["code"])
+                self.assertEqual("t1", body["error"]["task_id"])
+                self.assertEqual(1, len([c for c in server.calls if c[0] == "POST"]))
 
     def test_write_500_or_malformed_acknowledgement_is_unknown(self):
         for reply in [(500, {}, {}), (200, {}, {}), (200, b"invalid", {})]:

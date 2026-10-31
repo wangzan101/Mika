@@ -249,8 +249,8 @@ def execute(args, secrets):
     if args.command == "task":
         if args.action == "run":
             args.goal = text_input(args.goal, args.goal_file, "goal")
-        if args.action == "answer":
-            args.text = text_input(args.text, args.text_file, "answer")
+        if args.action in {"answer", "steer"}:
+            args.text = text_input(args.text, args.text_file, args.action)
         if hasattr(args, "task_id") and not re.fullmatch(r"[A-Za-z0-9_-]+", args.task_id):
             raise CliError("arguments", "task_id must be an ID returned by Mika.")
     if args.command == "devices":
@@ -265,6 +265,8 @@ def execute(args, secrets):
             device = client.request("GET", "/device") if "device_state" in info.get("capabilities", []) else {"status": "unsupported"}
             return {"connection": "ok", **transport, "api_version": 1, "device_state": device, "model_configuration": "unverified"}
         action = args.action
+        if action == "steer" and "task_steer" not in info.get("capabilities", []):
+            raise CliError("incompatible_api", "This Mika APK does not support task steering; update the phone app.")
         path = "/tasks" + ("/" + args.task_id if hasattr(args, "task_id") else "")
         if action == "run":
             body = {"goal": args.goal}
@@ -288,9 +290,12 @@ def execute(args, secrets):
                 return {**result, "changed": False}
             return task_snapshot(client.request("POST", path + "/wait", {"timeout_s": args.timeout},
                                                timeout=max(client.timeout, args.timeout + 5)), client, task_id=args.task_id)
-        body = {"text": args.text} if action == "answer" else {}
+        body = {"text": args.text} if action in {"answer", "steer"} else {}
         result = client.request("POST", path + "/" + action, body, mutation=True, task_id=args.task_id)
         if result.get("task_id") != args.task_id or type(result.get("accepted")) is not bool:
+            client.unknown(args.task_id)
+        if action == "steer" and (result["accepted"] is not True or
+                                  not isinstance(result.get("message_id"), str) or not result["message_id"]):
             client.unknown(args.task_id)
         return result
 
@@ -342,12 +347,12 @@ def parser():
     goal.add_argument("--goal")
     goal.add_argument("--goal-file", help="UTF-8 file, or - for stdin")
     run.add_argument("--conversation", help="Continue a conversation returned by a previous remote task")
-    for name in ["status", "wait", "answer", "cancel"]:
+    for name in ["status", "wait", "answer", "steer", "cancel"]:
         cmd = actions.add_parser(name, parents=[common])
         cmd.add_argument("task_id")
         if name == "wait":
             cmd.add_argument("--timeout", type=bounded_int(1, 50), default=30, help="One bounded wait, 1–50 seconds; never cancels the task")
-        if name == "answer":
+        if name in {"answer", "steer"}:
             answer = cmd.add_mutually_exclusive_group(required=True)
             answer.add_argument("--text")
             answer.add_argument("--text-file", help="UTF-8 file, or - for stdin")

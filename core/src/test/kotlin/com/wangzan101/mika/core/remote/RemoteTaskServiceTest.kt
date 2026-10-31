@@ -84,4 +84,62 @@ class RemoteTaskServiceTest {
         assertFalse(result.changed)
         assertTrue(testScheduler.currentTime < 2_000)
     }
+
+    @Test fun steeringKeepsTheTaskAndConversationAndReportsOnlyReceipt() {
+        val task = service.start("read messages")
+        tasks.set(task.id, TaskState.Running(1, "reading"))
+        val receipt = service.steer(" ${task.id} ", "  only today\n不要发送 👋  ")
+        assertEquals(task.id, receipt.taskId)
+        assertEquals(listOf(task.id to "only today\n不要发送 👋"), tasks.steered)
+        val current = service.get(task.id)
+        assertEquals(task.conversation, current.conversation)
+        assertEquals(task.goal, current.goal)
+        assertEquals(listOf(RemoteSteer(receipt.messageId, "received")), current.steers)
+        assertEquals(1, tasks.tasks.size)
+    }
+
+    @Test fun steeringRejectsUnknownIdsEmptyOrLongInputWithoutDelivery() {
+        val task = service.start("read")
+        tasks.set(task.id, TaskState.Running(1, "reading"))
+        for ((id, text) in listOf("" to "more", task.id to "  ", task.id to "x".repeat(RemoteTaskService.MAX_STEER + 1))) {
+            assertEquals(RemoteTaskError.Code.INVALID_ARGUMENT,
+                (runCatching { service.steer(id, text) }.exceptionOrNull() as RemoteTaskError).code)
+        }
+        assertEquals(RemoteTaskError.Code.NOT_FOUND,
+            (runCatching { service.steer("local-task", "more") }.exceptionOrNull() as RemoteTaskError).code)
+        assertTrue(tasks.steered.isEmpty())
+    }
+
+    @Test fun steeringDoesNotAnswerResumeApproveOrRestartTasks() {
+        val task = service.start("read")
+        val states = listOf(null, TaskState.Idle, TaskState.WaitingInput("Which one?"),
+            TaskState.WaitingTakeover("payment", "Use the phone"),
+            TaskState.WaitingConfirmation(com.wangzan101.mika.core.gate.ConfirmationRequest(
+                com.wangzan101.mika.core.risk.IrrevAction.order, "Shop", "item", "$25", "shop")),
+            TaskState.Held(com.wangzan101.mika.core.agent.GateReason("paused")),
+            TaskState.Succeeded("done"), TaskState.Failed("failed", com.wangzan101.mika.core.agent.FailKind.Environment), TaskState.Cancelled)
+        for (state in states) {
+            tasks.set(task.id, state)
+            assertEquals("$state", RemoteTaskError.Code.CONFLICT,
+                (runCatching { service.steer(task.id, "continue") }.exceptionOrNull() as RemoteTaskError).code)
+        }
+        assertTrue(tasks.steered.isEmpty())
+        assertTrue(tasks.answers.isEmpty())
+        assertEquals(1, tasks.tasks.size)
+    }
+
+    @Test fun taskClosingBetweenCheckAndDeliveryIsNotAcknowledged() {
+        val task = service.start("read")
+        tasks.set(task.id, TaskState.Running(1, "reading"))
+        val closing = object : RemoteTasks by tasks {
+            override fun steer(id: String, text: String): String? {
+                tasks.set(id, TaskState.Cancelled)
+                return null
+            }
+        }
+        assertEquals(RemoteTaskError.Code.CONFLICT,
+            (runCatching { RemoteTaskService(closing).steer(task.id, "more") }.exceptionOrNull() as RemoteTaskError).code)
+        assertTrue(tasks.steered.isEmpty())
+        assertEquals(1, tasks.tasks.size)
+    }
 }

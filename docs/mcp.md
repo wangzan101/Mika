@@ -126,6 +126,7 @@ curl -s http://192.168.1.23:8765/mcp \
 | `mika_task_status` | `task_id` | 任务此刻的状态、最近的进度、在等什么、做完时的回答。 |
 | `mika_wait_task` | `task_id`、`timeout_s`（可选，默认 30，最多 50） | 等到状态变了（比如开始等你回答、做完了）或者到时间，再返回状态。进度说明变了不算，不会一步一返回。 |
 | `mika_answer` | `task_id`、`text` | 回答 Mika 在这个任务里问的问题。 |
+| `mika_steer_task` | `task_id`、`text` | 向 running 任务追加要求(最多 4000 字符),保留任务 ID 和上下文。返回 accepted 与 message_id,不代表已经执行。 |
 | `mika_cancel_task` | `task_id` | 停下这个任务。 |
 | `mika_list_tasks` | `limit`（可选，默认 10） | 电脑交来的最近几个任务，新的在前。 |
 
@@ -141,6 +142,8 @@ curl -s http://192.168.1.23:8765/mcp \
 - `cancelled`：停掉了。
 
 建议的用法：`mika_run_task` → 反复 `mika_wait_task` → 遇到 `waiting_for_answer` 用 `mika_answer` → 直到 `done` / `failed` / `cancelled`。
+
+追加要求后,用 `mika_task_status` 查看 `steers` 中对应 `message_id` 的去向:`received` 已收到、`joined` 已加入上下文、`not_applied` 结束或取消前未用上。正在执行的动作会先做完,追加不会撤销已做的事。排队/暂停、等待回答/审批/接管和终态均拒绝追加;收尾时未消费的远程插话不另开任务。响应丢失不要自动重发。旧 APK 的工具列表没有 `mika_steer_task`,需要升级手机 App。
 
 ## 远程亮屏与解锁
 

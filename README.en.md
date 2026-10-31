@@ -40,20 +40,24 @@ Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.m
 
 It checks the phone, downloads and installs Mika, turns on the permissions it needs, and stops to tell you whenever something needs a tap on the phone. You enter your API key in Mika yourself; it never goes through the agent.
 
-**CLI and Agent Skill**
+**After installing: use Mika from your computer (CLI / Skill / MCP)**
 
-For terminals, scripts, Codex or Claude Code, see [installing, updating and removing the computer CLI / Skill](docs/computer-install.en.md). The Skill includes its own CLI script; phone APK setup is separate.
+For terminals, scripts, Codex or Claude Code, see [installing, updating and removing the computer CLI / Skill](docs/computer-install.en.md). The Skill includes its own CLI script, and this path needs no MCP configuration; phone APK setup is separate.
 
-**After installing: let AI tools on your computer use Mika (MCP)**
+**Using an MCP client: quick USB connection**
 
-With the phone connected by USB, run on the computer:
+Install adb on the computer, open Mika at least once on the phone, and authorize this computer for USB debugging. Connect the USB cable, then run on the computer:
 
 ```
 adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
 adb forward tcp:8765 tcp:8765
 ```
 
-The first command turns on Mika's computer access and prints the connection info (URL `http://127.0.0.1:8765/mcp` and a token). Add them to your AI tool's MCP config, and it can hand Mika tasks, check progress and get results. No tapping on the phone; USB only and token-protected, not reachable over Wi-Fi; confirmations such as payments can only be approved on the phone. With option 2, the AI agent can set this up for you. See the [computer access guide](docs/mcp.en.md).
+The first command turns on USB computer access and prints the connection URL and token. Add a Streamable HTTP MCP server to your AI tool, using `http://127.0.0.1:8765/mcp` as the URL and `Authorization: Bearer <token>` as the request header. Once configured, it can hand Mika tasks, check progress and get results.
+
+USB access uses ADB forwarding and token authentication. Direct Wi-Fi or private-network access must be enabled separately on the phone; see the [computer access guide](docs/mcp.en.md). Confirmations such as payments still have to be handled on the phone.
+
+With option 2, if you also request computer access, the AI agent will configure the CLI, Skill or MCP entry point you choose.
 
 > **Language**
 >

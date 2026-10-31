@@ -40,24 +40,28 @@
 
 它会检查手机、下载安装、打开需要的权限，需要你在手机上点的时候会停下来告诉你。API Key 由你自己在 Mika 里填，不经过它。
 
-**CLI 与 Agent Skill**
+**装好之后：从电脑使用 Mika（CLI / Skill / MCP）**
 
-在终端、脚本、Codex 或 Claude Code 中使用 Mika,见[电脑端 CLI / Skill 的安装、升级和卸载](docs/computer-install.md)。Skill 自带 CLI 脚本;手机 APK 仍需单独安装和设置。
+在终端、脚本、Codex 或 Claude Code 中使用 Mika，见[电脑端 CLI / Skill 的安装、升级和卸载](docs/computer-install.md)。Skill 自带 CLI 脚本，这条路径无需配置 MCP；手机 APK 仍需单独安装和设置。
 
-**装好之后：让电脑上的 AI 工具直接用 Mika（MCP）**
+**使用 MCP 客户端：通过 USB 快速连接**
 
-手机用数据线连着电脑，在电脑上运行：
+电脑需要装好 adb，手机至少打开过一次 Mika，并已授权这台电脑的 USB 调试。用数据线连接后，在电脑上运行：
 
 ```
 adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
 adb forward tcp:8765 tcp:8765
 ```
 
-第一条会打开 Mika 的电脑连接，并打印连接信息（地址 `http://127.0.0.1:8765/mcp` 和令牌）；把它们填进电脑上 AI 工具的 MCP 配置，它就能给 Mika 派任务、查进度、拿结果。手机上不用点；只经数据线连接、要令牌，Wi-Fi 上连不到；付款这类确认只能在手机上点。用方式二安装时，AI 助手会顺手帮你接好。详见[电脑连接说明](docs/mcp.md)。
+第一条会打开 USB 方式的电脑连接，并打印连接地址和令牌。在 AI 工具中添加一个 Streamable HTTP 类型的 MCP 服务器，地址为 `http://127.0.0.1:8765/mcp`，请求头为 `Authorization: Bearer <令牌>`。配置完成后，就能给 Mika 派任务、查进度、拿结果。
+
+USB 接入经 ADB 转发并使用令牌验证；直接经 Wi-Fi 或私有网络连接，需要在手机上另行开启，见[电脑连接说明](docs/mcp.md)。付款这类确认仍只能在手机上处理。
+
+用方式二安装时，如果你也要求电脑访问，AI 助手会按你选择的 CLI、Skill 或 MCP 入口继续配置。
 
 > **English summary**
 >
-> Mika is an Android app that takes a one-sentence request and carries it out on your phone. It drives apps on a private background screen (so you can keep using your phone), browses the web in a built-in desktop-class browser, and runs scripts in a local Linux sandbox. You bring your own model API key (several providers are supported as presets, plus any OpenAI-compatible, Anthropic, Gemini or OpenAI Responses endpoint). There is no Mika server: your requests go only to the model provider you configure.
+> Mika is an Android app that takes a one-sentence request and carries it out on your phone. It drives apps on a private background screen (so you can keep using your phone), browses the web in a built-in desktop-class browser, and runs scripts in a local Linux sandbox. You can use your own model API key (several providers are supported as presets, plus any OpenAI-compatible, Anthropic, Gemini or OpenAI Responses endpoint), or sign in with ChatGPT. There is no Mika server: your requests go only to the model provider you configure.
 >
 > Status: **public beta**, changing quickly (see [Releases](https://github.com/wangzan101/Mika/releases) for versions and changes). Chat, web and sandbox tasks work on Android 11+; phone app control needs Android 12+, with Android 14+ recommended. The sandbox runs on arm64 devices only. The app UI is available in Simplified Chinese, Traditional Chinese and English (follows your system language; switch in Settings › Language); see the [full English README](README.en.md). Licensed under Apache-2.0.
 

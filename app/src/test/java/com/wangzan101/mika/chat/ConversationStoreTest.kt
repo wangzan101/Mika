@@ -73,11 +73,15 @@ class ConversationStoreTest {
         java.io.File(dir, "$id.json.tmp").writeText("x")
         store.append(other, Turn("订票", "好了", "succeeded"))
         val changes = mutableListOf<String>()
+        val deletions = mutableListOf<String>()
         val job = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { store.changes.collect { changes += it } }
+        val gone = launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { store.deletions.collect { deletions += it } }
         store.delete(id)
         kotlinx.coroutines.yield()
         job.cancel()
+        gone.cancel()
         assertEquals(listOf(id), changes)
+        assertEquals(listOf(id), deletions)
         assertEquals(listOf("$other.json"), dir.list()!!.sorted())
         assertEquals(listOf(other), store.list().map { it.id })
         assertEquals(emptyList<Turn>(), store.turns(id))
@@ -241,12 +245,16 @@ class ConversationStoreTest {
     @Test fun announcesChangedConversations() = kotlinx.coroutines.test.runTest {
         val s = ConversationStore(tmp.newFolder("c"))
         val seen = mutableListOf<String>()
+        val deleted = mutableListOf<String>()
         backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { s.changes.collect { seen += it } }
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { s.deletions.collect { deleted += it } }
         s.append("a", Turn("查天气", "晴", "succeeded", runId = "r1", usedMemory = listOf("m1")))
         s.append("b", Turn("订票", "好了", "succeeded"))
         s.updateTurn("a", "r1") { it.copy(outcome = "晴转多云") }
         s.updateTurn("a", "missing") { it }
         s.stripMemory(setOf("m1"))
         assertEquals(listOf("a", "b", "a", "a"), seen)
+        // 只有删对话才发 deletions
+        assertEquals(emptyList<String>(), deleted)
     }
 }

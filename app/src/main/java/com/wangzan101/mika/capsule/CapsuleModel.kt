@@ -102,6 +102,7 @@ sealed interface CapsuleView {
  *   打开卡片时看到的那几件(同一件事、同一个等待)记为看过,收起后回到一颗(橙色),来了新的才再展开;
  * - 办好了 / 没办成 / 已停止先展开 [PILL_MS],再缩回一颗带着结果角标,共停 [LINGER_MS] 后消失(「一直显示」时回到图标);
  *   在卡片里看过的直接是一颗;卡片展开着时这段时间停表:用户正看着的结果不会被收走,收起卡片后接着走剩下的时间;
+ *   停完消失的不再回来(调用方之后还列着它也不算);对话删掉了([forget])时它已结束的任务马上消失;
  * - 同一件事、同一个状态里换句时每句至少停 [MIN_SENTENCE_MS],这期间来的只留最后一句;换了状态或换了一件事马上换。
  * 卡片按什么先后挑那一件见 [cardRuns]。
  * [reasonLabel] 把接管原因(login 等)换成给人看的名字,认不出为 null。时间由调用方给,测试里用假时钟。
@@ -115,6 +116,8 @@ class CapsuleModel(private val reasonLabel: (String) -> String? = { null }) {
     /** 各任务第一次出现的时刻:同样要紧时按先后排,卡片上显示用时。 */
     private val firstSeen = HashMap<String, Long>()
     private val ended = HashMap<String, Ended>()
+    /** 停完或对话删掉而拿掉的已结束任务:调用方还列着时不再记进 [ended];调用方不再列的就忘掉。 */
+    private val dropped = HashSet<String>()
     /** 在等接管或已经接手的任务,按开始等的先后:主屏一次只交一个,排在前面的先处理。 */
     private val takeoverSince = LinkedHashMap<String, Long>()
     /** 用户在卡片里看过的要你处理和结果:不再展开成胶囊。 */
@@ -145,8 +148,9 @@ class CapsuleModel(private val reasonLabel: (String) -> String? = { null }) {
             ended.replaceAll { _, e -> Ended(e.run, e.at + paused) }
             frozenSince = null
         }
-        inputs.runs.filter { it.state.ended() }.forEach { ended.getOrPut(it.key) { Ended(it, frozenSince ?: now) } }
-        if (frozenSince == null) ended.values.removeAll { now - it.at >= LINGER_MS }
+        dropped.retainAll(keys)
+        inputs.runs.filter { it.state.ended() && it.key !in dropped }.forEach { ended.getOrPut(it.key) { Ended(it, frozenSince ?: now) } }
+        if (frozenSince == null) drop(ended.filterValues { now - it.at >= LINGER_MS }.keys)
         firstSeen.keys.retainAll(keys + ended.keys)
         val waiting = inputs.runs.filter { it.state is TaskState.WaitingTakeover && it.stage != Takeover.Stage.None }.map { it.key }
         takeoverSince.keys.retainAll(waiting.toSet())
@@ -168,6 +172,14 @@ class CapsuleModel(private val reasonLabel: (String) -> String? = { null }) {
             return CapsuleView.Hidden
         }
         return throttle(candidate, now)
+    }
+
+    /** 对话 [conversationId] 删掉了:它已结束的任务马上从胶囊和卡片上拿掉,进行中的照旧。 */
+    fun forget(conversationId: String) = drop(ended.filterValues { it.run.conversationId == conversationId }.keys)
+
+    private fun drop(keys: Set<String>) {
+        ended.keys.removeAll(keys)
+        dropped += keys
     }
 
     private fun needMarks(runs: List<CapsuleRun>): Set<Mark> =

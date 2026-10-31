@@ -34,6 +34,11 @@ class ConversationStore(private val dir: File) {
      */
     val changes: SharedFlow<String> = _changes.asSharedFlow()
 
+    private val _deletions = MutableSharedFlow<String>(extraBufferCapacity = 16, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** 删掉的对话编号:[delete] 时发一次([changes] 也照发)。悬浮胶囊据此拿掉这个对话刚结束的任务、卡片不再接着它。 */
+    val deletions: SharedFlow<String> = _deletions.asSharedFlow()
+
     /**
      * 对话列表,最近改过的在前;[ConversationSummary.title] 是标题(用户改的或起好的),没有时是第一句话;
      * [ConversationSummary.pinnedAt] 是置顶的时间。没有内容的对话不列。
@@ -60,7 +65,8 @@ class ConversationStore(private val dir: File) {
     private val deleted = mutableSetOf<String>()
 
     /**
-     * 删掉一个对话存下的一切:对话文件、标题、置顶,以及写到一半的临时文件和挪到一边的损坏文件。删了什么都发一次 [changes]。
+     * 删掉一个对话存下的一切:对话文件、标题、置顶,以及写到一半的临时文件和挪到一边的损坏文件。删了什么都发一次 [changes]
+     * 和 [deletions]。
      * 对话的工作区、定时任务、在跑的任务不归这里管,见 [ConversationDeleter]。
      */
     @Synchronized
@@ -70,6 +76,7 @@ class ConversationStore(private val dir: File) {
         dir.listFiles { f -> f.isFile && (f.name == main || f.name.startsWith("$main.") || f.name == titleFile(conversationId).name || f.name == pinFile(conversationId).name) }
             .orEmpty().forEach { it.delete() }
         _changes.tryEmit(conversationId)
+        _deletions.tryEmit(conversationId)
     }
 
     /**

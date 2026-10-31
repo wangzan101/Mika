@@ -202,6 +202,8 @@ class CapsuleController(
         }
         // 停止后的交代写好(或写不成)时那一轮已改进对话:重读记下的轮次
         scope.launch { tasks.summarizing.collect { threadOf?.let(::loadPast) } }
+        // 对话删掉了:见 [forget]
+        scope.launch { ConversationStore.shared(context).deletions.collect(::forget) }
         // 卡片上这个对话的标题变了(用户在侧栏改了名、后台起好了标题):卡片顶上「接着「…」聊」跟着换
         scope.launch {
             val store = ConversationStore.shared(context)
@@ -236,7 +238,8 @@ class CapsuleController(
 
     /**
      * 各任务此刻的样子。任务收尾后会从 [TaskCenterState.runs] 里拿掉;拿掉时它的状态已是终态,
-     * 再带它一轮,模型才能记下「办好了」并停一会儿。没到终态就被拿掉的(服务被销毁)直接不算。
+     * 还带着它(到任务列表再变为止),模型才能记下「办好了」并停一会儿,停完以后再列着它模型也不算。
+     * 没到终态就被拿掉的(服务被销毁)直接不算。
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun runs(): Flow<List<CapsuleRun>> {
@@ -342,6 +345,19 @@ class CapsuleController(
 
     private fun refresh() {
         last?.let(::render)
+    }
+
+    /**
+     * 对话 [id] 删掉了:它刚结束的任务马上从胶囊和卡片上拿掉,卡片不再接着它(刚在卡片里发了话的;空闲卡片接着的,
+     * 展开着时换成开新对话的那张),展开着的卡片按 [CapsuleCards.of] 重挑(什么都没有就收起)。删对话先停掉它的任务、
+     * 等它收尾(最多 15 秒)再删记录,所以这时它的任务一般已经结束;等不到收尾的,或者收尾以后、删记录之前又在卡片里接着说的
+     * (会在这个对话里开一件新任务),之后存进的那一轮会把对话重新建起来,胶囊照常显示它。
+     */
+    private fun forget(id: String) {
+        model.forget(id)
+        if (follow == id) follow = null
+        if (idle?.conversationId == id) idle = if (expanded) CardView.Chat(null) else null
+        refresh()
     }
 
     private fun hide() {

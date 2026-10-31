@@ -91,9 +91,16 @@ class MainScreenSpillDeviceTest {
         val button = s.elements.first { it.name == "open elsewhere" }
         val r = screen.tapRef(button.ref, s.snapshotId)
         assertTrue("expected Ok, got $r", r is ActionResult.Ok)
-        val opened = (r as ActionResult.Ok).opened
-        assertNotNull("tap did not report opened: $r", opened)
-        val now = screen.snapshot()
+        // 慢一点才起的 App 在动作里赶不上,下一次读屏会补报(和模型走同一条路)
+        var now = screen.snapshot()
+        var opened = (r as ActionResult.Ok).opened ?: now.opened
+        val deadline = System.currentTimeMillis() + 8_000
+        while (opened == null && System.currentTimeMillis() < deadline) {
+            kotlinx.coroutines.delay(300)
+            now = screen.snapshot()
+            opened = now.opened
+        }
+        assertNotNull("tap did not report opened: $r / ${now.opened}", opened)
         println("spill result: $r; on Mika's screen (${now.packageName}): ${now.elements.filter { it.clickable }.map { it.name }}")
         if (!opened!!.picker) {
             assertTrue("not pulled back: $opened", opened.pulledBack)

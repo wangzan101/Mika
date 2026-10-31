@@ -68,6 +68,15 @@ class OpenedElsewhereTest {
         assertNull(back.toJson()["onUserScreen"])
     }
 
+    @Test fun popupThatNeedsTheUserStaysOnTheirScreen() {
+        val o = OpenedElsewhere("com.google.android.gms", "Google Play services", pulledBack = false, needsUser = true)
+        assertEquals("true", o.toJson()["needsUser"]!!.jsonPrimitive.content)
+        assertEquals("true", o.toJson()["onUserScreen"]!!.jsonPrimitive.content)
+        assertEquals(Feedback.format("spill.user_popup", "app" to "Google Play services"), openedHint(o))
+        // 用户处理完、关掉了之后按处理完说,不再说弹窗还在
+        assertEquals(Feedback["spill.picker_closed"], openedHint(o.copy(closed = true)))
+    }
+
     @Test fun appTheUserIsUsingIsNotNoEffect() = runTest {
         val c = tap(ActionResult.Ok(changed = false, opened = OpenedElsewhere("com.chat", "Chat", pulledBack = false)))
         assertEquals("true", c["opened"]!!.jsonObject["onUserScreen"]!!.jsonPrimitive.content)

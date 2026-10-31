@@ -99,10 +99,11 @@ data class ScreenSnapshot(
  * [picker]:开出来的是系统问「用哪一个打开」的窗口(同一 App 装了两份、几个 App 都能打开等)。它从不挪:留给用户在自己屏上选,
  * 选之前任务停着等;[app] 是问的那个 App 的名字(认得出时)。
  * [closed]:用户把那个问题关了,什么也没打开。[byUser]:选出来的 App 要用户亲手处理,用户在自己屏上处理完、点了继续。
+ * [needsUser]:冒到主屏上的是要用户亲手处理的弹窗(登录验证、账号确认、付款确认一类),留在主屏给他们点。
  */
 data class OpenedElsewhere(
     val packageName: String, val app: String?, val pulledBack: Boolean, val inProfile: String? = null, val picker: Boolean = false,
-    val closed: Boolean = false, val byUser: Boolean = false,
+    val closed: Boolean = false, val byUser: Boolean = false, val needsUser: Boolean = false,
 ) {
     /** 此刻还在用户的主屏上(用户正用着,或系统正在问用户)。 */
     val onUserScreen: Boolean get() = !pulledBack && !closed && !byUser
@@ -112,6 +113,7 @@ data class OpenedElsewhere(
         app?.let { put("app", it) }
         put("pulledBack", pulledBack)
         if (onUserScreen) put("onUserScreen", true)
+        if (needsUser) put("needsUser", true)
         inProfile?.let { put("inProfile", it) }
         if (picker) put("picker", true)
         if (closed) put("closed", true)

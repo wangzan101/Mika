@@ -10,6 +10,7 @@ package com.wangzan101.mika.cap.phone.a11y
  * 此刻已不在主屏上的;这段时间里用户在主屏上点过东西(说不清是谁打开的,当作用户自己开的);
  * 动作之前就在主屏最上面的那个任务又回到最上面(挪走开出来的那个后露出来的)。
  * 动作之前主屏最上面的任务里换了页面:是用户正在用的那个 App 被打开了,开在了用户眼前,不去动它([InUse])。
+ * 冒出来的任务用户已经在点了(点的那个窗口属于它):也是用户在用,不挪。
  * 纯逻辑。
  */
 internal object MainScreenSpill {
@@ -26,7 +27,11 @@ internal object MainScreenSpill {
         val sameTask: Boolean,
         val standard: Boolean,
         val now: Int,
+        val topActivity: String? = null,
     )
+
+    /** 用户在主屏上点了一下:[at] 时刻,[packageName] 是点的那一下所在的包(读不到为 null)。 */
+    data class Tap(val at: Long, val packageName: String?)
 
     sealed interface Verdict { val arrival: Arrival }
     /** 动作开到主屏上的:挪回 Mika 的屏。 */
@@ -36,7 +41,7 @@ internal object MainScreenSpill {
 
     /**
      * [since] 动作开始的时刻,[windowMs] 之后冒出来的不算这个动作的;[topBefore] 动作开始时主屏最上面的任务;
-     * [userTaps] 用户在主屏上点东西的时刻。同一个任务只出一条(取最后一次),按先后排。
+     * [userTaps] 用户在主屏上点东西的时刻和包。同一个任务只出一条(取最后一次),按先后排。
      */
     fun decide(
         arrivals: List<Arrival>,
@@ -44,7 +49,7 @@ internal object MainScreenSpill {
         windowMs: Long,
         topBefore: Int,
         excluded: Set<String>,
-        userTaps: List<Long>,
+        userTaps: List<Tap>,
     ): List<Verdict> {
         val out = LinkedHashMap<Int, Verdict>()
         for (a in arrivals.sortedBy { it.at }) {
@@ -84,13 +89,29 @@ internal object MainScreenSpill {
      */
     fun needsUser(passwordField: Boolean, readable: Boolean, secureWindow: Boolean): Boolean = passwordField || (!readable && secureWindow)
 
-    private fun verdict(a: Arrival, since: Long, windowMs: Long, topBefore: Int, excluded: Set<String>, userTaps: List<Long>): Verdict? {
+    /**
+     * 系统 App 的这个页面是不是要用户亲手做的登录、验证、授权一类(Google 账号验证的 MinuteMaid、AddAccount、
+     * OtpActivity 等自己不带 excludeFromRecents):看类名里有没有这些词。不是系统 App 的页面不用这条(普通 App 的页面照常挪回)。
+     */
+    fun looksLikeUserStep(topActivity: String?): Boolean {
+        val name = topActivity?.lowercase() ?: return false
+        return USER_STEP_WORDS.any { name.contains(it) }
+    }
+
+    private val USER_STEP_WORDS = listOf(
+        "auth", "signin", "sign_in", "login", "log_in", "account", "verif", "consent", "credential",
+        "otp", "captcha", "password", "confirm",
+    )
+
+    private fun verdict(a: Arrival, since: Long, windowMs: Long, topBefore: Int, excluded: Set<String>, userTaps: List<Tap>): Verdict? {
         if (a.at < since || a.at > since + windowMs) return null
         val pkg = a.packageName ?: return null
         if (!a.standard || pkg in excluded) return null
         if (a.from != NEW && a.from != MAIN) return null
         if (a.now != MAIN) return null
-        if (userTaps.any { it in since..a.at }) return null
+        if (userTaps.any { it.at in since..a.at }) return null
+        // 用户已经在点它了(出现之后点在这一个 App 的窗口上):留给用户,不挪
+        if (userTaps.any { it.at >= a.at && it.packageName == pkg }) return InUse(a)
         if (a.taskId == topBefore) return if (a.sameTask) InUse(a) else null
         return PullBack(a)
     }

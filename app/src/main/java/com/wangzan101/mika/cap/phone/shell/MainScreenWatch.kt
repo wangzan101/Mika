@@ -137,6 +137,7 @@ internal class MainScreenWatch(
         const val KEY_FROM = "from"
         const val KEY_SAME_TASK = "sameTask"
         const val KEY_STANDARD = "standard"
+        const val KEY_ACTIVITY = "activity"
         const val KEY_NOW = "now"
         const val KEY_LISTENING = "listening"
 
@@ -149,6 +150,7 @@ internal class MainScreenWatch(
             putIntArray(KEY_FROM, list.map { it.from }.toIntArray())
             putBooleanArray(KEY_SAME_TASK, list.map { it.sameTask }.toBooleanArray())
             putBooleanArray(KEY_STANDARD, list.map { it.standard }.toBooleanArray())
+            putStringArray(KEY_ACTIVITY, list.map { it.topActivity }.toTypedArray())
             putIntArray(KEY_NOW, list.map { now(it.taskId) }.toIntArray())
             putBoolean(KEY_LISTENING, listening)
         }

@@ -26,6 +26,7 @@ internal class MainScreenLog(private val keepMs: Long = KEEP_MS) {
         val from: Int,
         val sameTask: Boolean,
         val standard: Boolean,
+        val topActivity: String? = null,
     )
 
     private var top: Task? = null
@@ -51,7 +52,7 @@ internal class MainScreenLog(private val keepMs: Long = KEEP_MS) {
     }
 
     private fun add(t: Task, now: Long, from: Int, sameTask: Boolean) {
-        arrivals.addLast(Arrival(t.taskId, t.packageName, t.userId, now, from, sameTask, t.standard))
+        arrivals.addLast(Arrival(t.taskId, t.packageName, t.userId, now, from, sameTask, t.standard, t.topActivity))
     }
 
     /** 主屏此刻最上面的任务;还没看过或主屏没有任务为 -1。 */

@@ -2,10 +2,13 @@ package com.wangzan101.mika.cap.phone.a11y
 
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Path
+import android.graphics.Rect
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -931,8 +934,8 @@ class AndroidScreen(
     /** 等用户的那些事办完之后要告诉模型的,下一次读屏或动作时报出去。 */
     @Volatile private var pendingReport: Spill? = null
 
-    /** 用户在主屏上点东西的时刻(只在动作前后那一小段里记)。 */
-    private val userTaps = java.util.concurrent.ConcurrentLinkedDeque<Long>()
+    /** 用户在主屏上点东西的时刻和包(只在动作前后那一小段里记)。 */
+    private val userTaps = java.util.concurrent.ConcurrentLinkedDeque<MainScreenSpill.Tap>()
     private val spillScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var tapWatch: Job? = null
     @Volatile private var tapWatchUntil = 0L
@@ -964,7 +967,7 @@ class AndroidScreen(
                     if ((e.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED || e.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) &&
                         e.packageName?.toString() != a11y.packageName
                     ) {
-                        userTaps.addLast(SystemClock.uptimeMillis())
+                        userTaps.addLast(MainScreenSpill.Tap(SystemClock.uptimeMillis(), e.packageName?.toString()))
                         while (userTaps.size > MAX_USER_TAPS) userTaps.pollFirst()
                     }
                 }
@@ -992,7 +995,8 @@ class AndroidScreen(
             val a = v.arrival
             val pkg = a.packageName ?: continue
             last = when (v) {
-                is MainScreenSpill.PullBack -> leaveForUser(a, pkg, w) ?: pullBack(a, pkg) ?: last
+                // 系统问打开哪一个的先按选择框处理;要用户亲手处理的弹窗(登录验证、账号确认一类)留在主屏,不挪到 Mika 的屏上
+                is MainScreenSpill.PullBack -> leaveForUser(a, pkg, w) ?: leavePopup(a, pkg) ?: pullBack(a, pkg) ?: last
                 is MainScreenSpill.InUse -> Spill(OpenedElsewhere(pkg, appLabel(pkg), pulledBack = false, inProfile = inProfileOf(pkg, a.userId)), null)
             }
         }
@@ -1011,6 +1015,52 @@ class AndroidScreen(
         if (SystemClock.uptimeMillis() > w.since + SPILL_WINDOW_MS) watch = null
         return spill
     }
+
+    /**
+     * 冒到主屏上的是要用户亲手处理的弹窗(登录验证、账号确认、付款确认一类):不挪,留在用户屏上。
+     * 判据:顶层窗口不是整屏(对话框、底部弹层),窗口里有密码框,或页面本身是临时的(excludeFromRecents / noHistory)。
+     * 这类窗口挪到 Mika 的屏上就从用户眼前消失,用户也就没法在主屏上点确认。不是为 null。
+     */
+    private suspend fun leavePopup(a: MainScreenSpill.Arrival, pkg: String): Spill? =
+        if (needsUserWindow(a, pkg)) popup(a, pkg) else null
+
+    /** 主屏上这个任务的顶层窗口是不是一个要用户亲手处理的弹窗(见 [leavePopup])。 */
+    private suspend fun needsUserWindow(a: MainScreenSpill.Arrival, pkg: String): Boolean {
+        val activity = a.topActivity?.let {
+            runCatching { a11y.packageManager.getActivityInfo(ComponentName(pkg, it), 0) }.getOrNull()
+        }
+        if (activity != null && activity.flags and (ActivityInfo.FLAG_EXCLUDE_FROM_RECENTS or ActivityInfo.FLAG_NO_HISTORY) != 0) return true
+        // 系统 App 里的登录、验证、授权、密码一类页面(Google 账号验证的 MinuteMaid、AddAccount 等不一定是对话框):
+        // 有的系统页面自己不带 excludeFromRecents,整屏、没有密码框
+        if (isSystemPackage(pkg) && MainScreenSpill.looksLikeUserStep(a.topActivity)) return true
+        val metrics = a11y.resources.displayMetrics
+        // 刚冒出来的窗口可能还在开场动画里(画得比整屏小),等它停稳再看一次,免得把普通 App 当成弹窗
+        var window = topWindowOf(pkg)
+        if (window == null) {
+            delay(POPUP_SETTLE_MS)
+            window = topWindowOf(pkg) ?: return false
+        }
+        if (isNarrow(window, metrics)) {
+            delay(POPUP_SETTLE_MS)
+            val settled = topWindowOf(pkg) ?: return false
+            if (isNarrow(settled, metrics)) return true
+            window = settled
+        }
+        return ScreenReader.read(listOf(window), metrics.widthPixels, metrics.heightPixels).passwordField
+    }
+
+    private fun topWindowOf(pkg: String): AccessibilityWindowInfo? =
+        ScreenReader.contentWindows(a11y.windowsOn(Display.DEFAULT_DISPLAY)).firstOrNull { it.root?.packageName?.toString() == pkg }
+
+    /** 窗口没有遮住整块屏:对话框、底部弹层、悬浮窗一类。 */
+    private fun isNarrow(window: AccessibilityWindowInfo, metrics: android.util.DisplayMetrics): Boolean {
+        val bounds = Rect()
+        window.getBoundsInScreen(bounds)
+        return bounds.width() < metrics.widthPixels * FULL_SCREEN_SHARE || bounds.height() < metrics.heightPixels * FULL_SCREEN_SHARE
+    }
+
+    private suspend fun popup(a: MainScreenSpill.Arrival, pkg: String): Spill =
+        Spill(OpenedElsewhere(pkg, appLabel(pkg), pulledBack = false, inProfile = inProfileOf(pkg, a.userId), needsUser = true), null)
 
     /**
      * 开到主屏上的是系统问「用哪一个打开」的窗口(系统的选择器,或系统包的窗口里的选项对得上装了两份的 App;
@@ -1076,7 +1126,9 @@ class AndroidScreen(
                 arrivals.maxOfOrNull { it.at }?.let { consumed = maxOf(consumed, it) }
                 if (opened != null) {
                     val pkg = opened.packageName!!
-                    if (needsUser(pkg)) return@withContext PickResult.NeedsUser(opened.taskId, pkg, appLabel(pkg) ?: p.app, opened.userId)
+                    if (needsUser(pkg) || needsUserWindow(opened, pkg)) {
+                        return@withContext PickResult.NeedsUser(opened.taskId, pkg, appLabel(pkg) ?: p.app, opened.userId)
+                    }
                     pendingReport = pullBack(opened, pkg)
                     return@withContext PickResult.Settled
                 }
@@ -1155,9 +1207,12 @@ class AndroidScreen(
         val from = b.getIntArray(MainScreenWatch.KEY_FROM)
         val same = b.getBooleanArray(MainScreenWatch.KEY_SAME_TASK)
         val standard = b.getBooleanArray(MainScreenWatch.KEY_STANDARD)
+        val activity = b.getStringArray(MainScreenWatch.KEY_ACTIVITY)
         val now = b.getIntArray(MainScreenWatch.KEY_NOW)
         if (packages == null || users == null || at == null || from == null || same == null || standard == null || now == null) return emptyList()
-        return tasks.indices.map { i -> MainScreenSpill.Arrival(tasks[i], packages[i], users[i], at[i], from[i], same[i], standard[i], now[i]) }
+        return tasks.indices.map { i ->
+            MainScreenSpill.Arrival(tasks[i], packages[i], users[i], at[i], from[i], same[i], standard[i], now[i], activity?.getOrNull(i))
+        }
     }
 
     private fun hintLateSpill(o: OpenedElsewhere): String {
@@ -1171,6 +1226,8 @@ class AndroidScreen(
             o.closed -> "The user closed the system's question on their screen without picking, so nothing was opened. Decide what to do next; do not simply repeat the action."
             o.byUser && !o.pulledBack -> "$name needed the user; they handled it on their own screen and tapped continue, and it has closed. Observe before acting."
             o.byUser -> "$name needed the user; they handled it on their own screen and tapped continue. It is now in front on Mika's screen. Observe before acting."
+            o.needsUser && o.onUserScreen -> "It was $name: a popup on the user's screen that needs them (a sign-in, verification or confirmation step). " +
+                "It was left there on purpose; do not repeat the action. Call hand_to_user so they can finish it, then observe before acting."
             o.pulledBack -> "It was $name, now in front on Mika's screen.$copy Observe before acting."
             else -> "It was $name, which the user is using on their own screen, so it was left there. " +
                 "Do not repeat the previous action: call hand_to_user with reason other so the user can do that step there, or wait and try again later."
@@ -1509,6 +1566,10 @@ class AndroidScreen(
         const val TAG = "MikaScreen"
         /** 动作开始后多久之内主屏冒出来的任务算这个动作开出来的。 */
         const val SPILL_WINDOW_MS = 6_000L
+        /** 窗口至少遮住主屏这么大才算整屏的页面;比这小的是对话框、底部弹层一类。 */
+        const val FULL_SCREEN_SHARE = 0.95f
+        /** 刚冒出来的窗口可能还在开场动画里:等这么久再看一次,确认它是不是一直不是整屏。 */
+        const val POPUP_SETTLE_MS = 300L
         const val MAX_USER_TAPS = 32
         /** 用户在主屏的选择框里选了之后,等选中的 App 上来最多多久;等着用户选时多久看一次。 */
         const val PICK_WAIT_MS = 3_000L

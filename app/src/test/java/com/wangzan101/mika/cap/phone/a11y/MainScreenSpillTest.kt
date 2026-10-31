@@ -3,6 +3,7 @@ package com.wangzan101.mika.cap.phone.a11y
 import com.wangzan101.mika.cap.phone.a11y.MainScreenSpill.InUse
 import com.wangzan101.mika.cap.phone.a11y.MainScreenSpill.PullBack
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -16,7 +17,7 @@ class MainScreenSpillTest {
         sameTask: Boolean = false, standard: Boolean = true, now: Int = MainScreenSpill.MAIN, user: Int = 0,
     ) = MainScreenSpill.Arrival(task, pkg, user, at, from, sameTask, standard, now)
 
-    private fun decide(vararg a: MainScreenSpill.Arrival, topBefore: Int = 3, taps: List<Long> = emptyList()) =
+    private fun decide(vararg a: MainScreenSpill.Arrival, topBefore: Int = 3, taps: List<MainScreenSpill.Tap> = emptyList()) =
         MainScreenSpill.decide(a.toList(), since, window, topBefore, home, taps)
 
     @Test fun newTaskOnTheMainScreenRightAfterTheActionIsPulledBack() {
@@ -52,11 +53,18 @@ class MainScreenSpillTest {
     }
 
     @Test fun userTappingTheMainScreenMeansTheUserOpenedIt() {
-        assertTrue(decide(arrival(at = since + 900), taps = listOf(since + 400)).isEmpty())
-        // 点在出现之后(比如用户去点它):出现那一刻还没人碰,照样算
-        assertEquals(1, decide(arrival(at = since + 900), taps = listOf(since + 1_500)).size)
+        val other = MainScreenSpill.Tap(since + 400, "com.other")
+        assertTrue(decide(arrival(at = since + 900), taps = listOf(other)).isEmpty())
         // 动作之前的点按不算
-        assertEquals(1, decide(arrival(at = since + 900), taps = listOf(since - 100)).size)
+        assertEquals(1, decide(arrival(at = since + 900), taps = listOf(MainScreenSpill.Tap(since - 100, "com.other"))).size)
+    }
+
+    @Test fun userTappingThePopupItselfLeavesItThere() {
+        // 弹窗冒出来之后用户就点在上面(在屏幕上点确认):用户在用它,不挪
+        val a = arrival(at = since + 900)
+        assertEquals(listOf(InUse(a)), decide(a, taps = listOf(MainScreenSpill.Tap(since + 1_500, "com.chat"))))
+        // 点的是别的 App 的窗口:说不清,照常挪回
+        assertEquals(1, decide(a, taps = listOf(MainScreenSpill.Tap(since + 1_500, "com.other"))).size)
     }
 
     @Test fun previousTopComingBackIsNotASpill() {
@@ -103,6 +111,19 @@ class MainScreenSpillTest {
         // 树本来就读不出东西的 App 不算要用户处理,照常挪回
         assertEquals(false, MainScreenSpill.needsUser(passwordField = false, readable = false, secureWindow = false))
         assertEquals(false, MainScreenSpill.needsUser(passwordField = false, readable = true, secureWindow = false))
+    }
+
+    @Test fun systemAuthPagesLookLikeUserSteps() {
+        // Google 账号的登录、验证、确认一类(有的自己不带 excludeFromRecents,整屏、没有密码框)
+        assertTrue(MainScreenSpill.looksLikeUserStep("com.google.android.gms.auth.uiflows.minutemaid.MinuteMaidActivity"))
+        assertTrue(MainScreenSpill.looksLikeUserStep("com.google.android.gms.auth.uiflows.addaccount.AddAccountActivity"))
+        assertTrue(MainScreenSpill.looksLikeUserStep("com.google.android.gms.auth.account.otp.OtpActivity"))
+        assertTrue(MainScreenSpill.looksLikeUserStep("com.google.android.gms.auth.api.signin.ui.SignInActivity"))
+        assertTrue(MainScreenSpill.looksLikeUserStep("com.google.android.gms.auth.login.CaptchaActivity"))
+        // 普通的系统页面不是
+        assertFalse(MainScreenSpill.looksLikeUserStep("com.android.deskclock.DeskClock"))
+        assertFalse(MainScreenSpill.looksLikeUserStep("com.android.settings.homepage.SettingsHomepageActivity"))
+        assertFalse(MainScreenSpill.looksLikeUserStep(null))
     }
 
     @Test fun oneVerdictPerTaskInOrder() {

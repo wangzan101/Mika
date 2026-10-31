@@ -17,13 +17,16 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MemoryViewModelTest {
     @get:Rule val texts = ChineseTexts()
 
     @get:Rule val tmp = TemporaryFolder()
-    private val said = MemorySource("user_said", "以后点外卖都不要香菜", "c1", 1_761_177_600_000L)
+    // 来历一行按本机时区显示日期:取本机时区那天的中午,在哪个时区跑都是 10 月 23 日
+    private val said = MemorySource("user_said", "以后点外卖都不要香菜", "c1", LocalDateTime.of(2025, 10, 23, 12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli())
     private val store = memoryStore().apply {
         add(MemoryKind.fact, "用户住在张江", listOf("家"), MemorySource("manual", atMs = 1)).getOrThrow()
         add(MemoryKind.preference, "用户点外卖不要香菜", listOf("外卖"), said).getOrThrow()

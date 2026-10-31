@@ -129,6 +129,8 @@ data class RoleChoices(
     val main: String? = null,
     val vision: RoleChoice = RoleChoice.Off,
     val light: RoleChoice = RoleChoice.SameAsMain,
+    /** 按用途保存,同一个模型可在不同用途选不同档位;「用主模型」连同它的档位一起跟随。 */
+    val reasoningEfforts: Map<ModelRole, String> = emptyMap(),
 ) {
     /** 这个用途的选择;主模型没选时为 null。 */
     operator fun get(role: ModelRole): RoleChoice? = when (role) {
@@ -148,10 +150,18 @@ data class RoleChoices(
     val referenced: Set<String> get() = ModelRole.entries.mapNotNull(::resolve).toSet()
 
     /** 改一个用途;这个用途不接受的选择(主模型只能是具体模型,轻量不能不用)返回 null。 */
-    fun with(role: ModelRole, choice: RoleChoice): RoleChoices? = when (role) {
+    fun with(role: ModelRole, choice: RoleChoice): RoleChoices? = (when (role) {
         ModelRole.Main -> (choice as? RoleChoice.Model)?.let { copy(main = it.configId) }
         ModelRole.Vision -> copy(vision = choice)
         ModelRole.Light -> if (choice == RoleChoice.Off) null else copy(light = choice)
+    })?.let { next ->
+        if (get(role) == choice) next else next.copy(reasoningEfforts = reasoningEfforts - role)
+    }
+
+    fun reasoningEffort(role: ModelRole): String? = when (get(role)) {
+        is RoleChoice.Model -> reasoningEfforts[role]
+        RoleChoice.SameAsMain -> main?.let { reasoningEfforts[ModelRole.Main] }
+        else -> null
     }
 
     /** 指向 [valid] 之外的选择退回默认:主模型变成没选,看图不用,轻量用主模型。 */
@@ -161,6 +171,7 @@ data class RoleChoices(
             main = main?.takeIf { it in valid },
             vision = if (vision.gone()) RoleChoice.Off else vision,
             light = if (light.gone()) RoleChoice.SameAsMain else light,
+            reasoningEfforts = reasoningEfforts.filterKeys { role -> (get(role) as? RoleChoice.Model)?.configId in valid },
         )
     }
 }
@@ -169,7 +180,11 @@ data class RoleChoices(
  * 建一个模型客户端时额外给的:[headers] 每个请求都带(客户端标识、会话号,见 [ClientHeaders]);
  * [maxOutputTokens] 限制回复长度(连接测试用),null 按适配器默认。
  */
-data class ClientSetup(val headers: Map<String, String> = emptyMap(), val maxOutputTokens: Int? = null)
+data class ClientSetup(
+    val headers: Map<String, String> = emptyMap(),
+    val maxOutputTokens: Int? = null,
+    val reasoningEffort: String? = null,
+)
 
 /** 「测试并保存」试调用(见 [ProviderStore.probe])的结果。 */
 sealed interface ProbeResult {
@@ -370,6 +385,20 @@ class ProviderStore(
         return true
     }
 
+    /** 只改这个用途;不支持的协议、跟随主模型的用途或列表明确不支持的档位不接受。 */
+    @Synchronized
+    fun setReasoningEffort(role: ModelRole, effort: String?): Boolean {
+        if (_roles.value[role] !is RoleChoice.Model) return false
+        val cfg = configFor(role) ?: return false
+        val listed = provider(cfg.providerId)?.models?.firstOrNull { it.id == cfg.model }
+        val options = ReasoningOptions.of(cfg, listed)
+        if (effort != null && (options == null || effort !in options.levels)) return false
+        _roles.value = _roles.value.copy(reasoningEfforts =
+            if (effort == null) _roles.value.reasoningEfforts - role else _roles.value.reasoningEfforts + (role to effort))
+        writeConfig()
+        return true
+    }
+
     /** 看图模型的「看图定位已验证」(开发者选项里改);看图用主模型时改的是主模型那条配置。没有看图模型时不动。 */
     @Synchronized
     fun setVisionGroundingVerified(verified: Boolean) {
@@ -399,7 +428,9 @@ class ProviderStore(
     fun modelFor(role: ModelRole, session: ModelSession = ModelSession.fresh()): ChatModel? = configFor(role)?.let { cfg ->
         val p = provider(cfg.providerId)
         val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, UsagePurpose.of(role))
-        modelFactory(cfg, apiKey(cfg.id), endpointOf(cfg), ClientSetup(headers(p?.sessionHeader, session))).metered(source, usage)
+        modelFactory(cfg, apiKey(cfg.id), endpointOf(cfg), ClientSetup(
+            headers(p?.sessionHeader, session), reasoningEffort = _roles.value.reasoningEffort(role),
+        )).metered(source, usage)
     }
 
     /**
@@ -526,9 +557,11 @@ class ProviderStore(
             ProviderConfig.Kind.Gemini ->
                 GeminiModel(baseUrl, apiKey.orEmpty(), cfg.model, cfg.capabilities, http, setup.headers, setup.maxOutputTokens)
             ProviderConfig.Kind.OpenAiResponses ->
-                ResponsesModel(baseUrl, BearerToken.fixed(apiKey), cfg.model, cfg.capabilities, http, headers = setup.headers)
+                ResponsesModel(baseUrl, BearerToken.fixed(apiKey), cfg.model, cfg.capabilities, http, headers = setup.headers,
+                    reasoningEffort = setup.reasoningEffort)
             ProviderConfig.Kind.ChatGpt ->
-                ResponsesModel(baseUrl, tokensFor(cfg.providerId), cfg.model, cfg.capabilities, http, chatGptPlan = true, headers = setup.headers)
+                ResponsesModel(baseUrl, tokensFor(cfg.providerId), cfg.model, cfg.capabilities, http, chatGptPlan = true, headers = setup.headers,
+                    reasoningEffort = setup.reasoningEffort)
         }
     }
 
@@ -634,6 +667,7 @@ class ProviderStore(
                 vision = m["vision"]?.jsonPrimitive?.booleanOrNull,
                 contextTokens = m["contextTokens"]?.jsonPrimitive?.intOrNull,
                 reasoning = m["reasoning"]?.jsonPrimitive?.booleanOrNull,
+                reasoningEfforts = m["reasoningEfforts"]?.jsonArray?.map { it.jsonPrimitive.content },
                 chat = m["chat"]?.jsonPrimitive?.booleanOrNull,
                 endpoint = (m["api"] as? JsonObject)?.let { a ->
                     ModelProtocol.of(a["protocol"]?.jsonPrimitive?.content)?.let { protocol ->
@@ -675,7 +709,10 @@ class ProviderStore(
         }
         var r = RoleChoices()
         ModelRole.entries.forEach { role -> choice(role)?.let { c -> r.with(role, c)?.let { r = it } } }
-        return r
+        return r.copy(reasoningEfforts = ModelRole.entries.mapNotNull { role ->
+            val effort = runCatching { o[role.name]?.jsonObject?.get("reasoningEffort")?.jsonPrimitive?.content }.getOrNull()
+            if (r[role] is RoleChoice.Model && !effort.isNullOrBlank()) role to effort else null
+        }.toMap())
     }
 
     private fun JsonObject.str(k: String) = this[k]!!.jsonPrimitive.content
@@ -700,6 +737,7 @@ class ProviderStore(
                                         m.vision?.let { put("vision", it) }
                                         m.contextTokens?.let { put("contextTokens", it) }
                                         m.reasoning?.let { put("reasoning", it) }
+                                        m.reasoningEfforts?.let { levels -> putJsonArray("reasoningEfforts") { levels.forEach { add(it) } } }
                                         m.chat?.let { put("chat", it) }
                                         m.endpoint?.let { e ->
                                             putJsonObject("api") {
@@ -730,7 +768,10 @@ class ProviderStore(
             putJsonObject("uses") {
                 ModelRole.entries.forEach { role ->
                     when (val c = _roles.value[role]) {
-                        is RoleChoice.Model -> putJsonObject(role.name) { put("use", USE_MODEL); put("config", c.configId) }
+                        is RoleChoice.Model -> putJsonObject(role.name) {
+                            put("use", USE_MODEL); put("config", c.configId)
+                            _roles.value.reasoningEfforts[role]?.let { put("reasoningEffort", it) }
+                        }
                         RoleChoice.SameAsMain -> putJsonObject(role.name) { put("use", USE_MAIN) }
                         RoleChoice.Off -> putJsonObject(role.name) { put("use", USE_NONE) }
                         null -> Unit

@@ -202,6 +202,8 @@ You can also skip the API key and sign in with ChatGPT (Plus or Pro, uses your p
 2. Tap "Test and save" (测试并保存). When you connect your first provider, a main model is picked automatically.
 3. The main model must support tool calling. Optional: a vision model (understands the UI and finds buttons in screenshots) and a light model (anything cheap and fast; handles small jobs like judging task outcomes and extracting memories).
 
+For ChatGPT sign-in and Responses models, adjust **Reasoning effort** below each role card. The default leaves the choice to the provider. "Use main model" inherits its effort; explicitly picking the same model lets each role use a different effort. Options come from the provider's model list when available; otherwise manual options are offered, subject to server support. Higher effort usually takes longer and uses more tokens.
+
 ### 5. Try it
 
 An empty conversation shows a few examples you can tap, edit and send. Or try something like:

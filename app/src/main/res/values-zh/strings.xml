@@ -33,4 +33,18 @@
     <string name="date_year_month_day">%1$d 年 %2$d 月 %4$d 日</string>
     <string name="ok_got_it">知道了</string>
     <string name="cancel">取消</string>
+    <string name="model_reasoning_title">思考强度 · %1$s</string>
+    <string name="model_reasoning_value">思考强度：%1$s</string>
+    <string name="model_reasoning_note">提高强度可能有助于复杂任务，也可能增加等待时间和用量。「默认」由服务商决定。</string>
+    <string name="model_reasoning_unknown">服务商未说明可用档位。不支持的选择可能导致任务失败，遇到这种情况请改回「默认」。</string>
+    <string name="model_reasoning_unavailable">服务商已不再列出保存的档位，请改回「默认」或选择其他档位。</string>
+    <string name="model_reasoning_inherit">思考强度也跟随主模型。要单独设置，请为此用途选择具体模型。</string>
+    <string name="model_reasoning_default">默认</string>
+    <string name="model_reasoning_none">不思考</string>
+    <string name="model_reasoning_minimal">极低</string>
+    <string name="model_reasoning_low">低</string>
+    <string name="model_reasoning_medium">中</string>
+    <string name="model_reasoning_high">高</string>
+    <string name="model_reasoning_xhigh">很高</string>
+    <string name="model_reasoning_max">最高</string>
 </resources>

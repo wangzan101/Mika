@@ -34,4 +34,18 @@
     <string name="date_year_month_day">%3$s %4$d, %1$d</string>
     <string name="ok_got_it">Got it</string>
     <string name="cancel">Cancel</string>
+    <string name="model_reasoning_title">Thinking effort · %1$s</string>
+    <string name="model_reasoning_value">Thinking effort: %1$s</string>
+    <string name="model_reasoning_note">Higher effort can help with difficult tasks, but may take longer and use more tokens. Default lets the provider decide.</string>
+    <string name="model_reasoning_unknown">This provider has not listed the available levels. An unsupported choice may cause tasks to fail; choose Default if that happens.</string>
+    <string name="model_reasoning_unavailable">The provider no longer lists the saved level. Choose Default or another level.</string>
+    <string name="model_reasoning_inherit">Thinking effort also follows the main model. Select a specific model for this role to set its effort separately.</string>
+    <string name="model_reasoning_default">Default</string>
+    <string name="model_reasoning_none">None</string>
+    <string name="model_reasoning_minimal">Minimal</string>
+    <string name="model_reasoning_low">Low</string>
+    <string name="model_reasoning_medium">Medium</string>
+    <string name="model_reasoning_high">High</string>
+    <string name="model_reasoning_xhigh">Extra high</string>
+    <string name="model_reasoning_max">Maximum</string>
 </resources>

@@ -98,7 +98,7 @@ class ModelCatalogTest {
         assertEquals(
             listOf(
                 ListedModel("deepseek-v4.1-flash", "DeepSeek V4.1 Flash", toolCalls = true, vision = true, contextTokens = 1_000_000,
-                    reasoning = true, endpoint = chat, chat = true),
+                    reasoning = true, endpoint = chat, chat = true, reasoningEfforts = listOf("low", "high")),
                 ListedModel("glm-5.3", "GLM-5.3", toolCalls = true, vision = false, contextTokens = 1_000_000, reasoning = true,
                     endpoint = chat.copy(reasoningField = null)),
                 ListedModel("grok-4.7", "Grok 4.7", toolCalls = true, vision = true, contextTokens = 500_000,
@@ -138,7 +138,7 @@ class ModelCatalogTest {
         assertEquals("Bearer token", server.takeRequest().getHeader("Authorization"))
         assertEquals(
             listOf(
-                ListedModel("gpt-b", "GPT B", vision = true, contextTokens = 272_000, reasoning = true),
+                ListedModel("gpt-b", "GPT B", vision = true, contextTokens = 272_000, reasoning = true, reasoningEfforts = listOf("low")),
                 ListedModel("gpt-a", "GPT A", vision = false),
                 ListedModel("odd", unsupportedApis = listOf("realtime")),
             ),

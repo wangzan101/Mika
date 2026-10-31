@@ -31,6 +31,8 @@ data class ListedModel(
     val endpoint: ModelEndpoint? = null,
     val unsupportedApis: List<String> = emptyList(),
     val chat: Boolean? = null,
+    /** 服务商明确给出的思考档位;null 表示未知,空列表表示没有可选档位。保留服务商的顺序。 */
+    val reasoningEfforts: List<String>? = null,
 ) {
     val usable: Boolean get() = endpoint != null || unsupportedApis.isEmpty()
 }
@@ -166,7 +168,11 @@ class ModelCatalog(private val http: OkHttpClient) {
         val caps = o["capabilities"] as? JsonObject
         val modalIn = ((o.obj("modalities")?.get("input") ?: o["input_modalities"]) as? JsonArray)
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-        val reasoningLevels = o["supported_reasoning_levels"] as? JsonArray
+        val reasoningLevels = (o["supported_reasoning_levels"] ?: caps?.obj("reasoning")?.get("effort")) as? JsonArray
+        val efforts = reasoningLevels?.mapNotNull { level ->
+            (((level as? JsonObject)?.get("effort") ?: level) as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                ?.trim()?.takeIf { it.isNotEmpty() }
+        }?.distinct()
         val api = o.obj("api")
         // 一个模型可能写了几种协议:按 Chat Completions、Messages、generateContent、Responses 的次序取第一种会说的
         val endpoint = api?.let { a ->
@@ -188,6 +194,7 @@ class ModelCatalog(private val http: OkHttpClient) {
             reasoning = params?.let { "reasoning" in it || "include_reasoning" in it } ?: caps?.obj("reasoning")?.bool("supported")
                 ?: o.bool("supports_reasoning") ?: reasoningLevels?.let { it.isNotEmpty() },
             endpoint = endpoint,
+            reasoningEfforts = efforts,
             unsupportedApis = if (endpoint == null) api?.keys?.toList().orEmpty() else emptyList(),
             chat = when (o.str("type")?.lowercase()) {
                 in CHAT_TYPES -> true

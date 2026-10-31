@@ -534,6 +534,11 @@ class ModelSetupViewModel(
 
     // ---------- 用途 ----------
 
+    fun setReasoningEffort(role: ModelRole, effort: String?) {
+        store.setReasoningEffort(role, effort)
+        sync()
+    }
+
     /** 把 [providerId] 下的 [model] 用作 [role](选择页和「用作」面板都走这里):没有配置的当场建一条。 */
     fun pick(role: ModelRole, providerId: String, model: String) {
         val m = model.trim()

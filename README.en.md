@@ -31,7 +31,7 @@ Details for each step are in [Quick start](#quick-start) below.
 
 **Option 2: let an AI agent on your computer do it**
 
-Connect the phone to your computer with a USB cable, turn on USB debugging on the phone, and send this sentence to an AI agent on the computer that can run commands:
+Connect the phone to your computer with a USB cable, turn on USB debugging on the phone (don't change other switches in Developer options unless the agent asks you to: some can erase the phone), and send this sentence to an AI agent on the computer that can run commands:
 
 ```
 Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.md to install Mika on the Android phone connected over USB.
@@ -192,7 +192,7 @@ Mika uses accessibility to read the UI and tap. You don't need to turn it on by 
 
 ### 3. Pair wireless debugging (once)
 
-Open "Set up phone control" (设置手机操作) in Settings and follow the checklist: enable Developer options, USB debugging and Wireless debugging, then pair using the 6-digit pairing code.
+Open "Set up phone control" (设置手机操作) in Settings and follow the checklist: enable Developer options, USB debugging and Wireless debugging, then pair using the 6-digit pairing code. In Developer options, don't change switches Mika doesn't mention: some can erase the phone, such as "Boot with 16 KB page size".
 
 First time, stuck on a step, or not sure where the pairing code goes? See the [phone control setup guide](docs/setup-guide.en.md): it covers where to tap for each step, how to tell it worked, and fixes for common snags.
 

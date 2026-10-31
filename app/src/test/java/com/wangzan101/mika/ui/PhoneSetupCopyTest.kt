@@ -109,6 +109,9 @@ class PhoneSetupCopyTest {
         assertTrue(usb.body.contains("「USB 调试」"))
         assertTrue(usb.body.contains("Wi-Fi"))
         assertTrue(usb.body.contains("数据线"))
+        // 开发者选项里有会清除数据的开关:向导开头和这一步都提醒别的开关不要动(第 2 步自动打勾时只看得到开头那句)
+        assertTrue(usb.body.contains("清除手机数据"))
+        assertTrue(PhoneSetupCopy.INTRO.contains("清除手机数据"))
     }
 
     @Test

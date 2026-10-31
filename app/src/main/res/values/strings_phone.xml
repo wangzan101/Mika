@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="phone_title">Set up phone control</string>
-    <string name="phone_intro">Mika uses apps for you on a separate virtual screen, so you can keep using your phone. For this it borrows Android’s built-in “USB debugging” and “Wireless debugging”: pair once and Mika connects automatically from then on — no computer needed. Web and file tasks work without this.</string>
+    <string name="phone_intro">Mika uses apps for you on a separate virtual screen, so you can keep using your phone. For this it borrows Android’s built-in “USB debugging” and “Wireless debugging”: pair once and Mika connects automatically from then on — no computer needed. Web and file tasks work without this. Don’t change any other switch in Developer options unless Mika asks you to: some can erase your phone.</string>
     <string name="phone_later">Not now</string>
     <string name="phone_bar_title">Phone control</string>
     <string name="phone_skip_note">You can skip this for now and just use web, files and chat; Mika will remind you the first time it needs an app.</string>
@@ -11,7 +11,7 @@
     <string name="phone_done_on">On</string>
     <string name="phone_step_dev_brief">Tap “Build number” 7 times in “About phone”</string>
     <string name="phone_step_usb">Turn on USB debugging</string>
-    <string name="phone_step_usb_body">In “Developer options”, find “USB debugging”, turn it on and tap “OK” when asked. No cable needed: with it on, Mika can keep working even when Wi-Fi is off.</string>
+    <string name="phone_step_usb_body">In “Developer options”, find “USB debugging”, turn it on and tap “OK” when asked. Don’t change the other switches: some can erase your phone. No cable needed: with it on, Mika can keep working even when Wi-Fi is off.</string>
     <string name="phone_open_dev_options">Open Developer options</string>
     <string name="phone_step_usb_brief">Keeps working without Wi-Fi</string>
     <string name="phone_step_a11y">Turn on Mika’s accessibility</string>

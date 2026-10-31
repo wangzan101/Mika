@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="phone_title">设置手机操作</string>
-    <string name="phone_intro">Mika 在一块单独的虚拟屏上替你操作 App,你可以照常用手机。为此要借用安卓自带的「USB 调试」和「无线调试」:配对一次就行,之后 Mika 会自动连接,不需要电脑。网页和文件类的事不受影响,不设置也能做。</string>
+    <string name="phone_intro">Mika 在一块单独的虚拟屏上替你操作 App,你可以照常用手机。为此要借用安卓自带的「USB 调试」和「无线调试」:配对一次就行,之后 Mika 会自动连接,不需要电脑。网页和文件类的事不受影响,不设置也能做。开发者选项里 Mika 没提到的开关都不要动,有的会清除手机数据。</string>
     <string name="phone_later">稍后再说</string>
     <string name="phone_bar_title">手机操作</string>
     <string name="phone_skip_note">也可以先跳过,只用上网、文件和聊天;第一次要操作 App 时会再提醒。</string>
@@ -11,7 +11,7 @@
     <string name="phone_done_on">已打开</string>
     <string name="phone_step_dev_brief">在「关于手机」里连点「版本号」7 次</string>
     <string name="phone_step_usb">打开 USB 调试</string>
-    <string name="phone_step_usb_body">在「开发者选项」里找到「USB 调试」并打开,弹出提示时选「确定」。不需要插数据线:打开后,断开 Wi-Fi 时 Mika 也能继续操作手机。</string>
+    <string name="phone_step_usb_body">在「开发者选项」里找到「USB 调试」并打开,弹出提示时选「确定」。别的开关不要动,有的会清除手机数据。不需要插数据线:打开后,断开 Wi-Fi 时 Mika 也能继续操作手机。</string>
     <string name="phone_open_dev_options">打开开发者选项</string>
     <string name="phone_step_usb_brief">断开 Wi-Fi 时也能继续操作</string>
     <string name="phone_step_a11y">打开 Mika 的无障碍</string>

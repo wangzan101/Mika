@@ -4,7 +4,7 @@
 
 This document is written for **an AI agent on your computer that can run commands**. With the phone connected over USB, the agent follows the steps below and uses adb to install and set up Mika. People can follow it too: every command can be copied as is.
 
-If you are the user: connect the phone to the computer with a USB cable, turn on USB debugging on the phone, and send this to the AI agent on your computer:
+If you are the user: connect the phone to the computer with a USB cable, turn on USB debugging on the phone (in Developer options, don't change switches this document doesn't mention: some can erase the phone), and send this to the AI agent on your computer:
 
 ```
 Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.md to install Mika on the Android phone connected over USB.

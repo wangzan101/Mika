@@ -51,6 +51,10 @@ class DeviceStateWatcher(
         _locked.value = readLocked() // 注册前后之间的变化
     }
 
+    // 门禁不能依赖广播缓存:部分 ROM 的广播可能缺失或早于实际状态变化。
+    // 冷流每次先读当前状态,只在调用方等待解锁时继续采样,取消/通过后不再轮询。
+    val currentLockState: Flow<Boolean> = lockStates(::readLocked)
+
     private fun readLocked() = isLocked(power.isInteractive, keyguard.isKeyguardLocked)
 
     /**
@@ -77,6 +81,13 @@ class DeviceStateWatcher(
 
     companion object {
         const val POLL_MS = 500L
+
+        internal fun lockStates(readLocked: () -> Boolean): Flow<Boolean> = flow {
+            while (true) {
+                emit(readLocked())
+                delay(POLL_MS)
+            }
+        }
 
         internal fun isLocked(interactive: Boolean, keyguardLocked: Boolean) = !interactive || keyguardLocked
 

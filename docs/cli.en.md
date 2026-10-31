@@ -30,7 +30,7 @@ With only the Skill installed, `mika` below means `python3 <actual-skill-directo
 
 ## Connect
 
-ADB mode requires Android platform-tools and a phone connected over USB or already paired and connected over wireless debugging. If the wireless device is not listed by ADB, complete pairing/connection using the phone's wireless debugging screen first.
+ADB mode requires Android platform-tools and either USB or connected wireless ADB. For wireless ADB, this computer must be paired and connected to the phone, which must appear as `device` in `adb devices`. Pairing Mika's built-in helper on the phone does not pair the computer; both also differ from direct LAN access below.
 
 ```bash
 mika devices --json
@@ -41,6 +41,8 @@ mika doctor --device SERIAL --json
 You may omit `--device` when exactly one device is online; the existing ANDROID_SERIAL environment variable is also supported. Multiple devices require a choice, and connection failure never selects a different phone. `connect` runs Mika's official bootstrap script to enable computer access and start the required helper; it does not submit a task. Other commands only read the current connection.
 
 Each invocation reads the current token, port and boot number, allocates its own temporary `adb forward tcp:0` mapping, then removes only that mapping. Tokens stay in process memory; bootstrap output is captured instead of printed. Exiting the CLI leaves the phone service and ongoing tasks running.
+
+The CLI handles forwarding; you do not need the MCP instructions for manually forwarding a fixed port. After reconnecting the cable, make sure the same phone is back in ADB. After a phone reboot or turning off computer access, run `connect` again.
 
 For LAN/private-network access explicitly enabled in the phone's settings:
 

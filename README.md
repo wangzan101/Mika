@@ -5,7 +5,7 @@
 <a href="https://github.com/wangzan101/Mika/stargazers"><img src="https://img.shields.io/github/stars/wangzan101/Mika?style=flat&logo=github&label=Star&color=1f6feb" alt="stars" /></a>
 <a href="https://github.com/wangzan101/Mika/releases"><img src="https://img.shields.io/github/downloads/wangzan101/Mika/total?label=%E4%B8%8B%E8%BD%BD&color=2ea043" alt="downloads" /></a>
 <a href="https://github.com/wangzan101/Mika/releases/latest"><img src="https://img.shields.io/github/v/release/wangzan101/Mika?include_prereleases&label=%E7%89%88%E6%9C%AC" alt="version" /></a>
-<img src="https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white" alt="android" />
+<img src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" alt="android" />
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-lightgrey" alt="license" /></a>
 <a href="https://x.com/wangzan101"><img src="https://img.shields.io/badge/X-%40wangzan101-000000?logo=x&logoColor=white" alt="X @wangzan101" /></a>
 
@@ -25,7 +25,7 @@
 **方式一：在手机上自己装**
 
 1. 从 [Releases](https://github.com/wangzan101/Mika/releases/latest) 下载最新的 APK，安装。
-2. 打开 Mika 设置里的「设置手机操作」向导，配对一次无线调试（[设置指南](docs/setup-guide.md)）。
+2. 需要操作手机 App 时，打开 Mika 设置里的「设置手机操作」向导，配对一次无线调试（[设置指南](docs/setup-guide.md)）。只用聊天、网页和文件时可跳过。
 3. 在设置里的「模型」添加服务商、填 API Key，或者用 ChatGPT 登录。
 
 每一步的细节见下文的[快速开始](#快速开始)。
@@ -59,7 +59,7 @@ adb forward tcp:8765 tcp:8765
 
 USB 接入经 ADB 转发并使用令牌验证；直接经 Wi-Fi 或私有网络连接，需要在手机上另行开启，见[电脑连接说明](docs/mcp.md)。付款这类确认仍只能在手机上处理。
 
-用方式二安装时，如果你也要求电脑访问，AI 助手会按你选择的 CLI、Skill 或 MCP 入口继续配置。
+用方式二安装时，如果你也要求电脑访问，AI 助手会按你选择的接入方式继续配置。
 
 > **English summary**
 >
@@ -177,9 +177,9 @@ USB 接入经 ADB 转发并使用令牌验证；直接经 Wi-Fi 或私有网络�
 
 ### 电脑上的 AI 工具也能用（CLI / MCP）
 
-手机连着电脑时，电脑上的 AI 工具可以通过 MCP 把任务交给 Mika，在手机上办完把结果拿回去。一条命令打开，只经数据线、要令牌；也可以在设置里打开局域网连接（默认关）。见[电脑连接说明](docs/mcp.md)。
+电脑上的 AI 工具可以通过 **CLI + Skill 或 MCP** 把任务交给 Mika、查进度并拿回结果，通常选一种即可。两种入口共用手机任务服务；只在终端或脚本里使用时，也可单独安装 CLI。
 
-也可以安装[电脑端 CLI 与 Agent Skill](docs/cli.md),用 `mika connect`、`mika task run`、`mika task wait` 完成连接和任务交接。CLI 与 MCP 并列接入同一份手机任务服务,CLI 不需要配置 MCP;需要包含任务 API v1 的 APK。
+选择 CLI / Skill，见[安装与维护指南](docs/computer-install.md)；选择 MCP，见[电脑连接说明](docs/mcp.md)。USB 快速连接和需要在手机上另行开启的 Wi-Fi／私有网络连接，是接入时选择的连接方式。
 
 ## 快速开始
 
@@ -191,13 +191,15 @@ USB 接入经 ADB 转发并使用令牌验证；直接经 Wi-Fi 或私有网络�
 | 操作手机 App | 安卓 12 及以上；安卓 12、13 上后台操作可能影响主屏焦点 |
 | 推荐 | 安卓 14 及以上：后台屏有自己的焦点，不影响你在主屏打字；不同对话的任务同时进行也需要它 |
 | Linux 沙箱 | 仅 arm64 设备；其他设备照常安装，沙箱显示「此设备不支持」 |
-| 模型 | 一个支持工具调用的大模型 API Key |
+| 模型 | 支持工具调用的模型，可通过服务商 API、本地服务或 ChatGPT 登录配置，见[添加模型](#4-添加模型) |
 
 ### 1. 下载安装
 
 从 [Releases](https://github.com/wangzan101/Mika/releases/latest) 下载最新的 APK 安装。
 
 ### 2. 无障碍（可以先跳过）
+
+第 2、3 步用于手机 App 操作（安卓 12+）。只用聊天、网页和文件时，直接到第 4 步添加模型。
 
 Mika 靠无障碍读界面、做点按。不用手动去开：下一步配对成功后，Mika 会自己把它打开。从 GitHub 下载安装的 App，手动打开无障碍时常被系统拦下（提示「受限制的设置」），让 Mika 自己开能省掉这个麻烦。向导里到这一步时选「跳过」即可。
 
@@ -210,8 +212,6 @@ Mika 靠无障碍读界面、做点按。不用手动去开：下一步配对成
 为什么要这一步：Mika 有一个内置的手机助手，要在后台屏上启动和操作 App，需要借用安卓自带的无线调试来启动它。全程在手机上完成，不需要电脑和数据线。配对过后，如果无线调试被系统关掉了（换 Wi-Fi、重启手机后安卓会关掉它），Mika 在你允许的前提下会自己把它重新打开。
 
 手边有电脑和数据线的话，也可以不配对：先打开一次 Mika，插着线在电脑上运行 `adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/usb-start.sh` 启动手机助手；但每次重启手机后都要再运行一次。这些也可以交给电脑上的 AI 助手，见[用电脑上的 AI 助手安装](docs/install-with-agent.md)。
-
-只用上网、文件和聊天的话，这一步可以先跳过。
 
 ### 4. 添加模型
 

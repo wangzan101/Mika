@@ -7,9 +7,11 @@
 | 用途 | 安装什么 |
 | --- | --- |
 | 在手机上运行 Mika | 从 [Releases](https://github.com/wangzan101/Mika/releases) 安装 APK,完成[手机设置](setup-guide.md)。 |
-| 在终端或脚本中派任务 | 安装 CLI,使用 `mika` 命令。 |
-| 让 Codex、Claude Code 使用 Mika | 安装 Skill;它自带 CLI 脚本,无需另装全局命令。 |
-| 使用已有 MCP 客户端 | 按 [MCP 指南](mcp.md)配置。 |
+| 在终端或脚本中派任务 | 跳到 [CLI 安装](#cli安装),使用 `mika` 命令。 |
+| 让 Agent 通过 Skill 使用 Mika（如 Codex、Claude Code） | 跳到 [Skill 安装](#skill安装);它自带 CLI 脚本。 |
+| 使用 MCP 客户端 | 直接按 [MCP 指南](mcp.md)配置,无需执行本文的 CLI / Skill 安装。 |
+
+只执行所选入口的步骤。只装 Skill 不用先装全局 CLI 或 pipx。电脑端工具的安装、升级不会安装或更新手机 APK；手机上的模型和所需功能仍要单独设置。
 
 官方 APK 从 **v0.1.23** 提供 task API v1;自编译包以 `connect` 的兼容性检查为准。下面以 `v0.1.23` 演示固定版本安装,可替换为 Releases 中更新的正式 tag。
 
@@ -117,6 +119,8 @@ Claude Code 使用 `.claude` 路径;项目范围去掉开头的 `~/`（Windows �
 
 ## Skill：升级、回退和卸载
 
+Skill 和全局 CLI 分别维护。电脑已有 `mika` 命令时，当前 Skill 会优先使用它；更新 Skill 不会升级全局 CLI。验证更新时要核对 Agent 实际调用的命令和来源，不能只看随附脚本的版本。
+
 **安装器管理的副本**：重复安装时的 `skills add` 命令,把 URL 中的 tag 换成目标版本,保持相同 Agent 和范围。升级用新 tag,回退用原 tag;随后重新执行 `skills list` 和脚本检查。若自己修改过 Skill,先把修改备份到技能目录之外。自动化可加 `--yes` 确认覆盖同名 Skill。
 
 完整卸载使用 Skill 名称和安装范围：
@@ -132,7 +136,9 @@ npx skills list --global
 
 ## 安装后的连接检查
 
-在手机上打开 Mika 一次,让它生成连接脚本。然后按[连接手机](cli.md#连接手机)执行 `devices`、`connect`、`doctor`;只装 Skill 时用其随附脚本替代 `mika`。`doctor` 只验证连接,任务执行另见[任务命令](cli.md#任务命令)。
+本节用于 CLI / Skill；MCP 用户按 [MCP 指南](mcp.md)检查。使用 USB 或已连接的无线 ADB 时，在手机上打开 Mika 一次，让它生成连接脚本，再按[连接手机](cli.md#连接手机)执行 `devices`、`connect`、`doctor`；只装 Skill 时用其随附脚本替代 `mika`。
+
+直接经 Wi-Fi／私有网络连接时，按同一连接指南里的 URL 和令牌文件方式检查，无需执行 ADB 的 `devices` / `connect` 流程。`doctor` 只验证接口连接和可读设备状态，不代表 Agent 已加载 Skill、模型已配置或真实任务成功；任务执行另见[任务命令](cli.md#任务命令)。
 
 卸载电脑端工具不会删除手机数据或关闭手机电脑连接。需要停止远程访问时,在手机「设置 › 电脑连接」关闭对应开关。
 

@@ -7,9 +7,11 @@
 | Goal | What to install |
 | --- | --- |
 | Run Mika on Android | Install the APK from [Releases](https://github.com/wangzan101/Mika/releases) and complete [phone setup](setup-guide.en.md). |
-| Submit tasks from a terminal or script | Install the CLI and use `mika`. |
-| Use Mika from Codex or Claude Code | Install the Skill; its bundled CLI script works without a global command. |
-| Use an existing MCP client | Follow the [MCP guide](mcp.en.md). |
+| Submit tasks from a terminal or script | Go to [CLI installation](#cli-install) and use `mika`. |
+| Use Mika through a Skill in an agent such as Codex or Claude Code | Go to [Skill installation](#skill-install); it includes its own CLI script. |
+| Use an MCP client | Go straight to the [MCP guide](mcp.en.md); skip CLI / Skill installation here. |
+
+Follow only the steps for your chosen entry point. Skill-only use needs neither a global CLI installation nor pipx. Installing or updating computer tools does not install or update the phone APK; the model and required phone features still need to be set up separately.
 
 Official APKs provide task API v1 starting in **v0.1.23**; for custom builds, rely on the compatibility check in `connect`. Examples pin `v0.1.23`; you can substitute a newer stable tag from Releases.
 
@@ -117,6 +119,8 @@ Download **Source code (zip)** from the selected release, extract it and copy th
 
 ## Skill: update, roll back and uninstall
 
+The Skill and global CLI are maintained separately. If `mika` is already installed, the current Skill prefers that command; updating the Skill does not update the global CLI. Verify the command and source the agent actually uses, not just the bundled script's version.
+
 **Installer-managed copies:** Repeat the original `skills add` command with the target tag in its URL, keeping the same agent and scope. Use a newer tag to update or the previous tag to roll back, then repeat the `skills list` and script checks. Back up any edits outside the skill directories first. Automation can add `--yes` to confirm replacing the skill.
 
 For a complete uninstall, specify the skill name and installation scope:
@@ -132,7 +136,9 @@ For project scope, omit `--global` and run from the original project root. This 
 
 ## Connection check after installation
 
-Open Mika once on the phone so it creates its connection script. Follow [Connect](cli.en.md#connect) to run `devices`, `connect` and `doctor`; with only the Skill installed, use its bundled script instead of `mika`. `doctor` checks connectivity; see [Tasks](cli.en.md#tasks) to verify task execution separately.
+This section is for CLI / Skill; MCP users should check the [MCP guide](mcp.en.md). For USB or connected wireless ADB, open Mika once on the phone so it creates its connection script, then follow [Connect](cli.en.md#connect) to run `devices`, `connect` and `doctor`. With only the Skill installed, use its bundled script instead of `mika`.
+
+For direct Wi-Fi / private-network access, use the URL and token-file instructions in that connection guide; skip the ADB `devices` / `connect` flow. `doctor` checks API connectivity and available device state, not Skill discovery, model configuration or real task success; see [Tasks](cli.en.md#tasks) to verify execution separately.
 
 Removing the computer tools does not erase phone data or disable computer access. To stop remote access, turn off the relevant switch under Settings > Computer access on the phone.
 

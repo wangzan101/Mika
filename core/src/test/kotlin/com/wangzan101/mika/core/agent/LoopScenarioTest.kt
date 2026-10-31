@@ -23,6 +23,7 @@ import com.wangzan101.mika.core.tool.FakeScreen
 import com.wangzan101.mika.core.tool.ScriptWebPort
 import com.wangzan101.mika.core.tool.ToolDispatcher
 import com.wangzan101.mika.core.verify.Verifier
+import com.wangzan101.mika.core.cap.web.AttachedPage
 import com.wangzan101.mika.core.cap.web.FakeWebPort
 import com.wangzan101.mika.core.cap.web.PageText
 import com.wangzan101.mika.core.cap.web.ScriptRun
@@ -66,6 +67,10 @@ class LoopScenarioTest {
         models.forEach { (role, m) -> assertEquals("$role 的剧本没有用完", 0, m.remaining) }
         LoopSnapshot.check(name, LoopSnapshot.render(end.toString(), models.toList()))
     }
+
+    /** 这次请求里最后一段运行时状态的全文。 */
+    private fun List<com.wangzan101.mika.core.model.Message>.runtimeState(): String =
+        flatMap { it.parts }.filterIsInstance<Part.Text>().last { ContextBuilder.kindOf(it.text) == ContextKind.RuntimeState }.text
 
     private fun FakeChatModel.lastResult(i: Int): String =
         requests[i].messages.last { it.role == Role.Tool }.parts.filterIsInstance<Part.ToolResult>().first().content
@@ -349,6 +354,53 @@ class LoopScenarioTest {
         assertEquals(3, main.requests.size)
     }
 
+    // 浏览器页上问:那句话以页面说明(固定的英文)开头,语言提示和回答的语言检查只看用户打的字,中文回答不退回
+    @Test fun browserPageAnswerFollowsTheUserWords() = runTest {
+        val attached = AttachedPage.Page("https://shop.example.com/s?k=降噪耳机", "降噪耳机 - 搜索结果")
+        val web = FakeWebPort().apply {
+            title = attached.title
+            page = pageText(attached.url, attached.title, "入耳式降噪耳机 B2 Pro 649 元\n头戴式降噪耳机 C3 Max 899 元")
+        }
+        val answer = "这页里 700 元以内的只有入耳式降噪耳机 B2 Pro,价格 649 元;头戴式的 C3 Max 要 899 元,超出了预算,所以选 B2 Pro。"
+        val main = fakeModel("main") {
+            call("web_read_page")
+            answer(answer)
+        }
+        val end = loop(main, toolDispatcher(FakeScreen(), web = web)).run(AttachedPage.compose(attached, "这页里 700 以内的挑一个"))
+        assertEquals(answer, (end as TaskState.Succeeded).answer)
+        assertEquals(2, main.requests.size)
+        val hint = main.requests[0].messages.runtimeState()
+        assertTrue(hint, "latest message: \"这页里 700 以内的挑一个\"" in hint)
+    }
+
+    // 浏览器页上插话带着新选中的字:语言提示引插话里打的字,中文回答不退回
+    @Test fun browserPageSteerFollowsTheUserWords() = runTest {
+        browserPageSteer("就看选中的这个", quoted = "就看选中的这个")
+    }
+
+    // 插话只选了字、没打字:语言提示沿用开局那句,中文回答不退回
+    @Test fun selectionOnlySteerKeepsTheOpeningWords() = runTest {
+        browserPageSteer("", quoted = "这页里 700 以内的挑一个")
+    }
+
+    /** 在英文标题的页面上用中文开局,插话带着新选中的字和 [words];模型直接给中文回答。 */
+    private suspend fun browserPageSteer(words: String, quoted: String) {
+        val attached = AttachedPage.Page("https://shop.example.com/s?k=headphones", "Noise Cancelling Headphones - Search Results")
+        val web = FakeWebPort().apply {
+            title = attached.title
+            page = pageText(attached.url, attached.title, "入耳式降噪耳机 B2 Pro 649 元\n头戴式降噪耳机 C3 Max 899 元")
+        }
+        val answer = "选中的是入耳式降噪耳机 B2 Pro,价格 649 元,在 700 元以内;头戴式的 C3 Max 要 899 元,超出了预算,所以选 B2 Pro。"
+        val main = fakeModel("main") { answer(answer) }
+        val inbox = RunInbox().apply { send(RunInput.Steer("m1", AttachedPage.compose(attached.copy(selection = "B2 Pro 649"), words))) }
+        val end = loop(main, toolDispatcher(FakeScreen(), web = web))
+            .run(RunSpec(RunId("r1"), AttachedPage.compose(attached, "这页里 700 以内的挑一个"), "thread-1"), inbox)
+        assertEquals(answer, (end as TaskState.Succeeded).answer)
+        assertEquals(1, main.requests.size)
+        val hint = main.requests[0].messages.runtimeState()
+        assertTrue(hint, "latest message: \"$quoted\"" in hint)
+    }
+
     // (o) 工具调用漏成了文字(服务端没解析成调用):不当回答,退回一次;模型经工具接口重新调用后照常做完
     @Test fun toolCallLeakedAsTextIsNudgedOnce() = runTest {
         val screen = ScriptedScreen(listOf(Screen(SETTINGS, listOf(label("@e1", "关于手机", 80), label("@e2", "Android 版本 14", 300)))))
@@ -425,6 +477,9 @@ class LoopScenarioTest {
         val kept = seen.indexOfFirst { it.role == Role.Assistant }
         assertEquals(listOf(Part.Text("我先看看 WLAN 开没开")), seen[kept].parts)
         assertTrue((seen[kept + 1].parts.first() as Part.Text).text.startsWith(AgentLoop.STEER_MARKER))
+        // 语言提示引的是插话里用户打的字,不带插话标记
+        val hint = seen.runtimeState()
+        assertTrue(hint, "latest message: \"不是 WLAN,是蓝牙\"" in hint)
         snapshot("p_steer_keeps_interrupted_reply", end, "main" to main)
     }
 

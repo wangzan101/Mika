@@ -29,6 +29,7 @@ class AgentLoopUserScreenTest {
     ))
     private val bank = UserScreen("s2", at, "com.example.bank", "银行", blocked = true)
     private val png = byteArrayOf(1, 2, 3)
+    private val screenAnswer = "第二句「应该去吧,怎么了」是对方说的:他在回答你问的周六聚会还去不去,意思是大概会去,又问你有什么事。"
 
     private val source = object : UserScreenSource {
         override suspend fun screen(id: String) = listOf(chat, bank).firstOrNull { it.id == id }
@@ -71,6 +72,29 @@ class AgentLoopUserScreenTest {
         assertFalse(body.contains("without words"))
         assertTrue(model.offeredTools.first().contains("view_user_screen"))
     }
+
+    // 模型看到的那句是固定的英文说明加附言:语言提示和回答的语言检查只看附言,中文回答不退回
+    @Test fun languageChecksSeeTheCaptionOnly() = runBlocking {
+        val goal = UserScreenMessage.compose("s1", "第二句是谁说的")
+        val model = FakeModel(answerReply(screenAnswer), repeatLast = true)
+        loop(model, goal).run(goal)
+        assertEquals(1, model.requests.size)
+        val hint = model.requests[0].runtimeHint()
+        assertTrue(hint, "latest message: \"第二句是谁说的\"" in hint)
+    }
+
+    // 只发了屏幕、没打字:没有可照的语言,不给语言提示,也不查
+    @Test fun screenWithoutWordsIsNotLanguageChecked() = runBlocking {
+        val goal = UserScreenMessage.compose("s1", "")
+        val model = FakeModel(answerReply(screenAnswer), repeatLast = true)
+        loop(model, goal).run(goal)
+        assertEquals(1, model.requests.size)
+        val hint = model.requests[0].runtimeHint()
+        assertFalse(hint, "latest message" in hint)
+    }
+
+    private fun List<com.wangzan101.mika.core.model.Message>.runtimeHint(): String =
+        flatMap { it.parts }.filterIsInstance<Part.Text>().last { ContextBuilder.kindOf(it.text) == ContextKind.RuntimeState }.text
 
     @Test fun blockedScreenSaysItCouldNotBeCaptured() = runBlocking {
         val model = FakeModel(answerReply("好"))

@@ -135,9 +135,9 @@ class ContextBuilder(
     fun notice(source: String, text: String): Message = Piece(ContextKind.Notice, source, body = text).message()
 
     /**
-     * 每轮一段的运行时状态:当前界面、第几步、本地时间、用户最近一句话的开头。是一段文字,接在这一步最后一条消息的末尾(见 AgentLoop)。
+     * 每轮一段的运行时状态:当前界面、第几步、本地时间、用户最近一句话里他自己打的字的开头。是一段文字,接在这一步最后一条消息的末尾(见 AgentLoop)。
      * [place] 是任务此刻在哪(App 或站点),[label] 是 App 名,[siteMode] 是 desktop / mobile(不知道为 null)。
-     * [userWords] 是用户最近一句话:读到的内容多是别的语言时,模型写给用户的话容易跟着换语言,紧挨着生成处摆出原话的开头,
+     * [userWords] 是用户最近一句话里他自己打的字(不带屏幕、页面说明这些,见 AgentLoop):读到的内容多是别的语言时,模型写给用户的话容易跟着换语言,紧挨着生成处摆出这些字的开头,
      * 让它照这句话的语言写;不在这里判断是哪种语言。
      */
     fun runtimeState(place: Place?, label: String?, siteMode: String?, step: Int, maxSteps: Int, nowMs: Long, userWords: String? = null): Part.Text {

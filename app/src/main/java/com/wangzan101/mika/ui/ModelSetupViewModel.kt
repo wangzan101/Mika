@@ -374,16 +374,21 @@ class ModelSetupViewModel(
     /**
      * 试调用的结论:通过、[model] 没调用工具、失败([message] 是给人看的原因)。
      * 失败是那个模型自己的问题(这个账号用不了、没有这个模型、不支持工具)时 [modelReason] 是短的原因,换一个模型可能就行;
-     * [notAvailable] 为真是没开通或没权限。
+     * [notAvailable] 为真是没开通或没权限;[serverSide] 为真是服务端出错(5xx),可能只是这一个模型的上游挂了,见 [probe]。
      */
     private sealed interface ProbeOutcome {
         data object Passed : ProbeOutcome
         data class NoToolCall(val model: String) : ProbeOutcome
-        data class Failed(val message: String, val modelReason: String? = null, val notAvailable: Boolean = false) : ProbeOutcome
+        data class Failed(
+            val message: String, val modelReason: String? = null,
+            val notAvailable: Boolean = false, val serverSide: Boolean = false,
+        ) : ProbeOutcome
     }
 
-    /** 先试、没通过的一个模型:[reason] 是短的原因。 */
-    private data class Rejected(val model: String, val reason: String, val notAvailable: Boolean)
+    /** 先试、没通过的一个模型:[reason] 是短的原因;[serverSide] 为真是服务端出错(5xx),见 [probe]。 */
+    private data class Rejected(
+        val model: String, val reason: String, val notAvailable: Boolean, val serverSide: Boolean = false,
+    )
 
     /** 有列表时试调用的结果:[Blocked] 是第一个就因为模型以外的原因失败,不存;[Done] 见 [probe]。 */
     private sealed interface ListProbe {
@@ -396,6 +401,10 @@ class ModelSetupViewModel(
      * 列出模型后按 [ModelOptions.candidates] 的先后(没有就第一个)让模型调用一次工具(见 [probeModel]),至多试
      * [PROBE_CANDIDATES] 个:通过就停;没通过、是那个模型自己的问题就试下一个。第一个因为别的原因失败为 [ListProbe.Blocked];
      * 之后的因为别的原因失败就不再试(Key 已证明是对的),和都没通过一样处理。列表里一个能用的也没有时算通过、不试。
+     *
+     * 服务端出错(5xx)不一定整家不可用:聚合服务商把很多上游的模型放在同一个列表里,其中一个上游挂了也会这样。
+     * 所以 5xx 先按这个模型没通过记下、接着试下一个:后面有通过的,就说明是那个模型的问题,照常保存;
+     * 试的全都是这样,才当成整家不可用,不存。只碰到过 5xx 时 Key 还没证明是对的,这之后再碰到别的原因失败也照旧不存。
      */
     private suspend fun probe(f: AddForm, baseUrl: String, key: String?, models: List<ListedModel>): ListProbe {
         // 用 ChatGPT 登录不走这张表单(登录本身就核对过了);表单只给 Key 的接口类型,这里再挡一次
@@ -404,6 +413,7 @@ class ModelSetupViewModel(
         val options = ModelOptions.merge(models, base)
         val order = ModelOptions.candidates(options, f.familyTokens).ifEmpty { listOfNotNull(options.firstOrNull()?.id) }
         val rejected = mutableListOf<Rejected>()
+        var firstServerError: String? = null
         for ((i, model) in order.take(PROBE_CANDIDATES).withIndex()) {
             val caps = options.first { it.id == model }.capabilities
             val endpoint = models.firstOrNull { it.id == model }?.endpoint
@@ -411,14 +421,22 @@ class ModelSetupViewModel(
                 ProbeOutcome.Passed -> return ListProbe.Done(model, rejected)
                 is ProbeOutcome.NoToolCall -> rejected += Rejected(model, tr(R.string.model_reason_no_tools), notAvailable = false)
                 is ProbeOutcome.Failed -> when {
-                    o.modelReason != null -> rejected += Rejected(model, o.modelReason, o.notAvailable)
-                    i == 0 -> return ListProbe.Blocked(o.message)
+                    o.modelReason != null -> {
+                        rejected += Rejected(model, o.modelReason, o.notAvailable, o.serverSide)
+                        if (o.serverSide && firstServerError == null) firstServerError = o.message
+                    }
+                    // 前面只有 5xx 时 Key 还没证明是对的:再碰到 Key、网络、地址、超时这类,照旧不存
+                    firstServerError != null || i == 0 -> return ListProbe.Blocked(o.message)
                     else -> {
                         rejected += Rejected(model, o.message, notAvailable = false)
                         break
                     }
                 }
             }
+        }
+        // 试的全都是服务端出错:多半整家不可用,不存
+        if (rejected.isNotEmpty() && rejected.all { it.serverSide }) {
+            return ListProbe.Blocked(firstServerError ?: rejected.first().reason)
         }
         return ListProbe.Done(null, rejected)
     }
@@ -469,6 +487,11 @@ class ModelSetupViewModel(
                     if (listMissing) tr(R.string.model_probe_not_found_no_list, model, ModelSetupCopy.modelExample(exampleKind))
                     else tr(R.string.model_probe_not_found, model, ModelSetupCopy.modelExample(exampleKind)),
                     tr(R.string.model_reason_not_found),
+                )
+                // 5xx:可能只是这一个模型的上游挂了,先按它没通过算,由 [probe] 决定还试不试下一个
+                is ModelError.Server -> ProbeOutcome.Failed(
+                    tr(R.string.model_probe_failed, model, e.message.orEmpty()),
+                    tr(R.string.model_reason_server, "HTTP ${e.status}"), serverSide = true,
                 )
                 else -> ProbeOutcome.Failed(tr(R.string.model_probe_failed, model, e.message.orEmpty()))
             }

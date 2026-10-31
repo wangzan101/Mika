@@ -194,6 +194,70 @@ class ModelSetupViewModelTest {
         )
     }
 
+    /**
+     * 聚合服务商(一个列表里很多家的模型):排在最前面的那个模型上游挂了(502),后面的能用。
+     * 5xx 不该当成整家不可用,按那个模型没通过算,照常存下这家、拿通过的那个当主模型。
+     */
+    @Test fun serverErrorOnTheFirstCandidateFallsBackToTheNext() = runTest {
+        val url = "https://api.qnaigc.com/v1"
+        listing[url] = ModelListResult.Ok(listOf(
+            ListedModel("meituan/longcat-flash-lite"), ListedModel("deepseek/deepseek-v4.1-flash"),
+        ))
+        reply = {
+            if (built.last().first == "meituan/longcat-flash-lite") throw ModelError.Server(502)
+            ModelReply(listOf(Part.ToolCall("c1", "get_time", "{}")), StopReason.ToolUse, null)
+        }
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("sk"); vm.testAndSave(); runCurrent()
+        assertEquals(listOf("meituan/longcat-flash-lite", "deepseek/deepseek-v4.1-flash"), built.map { it.first })
+        val p = store.providers.value.single()
+        assertEquals("deepseek/deepseek-v4.1-flash", store.configFor(ModelRole.Main)?.model)
+        assertTrue("deepseek/deepseek-v4.1-flash" in p.verifiedModels)
+        val s = vm.state.value
+        assertFalse(s.showForm)
+        assertNull(s.pickToProbe)
+        assertEquals(
+            "先试的 meituan/longcat-flash-lite 没测试通过：服务端出错（HTTP 502）。" +
+                "主模型用了测试通过的「deepseek/deepseek-v4.1-flash」。",
+            s.probeNote,
+        )
+    }
+
+    /** 试的几个都是 5xx:多半整家不可用(地址对、但服务没起来),照旧不存。 */
+    @Test fun serverErrorOnEveryCandidateSavesNothing() = runTest {
+        val url = "https://api.qnaigc.com/v1"
+        listing[url] = ModelListResult.Ok(listOf(ListedModel("a-model"), ListedModel("b-model"), ListedModel("c-model")))
+        reply = { throw ModelError.Server(502) }
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("sk"); vm.testAndSave(); runCurrent()
+        assertEquals("至多试 3 个", listOf("a-model", "b-model", "c-model"), built.map { it.first })
+        val failed = vm.state.value.form.test as ListState.Failed
+        assertTrue(failed.message, failed.message.contains("HTTP 502"))
+        assertTrue(store.providers.value.isEmpty())
+        assertTrue(store.list().isEmpty())
+        assertNull(store.roles.value.main)
+    }
+
+    /** 先试的是 5xx,接着试的却是 Key 不对:前面那个 5xx 没证明 Key 能用,照旧不存。 */
+    @Test fun serverErrorThenAuthErrorSavesNothing() = runTest {
+        val url = "https://api.qnaigc.com/v1"
+        listing[url] = ModelListResult.Ok(listOf(ListedModel("a-model"), ListedModel("b-model")))
+        reply = {
+            if (built.last().first == "a-model") throw ModelError.Server(502)
+            throw ModelError.Auth()
+        }
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("sk"); vm.testAndSave(); runCurrent()
+        assertEquals(listOf("a-model", "b-model"), built.map { it.first })
+        val failed = vm.state.value.form.test as ListState.Failed
+        assertTrue(failed.message, failed.message.contains("API Key 无效"))
+        assertTrue(store.providers.value.isEmpty())
+        assertTrue(store.list().isEmpty())
+    }
+
     /** 试的几个都没开通:Key 是对的,照样存下服务商,不定主模型,说清试了哪些,请用户从列表里选;选的时候先试调用,不通不选。 */
     @Test fun allCandidatesNotActivatedSavesProviderAndAsksToPick() = runTest {
         listing[qwenUrl] = ModelListResult.Ok(listOf(

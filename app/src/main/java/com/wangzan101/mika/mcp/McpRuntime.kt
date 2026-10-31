@@ -1,16 +1,17 @@
 package com.wangzan101.mika.mcp
 
+import com.wangzan101.mika.core.mcp.McpRpc
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.wangzan101.mika.BuildConfig
-import com.wangzan101.mika.core.mcp.McpAccess
-import com.wangzan101.mika.core.mcp.McpActivity
-import com.wangzan101.mika.core.mcp.McpHost
+import com.wangzan101.mika.core.remote.RemoteAccess
+import com.wangzan101.mika.core.remote.RemoteActivity
+import com.wangzan101.mika.core.remote.RemoteHost
 import com.wangzan101.mika.core.mcp.McpUsb
 import com.wangzan101.mika.core.shell.HelperHandoff
 import com.wangzan101.mika.device.AndroidDeviceAccess
-import com.wangzan101.mika.core.mcp.RemoteTasks
+import com.wangzan101.mika.core.remote.RemoteTasks
 import com.wangzan101.mika.settings.McpSettings
 import com.wangzan101.mika.settings.McpUsbSettings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,11 +39,11 @@ class McpRuntime(
 ) {
     private val _state = MutableStateFlow<McpServerState>(McpServerState.Off)
     val state: StateFlow<McpServerState> = _state.asStateFlow()
-    @Volatile private var host: McpHost? = null
+    @Volatile private var host: RemoteHost? = null
     private var hostListen = McpModes.Listen.Off
 
     /** 最近连过的客户端和最后一次请求;没在监听时为空。 */
-    val activity: McpActivity get() = host?.activity?.value ?: McpActivity()
+    val activity: RemoteActivity get() = host?.activity?.value ?: RemoteActivity()
 
     fun listen(): McpModes.Listen = McpModes.listen(settings.enabled.value, usb.enabled.value)
 
@@ -95,7 +96,7 @@ class McpRuntime(
 
     private fun startServer(want: McpModes.Listen): Boolean {
         val network = want == McpModes.Listen.PrivateNetworks
-        val h = McpHost(tasks, { if (settings.enabled.value) settings.token() else null }, settings.port, allowAllInterfaces = network,
+        val h = RemoteHost(tasks, { if (settings.enabled.value) settings.token() else null }, settings.port, allowAllInterfaces = network,
             serverVersion = BuildConfig.VERSION_NAME, onError = { Log.w(TAG, "computer access server error", it) },
             loopbackToken = usb::token, device = device.access)
         return try {
@@ -160,12 +161,12 @@ class McpRuntime(
                 .filter { runCatching { it.isUp && !it.isLoopback }.getOrDefault(false) }
                 .flatMap { it.inetAddresses.toList() }
                 .filterIsInstance<Inet4Address>()
-                .filter { !it.isLoopbackAddress && !it.isLinkLocalAddress && McpAccess.privateAddress(it) }
+                .filter { !it.isLoopbackAddress && !it.isLinkLocalAddress && RemoteAccess.privateAddress(it) }
                 .mapNotNull { it.hostAddress }
                 .distinct()
         }.getOrDefault(emptyList())
 
-        fun url(address: String, port: Int) = "http://$address:$port${McpAccess.PATH}"
+        fun url(address: String, port: Int) = "http://$address:$port${McpRpc.PATH}"
 
         /** 给电脑上的 MCP 客户端用的配置片段:地址加 Authorization 头。 */
         fun clientConfig(url: String, token: String): String = """

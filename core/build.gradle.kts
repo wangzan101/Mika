@@ -70,6 +70,8 @@ val chatgptSignInCheck by tasks.registering(JavaExec::class) {
 }
 
 tasks.test {
+    // 跨语言 CLI 契约由 cliTest 显式运行;纯 JVM 测试不要求电脑安装 Python。
+    exclude("**/RemoteCliContractTest*")
     // testFixtures 会把 core 的 jar 放到测试类路径前面;让目录排在前面,按目录读资源的测试才找得到文件
     classpath = sourceSets.main.get().output + classpath
     // TaskSetTest 读仓库根目录的评测任务集
@@ -91,3 +93,23 @@ tasks.test {
         outputs.upToDateWhen { false }
     }
 }
+
+val cliContractTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "真实 Python CLI 对接 Kotlin 任务 API,MCP 路由关闭"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.main.get().output + sourceSets.test.get().runtimeClasspath
+    include("**/RemoteCliContractTest*")
+    inputs.dir(rootProject.file("tools/mika/scripts"))
+    systemProperty("mika.python", providers.gradleProperty("mikaPython").getOrElse("python3"))
+}
+
+val cliTest by tasks.registering(Exec::class) {
+    group = "verification"
+    description = "CLI 进程、假 ADB、独立 Skill 与真实 HTTP 契约测试 (Python 3.10+)"
+    dependsOn(cliContractTest)
+    workingDir(rootProject.projectDir)
+    commandLine(providers.gradleProperty("mikaPython").getOrElse("python3"), "-m", "unittest", "discover", "-s", "tools/mika/tests", "-v")
+}
+
+tasks.check { dependsOn(cliTest) }

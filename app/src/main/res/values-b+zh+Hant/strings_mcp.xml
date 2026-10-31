@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mcp_title">電腦連線（MCP）</string>
+    <string name="mcp_title">電腦連線（CLI / MCP）</string>
     <string name="mcp_sub">讓電腦上的 AI 工具把任務交給 Mika</string>
-    <string name="mcp_foot">預設關閉。開啟後,Mika 在 Wi-Fi 和私有網路上監聽(行動數據上不監聽),同一網路裡電腦上的 MCP 用戶端就能把任務交給 Mika;Mika 在這臺手機上去做,你在對話列表裡看得到。每個請求都要帶下面的存取權杖。付款、確認和交給你處理的那一步,只能在這臺手機上做。</string>
+    <string name="mcp_foot">預設關閉。開啟後,Mika 在 Wi-Fi 和私有網路上監聽(行動數據上不監聽),同一網路裡電腦上的 CLI 或 MCP 用戶端就能把任務交給 Mika;Mika 在這臺手機上去做,你在對話列表裡看得到。每個請求都要帶下面的存取權杖。付款、確認和交給你處理的那一步,只能在這臺手機上做。</string>
     <string name="mcp_status">狀態</string>
     <string name="mcp_starting">正在開啟…</string>
     <string name="mcp_listening">正在監聽連接埠 %1$d</string>

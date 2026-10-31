@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wangzan101.mika.R
-import com.wangzan101.mika.core.mcp.McpActivity
+import com.wangzan101.mika.core.remote.RemoteActivity
 import com.wangzan101.mika.mcp.McpRuntime
 import com.wangzan101.mika.mcp.McpServerState
 import com.wangzan101.mika.ui.components.ButtonKind
@@ -61,7 +61,7 @@ fun McpScreen(runtime: McpRuntime, onBack: () -> Unit) {
     val usbCommand = remember { runtime.usbCommand() }
     val state by runtime.state.collectAsState()
     var addresses by remember { mutableStateOf<List<String>>(emptyList()) }
-    var activity by remember { mutableStateOf(McpActivity()) }
+    var activity by remember { mutableStateOf(RemoteActivity()) }
     var token by remember { mutableStateOf<String?>(null) }
     var confirmRegenerate by remember { mutableStateOf(false) }
     LaunchedEffect(enabled, usbOn) {

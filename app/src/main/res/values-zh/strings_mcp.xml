@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mcp_title">电脑连接（MCP）</string>
+    <string name="mcp_title">电脑连接（CLI / MCP）</string>
     <string name="mcp_sub">让电脑上的 AI 工具把任务交给 Mika</string>
-    <string name="mcp_foot">默认关闭。打开后,Mika 在 Wi-Fi 和私有网络上监听(移动数据上不监听),同一网络里电脑上的 MCP 客户端就能把任务交给 Mika;Mika 在这台手机上去做,你在对话列表里看得到。每个请求都要带下面的访问令牌。付款、确认和交给你处理的那一步,只能在这台手机上做。</string>
+    <string name="mcp_foot">默认关闭。打开后,Mika 在 Wi-Fi 和私有网络上监听(移动数据上不监听),同一网络里电脑上的 CLI 或 MCP 客户端就能把任务交给 Mika;Mika 在这台手机上去做,你在对话列表里看得到。每个请求都要带下面的访问令牌。付款、确认和交给你处理的那一步,只能在这台手机上做。</string>
     <string name="mcp_status">状态</string>
     <string name="mcp_starting">正在开启…</string>
     <string name="mcp_listening">正在监听端口 %1$d</string>

@@ -59,7 +59,7 @@ import com.wangzan101.mika.cap.sandbox.SandboxOwner
 import com.wangzan101.mika.core.workspace.SandboxTree
 import com.wangzan101.mika.task.TaskEnvironment
 import com.wangzan101.mika.task.ResourceScheduler
-import com.wangzan101.mika.task.McpTaskHub
+import com.wangzan101.mika.task.RemoteTaskHub
 import com.wangzan101.mika.task.FileChildRunStore
 import com.wangzan101.mika.task.TriggerRuntime
 
@@ -79,7 +79,7 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
 
     /** 各任务的标签池共用的标签总数上限。 */
     val resources = ResourceScheduler()
-    val mcpTasks by lazy { McpTaskHub(this) }
+    val remoteTasks by lazy { RemoteTaskHub(this) }
 
     /**
      * 电脑连接(MCP):开关、访问令牌(和服务商的 Key 一样加密存)、监听。局域网那种默认关着;
@@ -92,7 +92,7 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
             com.wangzan101.mika.settings.McpUsbSettings(settingsDir,
                 bootId = { android.provider.Settings.Global.getString(contentResolver, android.provider.Settings.Global.BOOT_COUNT) ?: "null" },
                 infoFile = { getExternalFilesDir(null)?.let { java.io.File(it, com.wangzan101.mika.core.mcp.McpUsb.INFO_FILE) } }),
-            mcpTasks, com.wangzan101.mika.device.AndroidDeviceAccess(this) { phone.hub.shell.value })
+            remoteTasks, com.wangzan101.mika.device.AndroidDeviceAccess(this) { phone.hub.shell.value })
     }
     val childRuns by lazy { FileChildRunStore(java.io.File(filesDir, "children-v3.json")) }
     override val tabBudget get() = resources.tabBudget

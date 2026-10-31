@@ -167,9 +167,11 @@ Apps and websites that already have usage knowledge (names as they appear in the
 - Each conversation gets a workspace that can run Python, Node and shell commands, process files you send, and save results to your phone's Download/Mika folder.
 - Offline by default; when needed, turn on "Allow scripts to access the network" (允许脚本联网) under "Files & compute" (文件与计算环境) in Settings. arm64 devices only.
 
-### AI tools on your computer can use it (MCP)
+### AI tools on your computer can use it (CLI / MCP)
 
 With the phone connected to a computer, AI tools there can hand Mika tasks over MCP and get the results back. One command turns it on; USB only and token-protected. A LAN option is in Settings, off by default. See the [computer access guide](docs/mcp.en.md).
+
+You can also install the [computer CLI and Agent Skill](docs/cli.en.md) and use `mika connect`, `mika task run` and `mika task wait`. CLI and MCP are peer entry points into the same phone task service; the CLI requires no MCP configuration. An APK containing task API v1 is required.
 
 ## Quick start
 
@@ -293,12 +295,14 @@ PRs welcome. Start with [`docs/architecture.md`](docs/architecture.md) (written 
 
 ### Build and test
 
+CLI tests also require Python 3.10+; select an interpreter with `-PmikaPython=/path/to/python3`.
+
 Requires JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, or the `ANDROID_HOME` environment variable).
 
 ```bash
 ./gradlew :app:assembleDebug                  # debug build
 ./gradlew :app:assemblePerf                   # build for judging smoothness: precompiled and non-debuggable like release, debug-signed, installs over the debug build
-./gradlew :core:test :app:testDebugUnitTest   # unit tests
+./gradlew :core:test :core:cliTest :app:testDebugUnitTest   # unit tests
 ```
 
 The debug build is not precompiled and its UI is several times slower; use the perf build to judge smoothness.

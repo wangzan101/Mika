@@ -1,12 +1,11 @@
 package com.wangzan101.mika.core.mcp
 
 import com.wangzan101.mika.core.device.DeviceAccess
-import com.wangzan101.mika.core.device.DeviceAccessResult
+import com.wangzan101.mika.core.device.toJson
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 
 /** 主屏准备是独立的确定性流程。工具不接收凭据,凭据只能在手机设置。沿用 MCP 的认证门口。 */
 internal class McpDeviceTools(private val device: DeviceAccess) {
@@ -30,17 +29,7 @@ internal class McpDeviceTools(private val device: DeviceAccess) {
             UNLOCK -> device.unlock()
             else -> throw McpTaskTools.ToolError("Unknown tool: $name")
         }
-        return describe(r)
-    }
-
-    private fun describe(r: DeviceAccessResult) = buildJsonObject {
-        put("status", r.status); put("enabled", r.enabled)
-        put("credential_configured", r.credentialConfigured); put("attempt_blocked", r.attemptBlocked)
-        r.state?.let { s -> putJsonObject("device") {
-            put("interactive", s.interactive); put("keyguard_showing", s.keyguardShowing)
-            put("device_locked", s.deviceLocked); put("secure", s.secure)
-            put("helper_available", s.helperAvailable); put("user_unlocked", s.userUnlocked); put("ready", s.ready)
-        } }
+        return r.toJson()
     }
 
     companion object {

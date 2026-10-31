@@ -1,5 +1,6 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.RemoteHost
 import com.wangzan101.mika.core.agent.TaskState
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -19,7 +20,7 @@ import java.net.Socket
 /** 真的开一个端口(只绑本机回环),用 HTTP 客户端走一遍:门口、协议、任务工具、近期连接的统计。 */
 class McpHostHttpTest {
     private val fake = FakeRemoteTasks()
-    private val host = McpHost(fake, { TOKEN }, port = 0, allowAllInterfaces = false, serverVersion = "test")
+    private val host = RemoteHost(fake, { TOKEN }, port = 0, allowAllInterfaces = false, serverVersion = "test")
     private val client = OkHttpClient()
     private lateinit var url: String
 

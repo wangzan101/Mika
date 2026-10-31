@@ -1,5 +1,8 @@
 package com.wangzan101.mika.core.mcp
 
+import com.wangzan101.mika.core.remote.StartOutcome
+import com.wangzan101.mika.core.remote.RemoteTasks
+import com.wangzan101.mika.core.remote.RemoteTask
 import com.wangzan101.mika.core.agent.TaskState
 
 /** 测试用的任务出入口:状态由测试直接改,记下回答和取消。 */
@@ -12,7 +15,7 @@ class FakeRemoteTasks : RemoteTasks {
 
     override fun start(goal: String, conversation: String?): StartOutcome {
         refuse?.let { return StartOutcome.Refused(it) }
-        val t = RemoteTask("t${++next}", conversation ?: McpTaskTools.newConversation(), goal, 1000L * next, null)
+        val t = RemoteTask("t${++next}", conversation ?: com.wangzan101.mika.core.remote.RemoteTaskService.newConversation(), goal, 1000L * next, null)
         tasks[t.id] = t
         return StartOutcome.Started(t)
     }

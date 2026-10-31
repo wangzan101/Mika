@@ -1,5 +1,7 @@
 # 电脑连接（MCP）：让电脑上的 AI 工具把任务交给 Mika
 
+CLI 与 MCP 现在并列接入同一份远程任务服务。若希望在终端或通过 Skill 使用 Mika,见 [CLI 与 Skill](cli.md);CLI 调用普通任务 API,不需要配置 MCP。
+
 简体中文 | [English](mcp.en.md)
 
 打开「电脑连接」后，Mika 就是一个 MCP 服务器：电脑上支持 MCP 的 AI 工具（MCP 客户端）可以把一件事交给 Mika，Mika 在手机上用自己的方式去做（操作 App、用内置浏览器、处理文件），做完把结果交回去。电脑说「要办成什么」，怎么做由手机上的 Mika 决定。

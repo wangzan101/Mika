@@ -6,10 +6,10 @@ import com.wangzan101.mika.core.agent.FailKind
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.mcp.McpTaskHost
 import com.wangzan101.mika.core.mcp.McpTaskLink
-import com.wangzan101.mika.core.mcp.McpTaskTools
-import com.wangzan101.mika.core.mcp.RemoteTask
-import com.wangzan101.mika.core.mcp.RemoteTasks
-import com.wangzan101.mika.core.mcp.StartOutcome
+import com.wangzan101.mika.core.remote.RemoteTaskService
+import com.wangzan101.mika.core.remote.RemoteTask
+import com.wangzan101.mika.core.remote.RemoteTasks
+import com.wangzan101.mika.core.remote.StartOutcome
 import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.core.run.Attendance
 import com.wangzan101.mika.core.run.RunEventBus
@@ -19,11 +19,11 @@ import com.wangzan101.mika.core.run.RunSpec
 import java.util.UUID
 
 /**
- * 电脑交来的任务的出入口:经 [TaskService] 开始(和对话界面同一条路,来源记成 MCP),状态读任务自己的([TaskRun.state]),
+ * 电脑交来的任务的出入口:经 [TaskService] 开始(和对话界面同一条路,来源沿用已有的远程 MCP 权限策略;CLI 与 MCP 都由这里接入),状态读任务自己的([TaskRun.state]),
  * 这里只记电脑给的编号对应哪个对话、原话,以及任务收尾时的终态(任务对象收尾后就不在了)。
  * 只认这里登记过的编号,手机上发起的任务看不到也动不了。
  */
-class McpTaskHub(
+class RemoteTaskHub(
     private val context: Context,
     private val runs: () -> List<TaskRun> = { (context.applicationContext as com.wangzan101.mika.MikaApp).taskState.runs.value },
     private val clock: () -> Long = System::currentTimeMillis,
@@ -38,7 +38,7 @@ class McpTaskHub(
     @Synchronized override fun submit(spec: RunSpec): McpTaskLink {
         require(spec.provenance.origin == RunOrigin.Mcp)
         val bus = buses.getOrPut(spec.id) { RunEventBus() }
-        val conversation = spec.threadId.takeIf(McpTaskTools::isConversation) ?: McpTaskTools.newConversation()
+        val conversation = spec.threadId.takeIf(RemoteTaskService::isConversation) ?: RemoteTaskService.newConversation()
         try { launch(spec.id.value, spec.goal, conversation, spec.provenance.attendance) }
         catch (e: Exception) { buses.remove(spec.id); throw e }
         return McpTaskLink(spec.id, bus) { cancel(spec.id.value) }
@@ -48,7 +48,7 @@ class McpTaskHub(
         val id = UUID.randomUUID().toString()
         val record = try {
             // 电脑那头能接着回答追问,但不一直守着:追问照常等,到时限就当没回答
-            launch(id, goal, conversation ?: McpTaskTools.newConversation(), Attendance.Reachable)
+            launch(id, goal, conversation ?: RemoteTaskService.newConversation(), Attendance.Reachable)
         } catch (e: Exception) {
             Log.w(TAG, "could not start MCP task", e)
             return StartOutcome.Refused("Mika could not start the task on the phone (${e.message ?: e::class.simpleName}). Open Mika on the phone and try again.")

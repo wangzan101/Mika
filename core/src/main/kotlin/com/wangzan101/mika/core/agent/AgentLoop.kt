@@ -175,6 +175,8 @@ class AgentLoop(
     /** 这次的原话给模型时的样子(带着屏幕时换成了说明,见 [UserScreenTurns]);还没开始为 null。判结局、提取记忆按它读。 */
     @Volatile var taskText: String? = null
         private set
+    /** 用户最近一句话(开局原话或插话)里他自己打的字,见 [ownWords];插话里只发了屏幕、只选了字时沿用上一句的。语言提示和回答的语言检查按它,记忆引文也只收这些字。 */
+    private var latestWords = ""
 
     private val _state = MutableStateFlow<TaskState>(TaskState.Idle)
     val state: StateFlow<TaskState> = _state.asStateFlow()
@@ -316,11 +318,12 @@ class AgentLoop(
         val opening = shots.render(raw)
         val task = opening?.said ?: raw
         taskText = task
+        latestWords = ownWords(raw, opening)
         val priorTurns = shots.collapse(rawPrior)
         earlierGoals = priorTurns.map { it.userText }
         // 之前的轮次只作参考,放在本次任务之前
         val context = Conversation.context(priorTurns)
-        utterances?.add(opening?.words ?: task)
+        utterances?.add(latestWords)
         // 记忆块:对话上文之后、任务原文之前;用到的条目由代码记下
         usedMemory = emptyList()
         // 上次没读出记忆文件(密钥库一时不可用)就再读一次;还读不出就这次不带记忆
@@ -527,7 +530,7 @@ class AgentLoop(
                 }
                 // 回答的正文不是用户最近那句的语言:退回一次整段改写;改写后还不对照样交出
                 if (!languageNudged) {
-                    val mismatch = ReplyLanguage.mismatch(latestUserWords(history), text)
+                    val mismatch = ReplyLanguage.mismatch(latestWords, text)
                     if (mismatch != null) {
                         languageNudged = true
                         TurnPolicy.language(mismatch).let { history += ctx.notice(it.source, it.text) }
@@ -709,17 +712,17 @@ class AgentLoop(
      */
     private suspend fun appendRuntimeState(history: MutableList<Message>, place: Place?, labels: Map<String, String>, step: Int) {
         val mode = if (place?.kind == PlaceKind.Site) tools.placeMode() else null
-        val userWords = history.lastOrNull { it.author == Author.User }?.parts?.filterIsInstance<Part.Text>()?.joinToString(" ") { it.text }
-        val state = ctx.runtimeState(place, place?.name?.let(labels::get), mode, step, maxSteps, now(), userWords)
+        val state = ctx.runtimeState(place, place?.name?.let(labels::get), mode, step, maxSteps, now(), latestWords)
         val last = history.lastOrNull()
         if (last == null || last.role == Role.Assistant) history += Message(Role.User, listOf(state), Author.Mika)
         else history[history.lastIndex] = last.copy(parts = last.parts + state)
     }
 
-    /** 用户最近一句话的文字(不含接在后面的运行时状态和插话标记)。 */
-    private fun latestUserWords(history: List<Message>): String =
-        history.lastOrNull { it.author == Author.User }?.let(ContextBuilder::withoutRuntimeState)?.parts?.filterIsInstance<Part.Text>()
-            ?.joinToString(" ") { it.text.removePrefix(STEER_MARKER) }.orEmpty()
+    /**
+     * 用户这句话里他自己打的字:带着屏幕时是附言,带着浏览器页的页面说明时是说明后面的话,都没有时是原话;只发了屏幕、只选了字时为空。
+     * 给模型的那句带着固定的英文说明、插话标记,后面还可能接着运行时状态,不能拿来判断用户用的语言。
+     */
+    private fun ownWords(raw: String, shown: UserScreenTurns.Rendered?): String = shown?.words ?: tools.userWords(raw)
 
     private suspend fun channelLine(matched: List<KnowledgeEntry>): String? {
         val facts = channelFacts ?: return null
@@ -737,9 +740,11 @@ class AgentLoop(
     private suspend fun appendSteers(history: MutableList<Message>, updates: List<RunInbox.UserSteer>): Boolean {
         updates.forEach { update ->
             val shown = screens?.render(update.text)
+            val words = ownWords(update.text, shown)
+            if (words.isNotBlank()) latestWords = words
             history += Message(Role.User, listOf(Part.Text("$STEER_MARKER\n${shown?.said ?: update.text}")) + shown?.images.orEmpty(), Author.User)
             shown?.details?.forEach { (source, body) -> history += ctx.userScreen(source, body) }
-            utterances?.add(shown?.words ?: update.text)
+            utterances?.add(words)
             emit(RunEvent.State(now(), "steer_received", RunEvent.clip(Redactor.text(update.messageId))))
         }
         return updates.isNotEmpty()

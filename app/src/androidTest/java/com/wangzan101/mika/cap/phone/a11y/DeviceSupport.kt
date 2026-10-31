@@ -70,7 +70,7 @@ object DeviceSupport {
     private fun rebindAccessibility() {
         if (ScreenAccessibility.instance.value != null) return
         val key = "enabled_accessibility_services"
-        val mika = "com.wangzan101.mika/${MikaAccessibilityService::class.java.name}"
+        val mika = "${InstrumentationRegistry.getInstrumentation().targetContext.packageName}/${MikaAccessibilityService::class.java.name}"
         val enabled = sh("settings get secure $key").trim().split(':')
         if (mika !in enabled) return
         try {

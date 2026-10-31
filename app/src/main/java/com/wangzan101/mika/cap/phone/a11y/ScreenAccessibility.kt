@@ -12,6 +12,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
 import com.wangzan101.mika.core.uistate.ScreenEvent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -19,11 +20,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-/** Mika 的无障碍服务:按屏读取窗口、在指定屏上做手势、按屏分发事件。 */
+/** Mika 的无障碍服务:操作和事件转给当前已连接实例,任务持有旧实例时也能在重连后恢复。 */
+@OptIn(ExperimentalCoroutinesApi::class)
 open class ScreenAccessibility : AccessibilityService() {
 
     private class DisplayEvent(val displayId: Int, val event: AccessibilityEvent)
@@ -95,7 +99,7 @@ open class ScreenAccessibility : AccessibilityService() {
 
     /** 指定屏上的窗口;该屏没有窗口(或不存在)时为空列表。 */
     fun windowsOn(displayId: Int): List<AccessibilityWindowInfo> =
-        windowsOnAllDisplays.get(displayId).orEmpty()
+        instance.value?.windowsOnAllDisplays?.get(displayId).orEmpty()
 
     /** 在指定屏上沿 [path] 做一次单指手势;完成返回 true,被取消或无法下发返回 false。 */
     suspend fun gesture(displayId: Int, path: Path, durationMs: Long): Boolean {
@@ -112,6 +116,7 @@ open class ScreenAccessibility : AccessibilityService() {
     }
 
     private suspend fun dispatch(displayId: Int, strokes: List<GestureDescription.StrokeDescription>): Boolean {
+        val service = instance.value ?: return false
         val gesture = GestureDescription.Builder()
             .setDisplayId(displayId)
             .apply { strokes.forEach(::addStroke) }
@@ -126,7 +131,7 @@ open class ScreenAccessibility : AccessibilityService() {
                     if (cont.isActive) cont.resume(false)
                 }
             }
-            if (!dispatchGesture(gesture, callback, null) && cont.isActive) cont.resume(false)
+            if (!service.dispatchGesture(gesture, callback, null) && cont.isActive) cont.resume(false)
         }
     }
 
@@ -149,7 +154,12 @@ open class ScreenAccessibility : AccessibilityService() {
     }
 
     private suspend fun screenshotOnce(): MainShot = suspendCancellableCoroutine { cont ->
-        takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor, object : TakeScreenshotCallback {
+        val service = instance.value
+        if (service == null) {
+            cont.resume(MainShot.Failed(ERROR_TAKE_SCREENSHOT_NO_ACCESSIBILITY_ACCESS))
+            return@suspendCancellableCoroutine
+        }
+        service.takeScreenshot(Display.DEFAULT_DISPLAY, service.mainExecutor, object : TakeScreenshotCallback {
             override fun onSuccess(result: ScreenshotResult) {
                 val shot = runCatching {
                     result.hardwareBuffer.use { buffer ->
@@ -169,16 +179,16 @@ open class ScreenAccessibility : AccessibilityService() {
     }
 
     /**
-     * 发生在指定屏上的无障碍事件。这条流属于当前这个服务实例:服务断开重连后它不再有事件,
-     * 订阅方要从 [instance] 拿到新实例后重新订阅。
+     * 发生在指定屏上的无障碍事件。断开时停止接收旧实例的事件,重连后已有订阅跟随新实例。
      */
     fun eventsFor(displayId: Int): Flow<AccessibilityEvent> =
-        events.filter { it.displayId == displayId }.map { it.event }
+        instance.flatMapLatest { it?.events ?: emptyFlow() }
+            .filter { it.displayId == displayId }.map { it.event }
 
-    fun notificationEvents(): Flow<ScreenEvent> = notifications
+    fun notificationEvents(): Flow<ScreenEvent> = instance.flatMapLatest { it?.notifications ?: emptyFlow() }
 
-    /** 窗口变了的信号(见 [windowChanges]);属于当前这个服务实例。 */
-    fun windowChanges(): Flow<Unit> = windowChanges
+    /** 窗口变了的信号(见 [windowChanges]);已有订阅跟随服务重连。 */
+    fun windowChanges(): Flow<Unit> = instance.flatMapLatest { it?.windowChanges ?: emptyFlow() }
 
     /**
      * 事件所在的屏。API 33 起事件自带屏号;更早的系统按事件的窗口号去各屏窗口里找,

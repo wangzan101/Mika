@@ -7,9 +7,6 @@ import com.wangzan101.mika.core.chatgpt.ChatGptTokens
 import com.wangzan101.mika.core.model.AnthropicModel
 import com.wangzan101.mika.core.model.BearerToken
 import com.wangzan101.mika.core.model.Capabilities
-import com.wangzan101.mika.core.model.CompactionThreshold
-import com.wangzan101.mika.core.model.ModelContextSettings
-import com.wangzan101.mika.core.model.withContextSettings
 import com.wangzan101.mika.core.model.Author
 import com.wangzan101.mika.core.model.ChatModel
 import com.wangzan101.mika.core.model.ClientHeaders
@@ -305,7 +302,7 @@ class ProviderStore(
         verified: Set<String> = emptySet(),
     ): Provider {
         val found = findOrAddProvider(name, kind, baseUrl)
-        val p = normalizeContextSettings(found.copy(models = models, sessionHeader = sessionHeader, verifiedModels = found.verifiedModels + verified))
+        val p = found.copy(models = models, sessionHeader = sessionHeader, verifiedModels = found.verifiedModels + verified)
         _providers.value = _providers.value.map { if (it.id == p.id) p else it }
         if (apiKey != null) setKey(p.id, apiKey)
         writeConfig()
@@ -316,7 +313,7 @@ class ProviderStore(
     @Synchronized
     fun rememberModels(providerId: String, models: List<ListedModel>) {
         if (provider(providerId) == null) return
-        _providers.value = _providers.value.map { if (it.id == providerId) normalizeContextSettings(it.copy(models = models)) else it }
+        _providers.value = _providers.value.map { if (it.id == providerId) it.copy(models = models) else it }
         writeConfig()
     }
 
@@ -408,10 +405,8 @@ class ProviderStore(
     @Synchronized
     fun setModelContextSettings(providerId: String, model: String, settings: ModelContextSettings): Boolean {
         val p = provider(providerId) ?: return false
-        val cfg = _configs.value.firstOrNull { it.providerId == providerId && it.model == model }
-        if (cfg == null && p.models?.none { it.id == model } != false && model !in p.contextSettings) return false
-        val automatic = p.automaticContextWindow(model, cfg?.capabilities?.contextTokens ?: ModelOptions.baseOf(p).contextTokens)
-        if (!settings.validFor(automatic)) return false
+        val cfg = _configs.value.firstOrNull { it.providerId == providerId && it.model == model } ?: return false
+        if (!settings.validFor(cfg.capabilities.contextTokens)) return false
         val saved = if (settings == ModelContextSettings()) p.contextSettings - model else p.contextSettings + (model to settings)
         _providers.value = _providers.value.map { if (it.id == providerId) p.copy(contextSettings = saved) else it }
         writeConfig()
@@ -447,11 +442,10 @@ class ProviderStore(
     fun modelFor(role: ModelRole, session: ModelSession = ModelSession.fresh()): ChatModel? = configFor(role)?.let { cfg ->
         val p = provider(cfg.providerId)
         val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, UsagePurpose.of(role))
-        val automatic = p?.automaticContextWindow(cfg.model, cfg.capabilities.contextTokens) ?: cfg.capabilities.contextTokens
-        val settings = p?.contextFor(cfg.model, automatic) ?: ModelContextSettings()
-        modelFactory(cfg.copy(capabilities = cfg.capabilities.copy(contextTokens = automatic)), apiKey(cfg.id), endpointOf(cfg), ClientSetup(
+        val configured = p?.contextSettings?.get(cfg.model)?.let { cfg.copy(capabilities = it.applyTo(cfg.capabilities)) } ?: cfg
+        modelFactory(configured, apiKey(cfg.id), endpointOf(cfg), ClientSetup(
             headers(p?.sessionHeader, session), reasoningEffort = _roles.value.reasoningEffort(role),
-        )).withContextSettings(settings).metered(source, usage)
+        )).metered(source, usage)
     }
 
     /**
@@ -617,7 +611,6 @@ class ProviderStore(
             keys = json.parseToJsonElement(keyFile.readText()).jsonObject.mapValues { it.value.jsonPrimitive.content }
         }
         migrate()
-        _providers.value = _providers.value.map(::normalizeContextSettings)
         // 指向不存在的配置的选择退回默认,没人用的配置删掉;和文件里的不一样(含刚迁移的用途)才写回
         _roles.value = _roles.value.keepOnly(_configs.value.map { it.id }.toSet())
         prune()
@@ -684,14 +677,13 @@ class ProviderStore(
             runCatching {
                 val value = raw.jsonObject
                 val window = value["windowTokens"]?.let { it.jsonPrimitive.int }
-                val threshold = value["threshold"]?.jsonObject?.let { t ->
-                    when (t.str("mode")) {
-                        "percent" -> CompactionThreshold.Percent(t["value"]!!.jsonPrimitive.int)
-                        "tokens" -> CompactionThreshold.Tokens(t["value"]!!.jsonPrimitive.int)
-                        else -> error("unknown compaction threshold mode")
-                    }
-                } ?: CompactionThreshold.Percent()
-                model to ModelContextSettings(window, threshold)
+                val threshold = value["threshold"]?.jsonObject
+                val mode = when (threshold?.str("mode")) {
+                    null, "percent" -> ThresholdMode.Percent
+                    "tokens" -> ThresholdMode.Tokens
+                    else -> error("unknown compaction threshold mode")
+                }
+                model to ModelContextSettings(window, threshold?.get("value")?.jsonPrimitive?.int ?: 60, mode)
             }.getOrNull()
         }?.toMap().orEmpty(),
         models = o["models"]?.jsonArray?.map { e ->
@@ -714,12 +706,6 @@ class ProviderStore(
             )
         },
     )
-
-    private fun normalizeContextSettings(p: Provider): Provider = p.copy(contextSettings = p.contextSettings.mapValues { (model, settings) ->
-        val fallback = _configs.value.firstOrNull { it.providerId == p.id && it.model == model }?.capabilities?.contextTokens
-            ?: ModelOptions.baseOf(p).contextTokens
-        settings.forWindow(p.automaticContextWindow(model, fallback))
-    }.filterValues { it != ModelContextSettings() })
 
     private fun configOf(o: JsonObject) = ProviderConfig(
         id = o.str("id"),
@@ -773,10 +759,7 @@ class ProviderStore(
                             p.contextSettings.forEach { (model, settings) -> putJsonObject(model) {
                                 settings.windowTokens?.let { put("windowTokens", it) }
                                 putJsonObject("threshold") {
-                                    when (val threshold = settings.threshold) {
-                                        is CompactionThreshold.Percent -> { put("mode", "percent"); put("value", threshold.value) }
-                                        is CompactionThreshold.Tokens -> { put("mode", "tokens"); put("value", threshold.value) }
-                                    }
+                                    put("mode", settings.mode.name.lowercase()); put("value", settings.threshold)
                                 }
                             } }
                         }

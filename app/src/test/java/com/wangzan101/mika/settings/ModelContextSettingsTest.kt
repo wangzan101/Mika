@@ -32,7 +32,7 @@ class ModelContextSettingsTest {
         val s = store()
         val p = connected(s)
         s.use(ModelRole.Main, p.id, "m", caps)
-        val custom = ModelContextSettings(1_000_000, CompactionThreshold.Tokens(600_000))
+        val custom = ModelContextSettings(1_000_000, 600_000, ThresholdMode.Tokens)
         assertTrue(s.setModelContextSettings(p.id, "m", custom))
         s.use(ModelRole.Main, p.id, "other", caps)
         assertTrue(s.list().none { it.model == "m" })
@@ -41,10 +41,10 @@ class ModelContextSettingsTest {
         reloaded.use(ModelRole.Main, p.id, "m", caps)
         val main = reloaded.modelFor(ModelRole.Main)!!
         assertEquals(1_000_000, main.capabilities.contextTokens)
-        assertEquals(custom.threshold, main.compactionThreshold)
-        assertEquals(custom.threshold, reloaded.modelFor(ModelRole.Light)!!.compactionThreshold)
+        assertEquals(0.6, main.capabilities.compactAt, 0.0)
+        assertEquals(0.6, reloaded.modelFor(ModelRole.Light)!!.capabilities.compactAt, 0.0)
         assertTrue(reloaded.setModelContextSettings(p.id, "m", ModelContextSettings()))
-        assertEquals(500_000, store().modelFor(ModelRole.Main)!!.capabilities.contextTokens)
+        assertEquals(caps.contextTokens, store().modelFor(ModelRole.Main)!!.capabilities.contextTokens)
         assertFalse(store().provider(p.id)!!.contextSettings.containsKey("m"))
     }
 
@@ -55,13 +55,13 @@ class ModelContextSettingsTest {
         s.use(ModelRole.Main, p.id, "m", caps)
         s.use(ModelRole.Vision, second.id, "m", caps)
         s.use(ModelRole.Light, p.id, "other", caps)
-        val custom = ModelContextSettings(900_000, CompactionThreshold.Percent(75))
+        val custom = ModelContextSettings(900_000, 75)
         assertTrue(s.setModelContextSettings(p.id, "m", custom))
         assertEquals(900_000, s.modelFor(ModelRole.Main)!!.capabilities.contextTokens)
-        assertEquals(500_000, s.modelFor(ModelRole.Vision)!!.capabilities.contextTokens)
-        assertEquals(200_000, s.modelFor(ModelRole.Light)!!.capabilities.contextTokens)
+        assertEquals(caps.contextTokens, s.modelFor(ModelRole.Vision)!!.capabilities.contextTokens)
+        assertEquals(caps.contextTokens, s.modelFor(ModelRole.Light)!!.capabilities.contextTokens)
         s.choose(ModelRole.Light, RoleChoice.SameAsMain)
-        assertEquals(custom.threshold, s.modelFor(ModelRole.Light)!!.compactionThreshold)
+        assertEquals(0.75, s.modelFor(ModelRole.Light)!!.capabilities.compactAt, 0.0)
         val streaming = s.modelFor(ModelRole.Main) as StreamingChatModel
         val text = mutableListOf<String>()
         assertEquals("m", streaming.name)
@@ -69,18 +69,20 @@ class ModelContextSettingsTest {
         assertEquals(listOf("ok"), text)
     }
 
-    @Test fun metadataRefreshUpdatesAutomaticWindowButPreservesExplicitOverrides() {
+    @Test fun metadataRefreshDoesNotChangeSavedWindowOrRewriteSettings() {
         val s = store()
         val p = connected(s)
         s.use(ModelRole.Main, p.id, "m", caps)
-        assertTrue(s.setModelContextSettings(p.id, "m", ModelContextSettings(threshold = CompactionThreshold.Tokens(300_000))))
-        assertFalse(s.setModelContextSettings(p.id, "m", ModelContextSettings(threshold = CompactionThreshold.Tokens(500_000))))
+        val saved = ModelContextSettings(threshold = 300_000, mode = ThresholdMode.Tokens)
+        assertTrue(s.setModelContextSettings(p.id, "m", saved))
+        assertFalse(s.setModelContextSettings(p.id, "m", ModelContextSettings(threshold = 360_001, mode = ThresholdMode.Tokens)))
         assertFalse(s.setModelContextSettings("missing", "m", ModelContextSettings()))
         assertFalse(s.setModelContextSettings(p.id, "missing", ModelContextSettings()))
         s.rememberModels(p.id, listOf(ListedModel("m", contextTokens = 200_000)))
-        assertEquals(200_000, s.modelFor(ModelRole.Main)!!.capabilities.contextTokens)
-        assertEquals(CompactionThreshold.Percent(), s.modelFor(ModelRole.Main)!!.compactionThreshold)
-        val explicit = ModelContextSettings(800_000, CompactionThreshold.Tokens(600_000))
+        assertEquals(caps.contextTokens, s.modelFor(ModelRole.Main)!!.capabilities.contextTokens)
+        assertEquals(saved, store().provider(p.id)!!.contextSettings["m"])
+        assertEquals(0.75, s.modelFor(ModelRole.Main)!!.capabilities.compactAt, 0.0)
+        val explicit = ModelContextSettings(800_000, 600_000, ThresholdMode.Tokens)
         s.setModelContextSettings(p.id, "m", explicit)
         connected(s)
         assertEquals(explicit, store().provider(p.id)!!.contextSettings["m"])
@@ -91,7 +93,7 @@ class ModelContextSettingsTest {
         val s = store()
         val p = connected(s)
         s.use(ModelRole.Main, p.id, "m", caps)
-        assertEquals(CompactionThreshold.Percent(60), store().modelFor(ModelRole.Main)!!.compactionThreshold)
+        assertEquals(0.6, store().modelFor(ModelRole.Main)!!.capabilities.compactAt, 0.0)
         val file = tmp.root.resolve("providers.json")
         val original = file.readText()
         for (entry in listOf(
@@ -104,8 +106,20 @@ class ModelContextSettingsTest {
             file.writeText(original.replace("\"services\":[{", "\"services\":[{\"contextSettings\":{\"m\":$entry},"))
             val reloaded = store()
             assertNotNull(entry, reloaded.provider(p.id))
-            assertEquals(entry, 500_000, reloaded.modelFor(ModelRole.Main)!!.capabilities.contextTokens)
-            assertEquals(entry, CompactionThreshold.Percent(), reloaded.modelFor(ModelRole.Main)!!.compactionThreshold)
+            assertEquals(entry, caps.contextTokens, reloaded.modelFor(ModelRole.Main)!!.capabilities.contextTokens)
+            assertEquals(entry, 0.6, reloaded.modelFor(ModelRole.Main)!!.capabilities.compactAt, 0.0)
         }
+    }
+
+    @Test fun reselectedSmallerModelCapsRuntimeThresholdWithoutErasingSavedValue() {
+        val s = store()
+        val p = connected(s)
+        s.use(ModelRole.Main, p.id, "m", caps)
+        val saved = ModelContextSettings(threshold = 300_000, mode = ThresholdMode.Tokens)
+        s.setModelContextSettings(p.id, "m", saved)
+        s.use(ModelRole.Main, p.id, "other", caps)
+        s.use(ModelRole.Main, p.id, "m", caps.copy(contextTokens = 200_000))
+        assertEquals(0.9, s.modelFor(ModelRole.Main)!!.capabilities.compactAt, 0.0)
+        assertEquals(saved, store().provider(p.id)!!.contextSettings["m"])
     }
 }

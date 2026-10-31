@@ -54,7 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wangzan101.mika.core.model.ModelRole
-import com.wangzan101.mika.core.model.ModelContextSettings
+import com.wangzan101.mika.settings.ModelContextSettings
 import com.wangzan101.mika.settings.ModelOption
 import com.wangzan101.mika.settings.ModelOptions
 import com.wangzan101.mika.settings.ProviderConfig

@@ -14,9 +14,9 @@ import org.junit.Test
 class ModelContextCallerTest {
     @Test fun configuredBudgetsReachTheRealCallerThroughMeteringWithoutChangingWireModel() = runTest {
         val received = mutableListOf<List<Message>>()
-        val underlying = object : ChatModel {
+        fun underlying(caps: Capabilities) = object : ChatModel {
             override val name = "provider-model"
-            override val capabilities = Capabilities(true, false, 1_000_000, false)
+            override val capabilities = caps
             override suspend fun complete(system: String, messages: List<Message>, tools: List<ToolSpec>): ModelReply {
                 received += messages
                 return ModelReply(listOf(Part.Text("ok")), StopReason.EndTurn, null)
@@ -26,16 +26,17 @@ class ModelContextCallerTest {
             Message(Role.Assistant, listOf(Part.ToolCall("c$n", "phone_tap", "{}")), Author.Mika),
             Message(Role.Tool, listOf(Part.ToolResult("c$n", """{"ok":true,"pad":"${"x".repeat(1000)}"}""", false)), Author.Mika),
         ) }
-        suspend fun ask(settings: ModelContextSettings) {
-            val model = underlying.withContextSettings(settings).metered(UsageSource("p", "provider", "model", UsagePurpose.Main), UsageSink { _, _ -> })
+        suspend fun ask(window: Int = 1_000_000, compactAt: Double = 0.6) {
+            val model = underlying(Capabilities(true, false, window, false, compactAt = compactAt))
+                .metered(UsageSource("p", "provider", "model", UsagePurpose.Main), UsageSink { _, _ -> })
             assertEquals("provider-model", model.name)
             val caller = ModelCaller(model, toolDispatcher(FakeScreen()), null, SpeedFlags.OFF, RetryPolicy.NONE, {}, { 0 })
             caller.reset("system")
             caller.ask(history, emptyList())
         }
-        ask(ModelContextSettings())
-        ask(ModelContextSettings(threshold = CompactionThreshold.Tokens(5000)))
-        ask(ModelContextSettings(windowTokens = 8000))
+        ask()
+        ask(compactAt = 0.005)
+        ask(window = 8000)
         assertEquals(history, received[0])
         for (sent in received.drop(1)) {
             assertTrue(sent.any { it.plainText().startsWith(ContextCompressor.HEADER) })

@@ -9,7 +9,7 @@ import com.wangzan101.mika.core.model.ModelEndpoint
 import com.wangzan101.mika.core.model.ModelError
 import com.wangzan101.mika.core.model.ModelListResult
 import com.wangzan101.mika.core.model.ModelRole
-import com.wangzan101.mika.core.model.ModelContextSettings
+import com.wangzan101.mika.settings.ModelContextSettings
 import com.wangzan101.mika.settings.LocalHosts
 import com.wangzan101.mika.settings.ModelOption
 import com.wangzan101.mika.settings.ModelOptions

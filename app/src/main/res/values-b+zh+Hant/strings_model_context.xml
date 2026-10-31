@@ -9,7 +9,7 @@
     <string name="model_context_threshold">壓縮閾值</string>
     <string name="model_context_percent">百分比</string>
     <string name="model_context_tokens">絕對 token 數</string>
-    <string name="model_context_percent_value">百分比（1–99）</string>
+    <string name="model_context_percent_value">百分比（1–90）</string>
     <string name="model_context_token_value">觸發閾值（tokens）</string>
     <string name="model_context_token_summary">%1$d tokens</string>
     <string name="model_context_trigger_note">達到此輸入預算時嘗試壓縮；必須保留的內容可能推遲後續壓縮。</string>
@@ -17,6 +17,6 @@
     <string name="model_context_reset">還原預設值</string>
     <string name="model_context_save_failed">模型資訊已變更，請關閉後重新開啟。</string>
     <string name="model_context_error_integer">請輸入 1 到 2147483647 之間的整數。</string>
-    <string name="model_context_error_percent">請輸入 1 到 99 之間的整數百分比。</string>
-    <string name="model_context_error_window">絕對閾值必須小於有效的上下文視窗。</string>
+    <string name="model_context_error_percent">請輸入 1 到 90 之間的整數百分比。</string>
+    <string name="model_context_error_window" formatted="false">絕對閾值不能超過有效上下文視窗的 90%。</string>
 </resources>

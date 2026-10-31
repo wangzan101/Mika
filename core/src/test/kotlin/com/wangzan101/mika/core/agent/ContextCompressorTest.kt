@@ -1,7 +1,6 @@
 package com.wangzan101.mika.core.agent
 
 import com.wangzan101.mika.core.model.Author
-import com.wangzan101.mika.core.model.CompactionThreshold
 import com.wangzan101.mika.core.model.Message
 import com.wangzan101.mika.core.model.Part
 import com.wangzan101.mika.core.model.Role
@@ -38,41 +37,6 @@ class ContextCompressorTest {
         // 没越过触发点:原样发,一条不裁
         assertEquals(h, c.messages)
         assertEquals(0, c.foldedSteps)
-    }
-
-    @Test fun percentAndAbsoluteThresholdsControlCompactionIndependentlyOfWindow() {
-        val h = head + taps(40)
-        val estimated = TokenEstimate.of(h)
-        val window = estimated * 2
-        // The default 60% budget leaves history alone. 40% and the equivalent token budget both compact it.
-        assertEquals(h, ContextCompressor(TOOLS).compress(h, window).messages)
-        val byPercent = ContextCompressor(TOOLS, threshold = CompactionThreshold.Percent(40)).compress(h, window)
-        val byTokens = ContextCompressor(TOOLS, threshold = CompactionThreshold.Tokens((window * .4).toInt())).compress(h, window)
-        assertTrue(byPercent.foldedSteps > 0)
-        assertEquals(byPercent.messages, byTokens.messages)
-        // The absolute limit stays fixed when the model window grows.
-        assertEquals(byTokens.messages, ContextCompressor(TOOLS, threshold = CompactionThreshold.Tokens((window * .4).toInt()))
-            .compress(h, window * 10).messages)
-        assertEquals(h, ContextCompressor(TOOLS, threshold = CompactionThreshold.Percent(40)).compress(h, window * 10).messages)
-    }
-
-    @Test fun absoluteThresholdAccountsForFixedOverheadAndCalibration() {
-        val h = head + taps(40)
-        val size = TokenEstimate.of(h)
-        val c = ContextCompressor(TOOLS, threshold = CompactionThreshold.Tokens(size + 10))
-        assertEquals(h, c.compress(h, 1_000_000).messages)
-        assertTrue(c.compress(h, 1_000_000, fixedOverhead = 100).foldedSteps > 0)
-        val calibrated = ContextCompressor(TOOLS, threshold = CompactionThreshold.Tokens(size + 10))
-        calibrated.calibrate(size, size * 2)
-        assertTrue(calibrated.compress(h, 1_000_000).foldedSteps > 0)
-    }
-
-    @Test fun highPercentageIsNotSilentlyReplacedByNinetyPercent() {
-        val h = head + taps(40)
-        val size = TokenEstimate.of(h)
-        val context = (size / .95).toInt()
-        assertEquals(h, ContextCompressor(TOOLS, threshold = CompactionThreshold.Percent(99)).compress(h, context).messages)
-        assertTrue(ContextCompressor(TOOLS, threshold = CompactionThreshold.Percent(90)).compress(h, context).foldedSteps > 0)
     }
 
     /** 刚越过触发点的上下文:压一次就能回到触发点的一半以下,用最轻的一级(留最近 12 次往返)。 */

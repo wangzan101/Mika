@@ -2,7 +2,6 @@ package com.wangzan101.mika.core.agent
 
 import com.wangzan101.mika.core.context.StepSummary
 import com.wangzan101.mika.core.model.Author
-import com.wangzan101.mika.core.model.CompactionThreshold
 import com.wangzan101.mika.core.model.Message
 import com.wangzan101.mika.core.model.Part
 import com.wangzan101.mika.core.model.Role
@@ -39,7 +38,6 @@ class ContextCompressor(
     private val keepRecent: Int = 12,
     private val structured: Boolean = false,
     private val diffScreens: Boolean = false,
-    private val threshold: CompactionThreshold? = null,
 ) {
     /** 「真实 / 粗估」比值:每次用量回来就平滑更新([TokenEstimate.calibrated]);只决定什么时候压缩、压到哪一级,不改发过的内容。 */
     private var observed: Double? = null
@@ -67,15 +65,13 @@ class ContextCompressor(
      * [maxImages]:服务商一次请求最多收几张图(发过的图平常不换成占位,超过它才从最早的换)。
      */
     fun compress(history: List<Message>, contextTokens: Int, aggressive: Boolean = false, fixedOverhead: Int = 0, maxImages: Int = Int.MAX_VALUE): Compressed {
-        val triggerTokens = thresholdTokens(contextTokens)
-        val limit = triggerTokens - fixedOverhead * scale
+        val limit = contextTokens * compactAt - fixedOverhead * scale
         val last = views[contextTokens]
         val view = valid(last, history)
         val sent = sent(view, history)
-        // 回差:至少再追加触发点 (1 - AFTER_COMPACTION) 才再压;上限取 [HARD_CAP] 与用户触发线中较大者
+        // 回差:压缩之后至少再追加触发点 (1 - AFTER_COMPACTION) 那么多才再压,但不越过上下文的 [HARD_CAP]
         val trigger = view?.let {
-            minOf(maxOf(limit, it.estimate * scale + triggerTokens * (1 - AFTER_COMPACTION)),
-                maxOf(triggerTokens, contextTokens * HARD_CAP) - fixedOverhead * scale)
+            minOf(maxOf(limit, it.estimate * scale + contextTokens * compactAt * (1 - AFTER_COMPACTION)), contextTokens * HARD_CAP - fixedOverhead * scale)
         } ?: limit
         val compact = (last != null && view == null) || (aggressive && view?.aggressive != true) || tokens(sent) > trigger
         if (!compact) return Compressed(HistoryPruner.limitImages(sent, maxImages), view?.folded ?: 0)
@@ -90,16 +86,13 @@ class ContextCompressor(
      */
     fun overflow(history: List<Message>, contextTokens: Int, fixedOverhead: Int = 0): Boolean {
         val current = sent(valid(views[contextTokens], history), history)
-        val next = compact(history, thresholdTokens(contextTokens) - fixedOverhead * scale, window(contextTokens, fixedOverhead), aggressive = true)
+        val next = compact(history, contextTokens * compactAt - fixedOverhead * scale, window(contextTokens, fixedOverhead), aggressive = true)
         if (next.estimate >= TokenEstimate.of(current)) return false
         views[contextTokens] = next
         return true
     }
 
     private fun window(contextTokens: Int, fixedOverhead: Int) = contextTokens - fixedOverhead * scale
-
-    private fun thresholdTokens(window: Int): Double =
-        threshold?.takeIf { it.fits(window) }?.tokens(window) ?: window * compactAt
 
     /** 压缩覆盖的那段历史没被改过才接着用;否则(不会发生在正常流程里)重新压。 */
     private fun valid(v: View?, history: List<Message>) = v?.takeIf { it.covered.size <= history.size && history.subList(0, it.covered.size) == it.covered }

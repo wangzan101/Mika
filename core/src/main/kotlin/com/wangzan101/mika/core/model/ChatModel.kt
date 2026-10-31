@@ -3,9 +3,6 @@ package com.wangzan101.mika.core.model
 interface ChatModel {
     val capabilities: Capabilities
 
-    /** Local compaction policy; omitted settings retain the existing 60% trigger. */
-    val compactionThreshold: CompactionThreshold get() = CompactionThreshold.Percent()
-
     /** 模型名,只用于记录。 */
     val name: String get() = ""
 

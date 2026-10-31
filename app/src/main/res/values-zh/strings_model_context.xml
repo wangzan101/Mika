@@ -9,7 +9,7 @@
     <string name="model_context_threshold">压缩阈值</string>
     <string name="model_context_percent">百分比</string>
     <string name="model_context_tokens">绝对 token 数</string>
-    <string name="model_context_percent_value">百分比（1–99）</string>
+    <string name="model_context_percent_value">百分比（1–90）</string>
     <string name="model_context_token_value">触发阈值（tokens）</string>
     <string name="model_context_token_summary">%1$d tokens</string>
     <string name="model_context_trigger_note">达到此输入预算时尝试压缩；必须保留的内容可能推迟后续压缩。</string>
@@ -17,6 +17,6 @@
     <string name="model_context_reset">恢复默认值</string>
     <string name="model_context_save_failed">模型信息已变化，请关闭后重新打开。</string>
     <string name="model_context_error_integer">请输入 1 到 2147483647 之间的整数。</string>
-    <string name="model_context_error_percent">请输入 1 到 99 之间的整数百分比。</string>
-    <string name="model_context_error_window">绝对阈值必须小于有效的上下文窗口。</string>
+    <string name="model_context_error_percent">请输入 1 到 90 之间的整数百分比。</string>
+    <string name="model_context_error_window" formatted="false">绝对阈值不能超过有效上下文窗口的 90%。</string>
 </resources>

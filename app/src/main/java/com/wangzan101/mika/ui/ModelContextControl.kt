@@ -29,15 +29,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.wangzan101.mika.R
-import com.wangzan101.mika.core.model.CompactionThreshold
-import com.wangzan101.mika.core.model.ModelContextSettings
+import com.wangzan101.mika.settings.ModelContextSettings
 import com.wangzan101.mika.core.model.ModelRole
 import com.wangzan101.mika.settings.ContextInputError
 import com.wangzan101.mika.settings.ModelContextForm
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.settings.ThresholdMode
-import com.wangzan101.mika.settings.automaticContextWindow
-import com.wangzan101.mika.settings.contextFor
 import com.wangzan101.mika.ui.components.SelectChip
 import com.wangzan101.mika.ui.theme.MikaTheme
 
@@ -48,13 +45,14 @@ internal fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
     val cfg = ui.configFor(role) ?: return
     if (ui.roles[role] == RoleChoice.SameAsMain) return
     val provider = ui.providerOf(cfg) ?: return
-    val automatic = provider.automaticContextWindow(cfg.model, cfg.capabilities.contextTokens)
-    val settings = provider.contextFor(cfg.model, automatic)
+    val automatic = cfg.capabilities.contextTokens
+    val settings = provider.contextSettings[cfg.model] ?: ModelContextSettings()
     var open by rememberSaveable(role, cfg.providerId, cfg.model) { mutableStateOf(false) }
     TextButton(onClick = { open = true }, Modifier.padding(start = 8.dp).testTag("context-${role.name.lowercase()}")) {
         Text(stringResource(R.string.model_context_summary,
             settings.windowTokens?.toString() ?: stringResource(R.string.model_context_auto),
-            thresholdLabel(settings.threshold)))
+            if (settings.mode == ThresholdMode.Percent) "${settings.threshold}%"
+            else stringResource(R.string.model_context_token_summary, settings.threshold)))
     }
     if (open) ModelContextDialog(cfg.model, automatic, settings, onDismiss = { open = false },
         onSave = { onSave(cfg.providerId, cfg.model, it) })
@@ -66,10 +64,9 @@ internal fun ModelContextDialog(model: String, automaticWindow: Int, initial: Mo
     onDismiss: () -> Unit, onSave: (ModelContextSettings) -> Boolean,
 ) {
     var window by rememberSaveable(model) { mutableStateOf(initial.windowTokens?.toString().orEmpty()) }
-    var mode by rememberSaveable(model) { mutableStateOf(if (initial.threshold is CompactionThreshold.Tokens) ThresholdMode.Tokens else ThresholdMode.Percent) }
-    var percent by rememberSaveable(model) { mutableStateOf((initial.threshold as? CompactionThreshold.Percent)?.value?.toString() ?: "60") }
-    var tokens by rememberSaveable(model) { mutableStateOf((initial.threshold as? CompactionThreshold.Tokens)?.value?.toString()
-        ?: initial.threshold.tokens(initial.window(automaticWindow)).toLong().coerceAtLeast(1).toString()) }
+    var mode by rememberSaveable(model) { mutableStateOf(initial.mode) }
+    var percent by rememberSaveable(model) { mutableStateOf(if (initial.mode == ThresholdMode.Percent) initial.threshold.toString() else "60") }
+    var tokens by rememberSaveable(model) { mutableStateOf(initial.thresholdTokens(automaticWindow).toLong().coerceAtLeast(1).toString()) }
     var saveFailed by remember { mutableStateOf(false) }
     val form = ModelContextForm(window, mode, if (mode == ThresholdMode.Percent) percent else tokens)
     val valid = form.settings(automaticWindow)
@@ -104,7 +101,7 @@ internal fun ModelContextDialog(model: String, automaticWindow: Int, initial: Mo
                     isError = thresholdError != null, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 if (valid != null) Text(stringResource(R.string.model_context_effective,
-                    valid.window(automaticWindow), valid.threshold.tokens(valid.window(automaticWindow)).toLong().coerceAtLeast(1)),
+                    valid.window(automaticWindow), valid.thresholdTokens(automaticWindow).toLong().coerceAtLeast(1)),
                     Modifier.testTag("context-effective").semantics { liveRegion = LiveRegionMode.Polite })
                 TextButton(onClick = { window = ""; mode = ThresholdMode.Percent; percent = "60"; tokens = (automaticWindow * 0.6).toLong().coerceAtLeast(1).toString(); saveFailed = false },
                     Modifier.testTag("context-reset")) { Text(stringResource(R.string.model_context_reset)) }
@@ -116,12 +113,6 @@ internal fun ModelContextDialog(model: String, automaticWindow: Int, initial: Mo
         }, enabled = valid != null, modifier = Modifier.testTag("context-save")) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
-}
-
-@Composable
-private fun thresholdLabel(value: CompactionThreshold): String = when (value) {
-    is CompactionThreshold.Percent -> "${value.value}%"
-    is CompactionThreshold.Tokens -> stringResource(R.string.model_context_token_summary, value.value)
 }
 
 @Composable

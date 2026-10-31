@@ -19,9 +19,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.wangzan101.mika.ChineseUi
 import com.wangzan101.mika.core.model.Capabilities
-import com.wangzan101.mika.core.model.CompactionThreshold
 import com.wangzan101.mika.core.model.ListedModel
-import com.wangzan101.mika.core.model.ModelContextSettings
+import com.wangzan101.mika.settings.ModelContextSettings
+import com.wangzan101.mika.settings.ThresholdMode
 import com.wangzan101.mika.settings.Provider
 import com.wangzan101.mika.settings.ProviderConfig
 import com.wangzan101.mika.settings.ProviderPresets
@@ -66,7 +66,7 @@ class ModelContextScreenTest {
         compose.onNodeWithTag("context-main").assertTextContains("1000000", substring = true).performClick()
         compose.onNodeWithTag("context-window").assertTextContains("1000000")
         compose.onNodeWithTag("context-threshold").performScrollTo().assertTextContains("80")
-        assertEquals(ModelContextSettings(1_000_000, CompactionThreshold.Percent(80)), saved)
+        assertEquals(ModelContextSettings(1_000_000, 80), saved)
     }
 
     @Test fun absoluteThresholdCannotEqualOrExceedEffectiveWindow() {
@@ -75,7 +75,7 @@ class ModelContextScreenTest {
         compose.onNodeWithTag("context-mode-tokens").performScrollTo().performClick()
         compose.onNodeWithTag("context-threshold").performTextReplacement("500000")
         compose.onNodeWithTag("context-save").assertIsNotEnabled()
-        compose.onNodeWithText("绝对阈值必须小于有效的上下文窗口。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("绝对阈值不能超过有效上下文窗口的 90%。").performScrollTo().assertIsDisplayed()
         screenshot("invalid-absolute")
         compose.onNodeWithTag("context-window").performScrollTo().performTextReplacement("1000000")
         compose.onNodeWithTag("context-threshold").performScrollTo().performTextReplacement("600000")
@@ -83,16 +83,16 @@ class ModelContextScreenTest {
         compose.onNodeWithTag("context-effective").performScrollTo().assertTextContains("600000", substring = true)
         screenshot("absolute")
         compose.onNodeWithTag("context-save").performClick()
-        assertEquals(ModelContextSettings(1_000_000, CompactionThreshold.Tokens(600_000)), saved)
+        assertEquals(ModelContextSettings(1_000_000, 600_000, ThresholdMode.Tokens), saved)
     }
 
     @Test fun percentageAndWindowValidationBlockSaveAndResetRestoresDefaults() {
         var saved: ModelContextSettings? = null
         compose.setContent { MikaTheme { ModelContextDialog("example-model", 500_000,
-            ModelContextSettings(1_000_000, CompactionThreshold.Percent(80)), {}, { saved = it; true }) } }
+            ModelContextSettings(1_000_000, 80), {}, { saved = it; true }) } }
         compose.onNodeWithTag("context-threshold").performScrollTo().performTextReplacement("100")
         compose.onNodeWithTag("context-save").assertIsNotEnabled()
-        compose.onNodeWithText("请输入 1 到 99 之间的整数百分比。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("请输入 1 到 90 之间的整数百分比。").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("context-window").performScrollTo().performTextReplacement("2147483648")
         compose.onNodeWithTag("context-save").assertIsNotEnabled()
         assertNull(saved)

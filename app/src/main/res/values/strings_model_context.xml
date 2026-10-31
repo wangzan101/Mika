@@ -9,7 +9,7 @@
     <string name="model_context_threshold">Compaction threshold</string>
     <string name="model_context_percent">Percentage</string>
     <string name="model_context_tokens">Token count</string>
-    <string name="model_context_percent_value">Percentage (1–99)</string>
+    <string name="model_context_percent_value">Percentage (1–90)</string>
     <string name="model_context_token_value">Threshold (tokens)</string>
     <string name="model_context_token_summary">Tokens: %1$d</string>
     <string name="model_context_trigger_note">Attempts compaction at this input budget. Required context can delay subsequent compactions.</string>
@@ -17,6 +17,6 @@
     <string name="model_context_reset">Restore defaults</string>
     <string name="model_context_save_failed">Model information changed. Close this dialog and try again.</string>
     <string name="model_context_error_integer">Enter a whole number from 1 to 2147483647.</string>
-    <string name="model_context_error_percent">Enter a whole percentage from 1 to 99.</string>
-    <string name="model_context_error_window">The token threshold must be smaller than the effective context window.</string>
+    <string name="model_context_error_percent">Enter a whole percentage from 1 to 90.</string>
+    <string name="model_context_error_window" formatted="false">The token threshold must not exceed 90% of the effective context window.</string>
 </resources>

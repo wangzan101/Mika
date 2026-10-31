@@ -54,6 +54,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wangzan101.mika.core.model.ModelRole
+import com.wangzan101.mika.settings.ModelContextSettings
 import com.wangzan101.mika.settings.ModelOption
 import com.wangzan101.mika.settings.ModelOptions
 import com.wangzan101.mika.settings.ProviderConfig
@@ -148,6 +149,7 @@ fun ModelSetupScreen(store: ProviderStore, onboarding: Boolean, onBack: () -> Un
             openProvider = { openProvider = it; allModels = false }, pickRole = { picking = it }, next = onDone,
             signInWithChatGpt = vm::signInWithChatGpt, cancelChatGpt = vm::cancelChatGptSignIn,
             setReasoningEffort = vm::setReasoningEffort,
+            setModelContext = vm::setModelContext,
         ),
         onBack,
     )
@@ -170,6 +172,7 @@ class ModelSetupActions(
     val signInWithChatGpt: () -> Unit = {},
     val cancelChatGpt: () -> Unit = {},
     val setReasoningEffort: (ModelRole, String?) -> Unit = { _, _ -> },
+    val setModelContext: (String, String, ModelContextSettings) -> Boolean = { _, _, _ -> false },
 )
 
 /**
@@ -197,7 +200,7 @@ fun ModelSetupContent(ui: ModelSetupUi, onboarding: Boolean, actions: ModelSetup
                     RolesSection(ui, onPick, actions.setReasoningEffort)
                     FooterNote(ModelSetupCopy.ONBOARDING_NOTE)
                 } else {
-                    RolesSection(ui, onPick, actions.setReasoningEffort)
+                    RolesSection(ui, onPick, actions.setReasoningEffort, actions.setModelContext)
                     ProvidersSection(ui, actions)
                 }
                 Spacer(Modifier.height(16.dp))
@@ -431,7 +434,9 @@ internal object ChatGptPage {
 
 /** 用途:主模型、看图模型、轻量模型各一张卡,点开是选择页。 */
 @Composable
-private fun RolesSection(ui: ModelSetupUi, onPick: (ModelRole) -> Unit, onReasoning: (ModelRole, String?) -> Unit) {
+private fun RolesSection(ui: ModelSetupUi, onPick: (ModelRole) -> Unit, onReasoning: (ModelRole, String?) -> Unit,
+    onContext: ((String, String, ModelContextSettings) -> Boolean)? = null,
+) {
     GroupLabel(ModelsCopy.ROLES)
     GroupCard {
         ModelRole.entries.forEachIndexed { i, role ->
@@ -439,6 +444,7 @@ private fun RolesSection(ui: ModelSetupUi, onPick: (ModelRole) -> Unit, onReason
                 onPick(role)
             }
             ReasoningControl(ui, role) { onReasoning(role, it) }
+            if (onContext != null) ModelContextControl(ui, role, onContext)
         }
     }
 }

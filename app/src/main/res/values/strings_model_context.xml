@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="model_context_title">Context and compaction</string>
+    <string name="model_context_summary">Context and compaction: %1$s · %2$s</string>
+    <string name="model_context_auto">Automatic</string>
+    <string name="model_context_auto_value">Leave blank for automatic (tokens): %1$d</string>
+    <string name="model_context_note">Shared by all roles using this provider and model, starting with the next task. A larger local budget does not increase the provider’s actual context limit.</string>
+    <string name="model_context_window">Context window (tokens)</string>
+    <string name="model_context_threshold">Compaction threshold</string>
+    <string name="model_context_percent">Percentage</string>
+    <string name="model_context_tokens">Token count</string>
+    <string name="model_context_percent_value">Percentage (1–90)</string>
+    <string name="model_context_token_value">Threshold (tokens)</string>
+    <string name="model_context_token_summary">Tokens: %1$d</string>
+    <string name="model_context_trigger_note">Attempts compaction at this input budget. Required context can delay subsequent compactions.</string>
+    <string name="model_context_effective">Window / estimated trigger (tokens): %1$d / %2$d</string>
+    <string name="model_context_reset">Restore defaults</string>
+    <string name="model_context_save_failed">Model information changed. Close this dialog and try again.</string>
+    <string name="model_context_error_integer">Enter a whole number from 1 to 2147483647.</string>
+    <string name="model_context_error_percent">Enter a whole percentage from 1 to 90.</string>
+    <string name="model_context_error_window" formatted="false">The token threshold must not exceed 90% of the effective context window.</string>
+</resources>

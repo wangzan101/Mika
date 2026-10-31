@@ -109,6 +109,8 @@ data class Provider(
     val models: List<ListedModel>? = null,
     val sessionHeader: String? = null,
     val verifiedModels: Set<String> = emptySet(),
+    /** Per-model local budgets survive pruning unused role configs. */
+    val contextSettings: Map<String, ModelContextSettings> = emptyMap(),
 ) {
     val key: String get() = ProviderConnection.keyOf(kind, baseUrl, name)
 }
@@ -399,6 +401,18 @@ class ProviderStore(
         return true
     }
 
+    /** Local context settings affect all roles using the same provider/model, on their next run. */
+    @Synchronized
+    fun setModelContextSettings(providerId: String, model: String, settings: ModelContextSettings): Boolean {
+        val p = provider(providerId) ?: return false
+        val cfg = _configs.value.firstOrNull { it.providerId == providerId && it.model == model } ?: return false
+        if (!settings.validFor(cfg.capabilities.contextTokens)) return false
+        val saved = if (settings == ModelContextSettings()) p.contextSettings - model else p.contextSettings + (model to settings)
+        _providers.value = _providers.value.map { if (it.id == providerId) p.copy(contextSettings = saved) else it }
+        writeConfig()
+        return true
+    }
+
     /** 看图模型的「看图定位已验证」(开发者选项里改);看图用主模型时改的是主模型那条配置。没有看图模型时不动。 */
     @Synchronized
     fun setVisionGroundingVerified(verified: Boolean) {
@@ -428,7 +442,8 @@ class ProviderStore(
     fun modelFor(role: ModelRole, session: ModelSession = ModelSession.fresh()): ChatModel? = configFor(role)?.let { cfg ->
         val p = provider(cfg.providerId)
         val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, UsagePurpose.of(role))
-        modelFactory(cfg, apiKey(cfg.id), endpointOf(cfg), ClientSetup(
+        val configured = p?.contextSettings?.get(cfg.model)?.let { cfg.copy(capabilities = it.applyTo(cfg.capabilities)) } ?: cfg
+        modelFactory(configured, apiKey(cfg.id), endpointOf(cfg), ClientSetup(
             headers(p?.sessionHeader, session), reasoningEffort = _roles.value.reasoningEffort(role),
         )).metered(source, usage)
     }
@@ -658,6 +673,19 @@ class ProviderStore(
         // 旧版本存下的没有这一项:按地址对得上的预设补上(读入后写回文件时记进去)
         sessionHeader = o["sessionHeader"]?.jsonPrimitive?.content ?: ProviderPresets.forBaseUrl(o.str("baseUrl"))?.sessionHeader,
         verifiedModels = o["verifiedModels"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet().orEmpty(),
+        contextSettings = (o["contextSettings"] as? JsonObject)?.mapNotNull { (model, raw) ->
+            runCatching {
+                val value = raw.jsonObject
+                val window = value["windowTokens"]?.let { it.jsonPrimitive.int }
+                val threshold = value["threshold"]?.jsonObject
+                val mode = when (threshold?.str("mode")) {
+                    null, "percent" -> ThresholdMode.Percent
+                    "tokens" -> ThresholdMode.Tokens
+                    else -> error("unknown compaction threshold mode")
+                }
+                model to ModelContextSettings(window, threshold?.get("value")?.jsonPrimitive?.int ?: 60, mode)
+            }.getOrNull()
+        }?.toMap().orEmpty(),
         models = o["models"]?.jsonArray?.map { e ->
             val m = e.jsonObject
             ListedModel(
@@ -727,6 +755,14 @@ class ProviderStore(
                         put("id", p.id); put("name", p.name); put("kind", p.kind.name); put("baseUrl", p.baseUrl)
                         p.sessionHeader?.let { put("sessionHeader", it) }
                         if (p.verifiedModels.isNotEmpty()) putJsonArray("verifiedModels") { p.verifiedModels.forEach { add(it) } }
+                        if (p.contextSettings.isNotEmpty()) putJsonObject("contextSettings") {
+                            p.contextSettings.forEach { (model, settings) -> putJsonObject(model) {
+                                settings.windowTokens?.let { put("windowTokens", it) }
+                                putJsonObject("threshold") {
+                                    put("mode", settings.mode.name.lowercase()); put("value", settings.threshold)
+                                }
+                            } }
+                        }
                         p.models?.let { models ->
                             putJsonArray("models") {
                                 models.forEach { m ->

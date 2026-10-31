@@ -231,6 +231,64 @@ adb shell settings get secure enabled_accessibility_services
 打开设置，告诉我安卓版本是多少
 ```
 
+## 第 10 步（可选）：让你的 AI 工具连上 Mika（经 USB 的 MCP）
+
+只有用户想让电脑上的 AI 工具（包括你自己）把任务交给 Mika 时才做这一步，先问一句。做完后 Mika 就是一个 MCP 服务器，只在手机本机上监听；电脑经数据线、用 adb 的端口转发连进来。手机上什么都不用点。详细说明见[电脑连接（MCP）](mcp.md)。
+
+1. 打开。手机助手（第 7 步）没在运行的话，这条命令也会启动它：
+
+   ```
+   adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
+   ```
+
+   成功：最后说「Computer access over USB is on」，并打印一段带 `url`、`headers`、`token` 的 JSON。提示文件不存在时，先打开一次 Mika（第 7 步里的命令），等几秒再试。
+
+2. 端口转发：
+
+   ```
+   adb forward tcp:8765 tcp:8765
+   ```
+
+3. 需要时随时再读令牌（`token` 那一项）：
+
+   ```
+   adb shell cat /sdcard/Android/data/com.wangzan101.mika/files/mcp-usb.json
+   ```
+
+4. 试一下能不能连上（把令牌填进去）：
+
+   ```
+   curl -s http://127.0.0.1:8765/mcp \
+     -H "Authorization: Bearer <令牌>" \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
+   ```
+
+   成功：回一段 JSON，`result` 里有 `serverInfo`。
+
+5. MCP 客户端的配置：一个 Streamable HTTP（常写作 `http`）类型的服务器，地址 `http://127.0.0.1:8765/mcp`，请求头 `Authorization: Bearer <令牌>`。大多数客户端是这个样子：
+
+   ```json
+   {
+     "mcpServers": {
+       "mika": {
+         "type": "http",
+         "url": "http://127.0.0.1:8765/mcp",
+         "headers": { "Authorization": "Bearer <令牌>" }
+       }
+     }
+   }
+   ```
+
+   用户愿意的话，按你自己这个工具的格式，把 Mika 加进**你自己的** MCP 配置里，别的条目一个都不动。你的工具需要重启或重新加载 MCP 配置才生效的话，告诉用户去做。用户没要求时，不要把令牌贴在对话里。
+
+告诉用户：
+
+- 拔插数据线之后（或者 adb 重启过），要再运行一次 `adb forward tcp:8765 tcp:8765`。令牌不变。
+- 重启手机后 USB 方式会关掉，要再运行一次第 1 条命令；这时令牌会换新的，MCP 配置里的令牌也要换上。
+- 关掉：`adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh off`，或者在 Mika 的 设置 › 电脑连接（MCP） 里关，或者点通知上的「关闭」。关掉后旧令牌立即作废。
+
 ## 常见问题
 
 | 现象 | 怎么办 |
@@ -242,10 +300,12 @@ adb shell settings get secure enabled_accessibility_services
 | 重启后手机助手没在运行 | 做过 A：连上 Wi-Fi 等一会儿，Mika 会自己恢复；不行就在 设置 › 手机操作 里点「重新配对」。只做过 B：再连电脑运行一次第 7 步 B 的命令，或者改做 A。 |
 | 连不上 GitHub | 请用户在浏览器里打开 [Releases](https://github.com/wangzan101/Mika/releases/latest) 手动下载 APK，然后 `adb install -r <APK 文件路径>`。 |
 | 无线调试打不开 | 手机要连着 Wi-Fi；在弹框里允许在此网络上使用无线调试。实在不行就用 B。 |
+| AI 工具经 USB 连不上 Mika（第 10 步） | 再运行一次 `adb forward tcp:8765 tcp:8765`（每次拔插数据线后都要）。手机重启过的话，再运行一次第 10 步打开的那条命令，并换上新令牌。 |
+| 转发报 `cannot bind`，或连上后返回的不是 Mika 的内容（第 10 步） | 电脑上 8765 端口被别的程序占了。换一个空闲端口转发，比如 `adb forward tcp:18765 tcp:8765`，配置里的地址改成 `http://127.0.0.1:18765/mcp`；手机那边不用改。 |
 
 ## 最后：给用户一份小结
 
 全部做完后，用用户的语言告诉用户：
 
 - **已经做好的**：装了哪个版本；通知权限、无障碍、电池白名单是否设好；手机助手用哪种方式启动、是否已经可用。哪一步失败或跳过了，也照实说。
-- **用户还要做的**：在 设置 › 模型 里添加模型（如果还没做）；配对无线调试（如果选了 A 但还没配完）；只用了 B 的话，提醒重启手机后要再连电脑运行一次那条命令；最后发一个简单的任务试试。
+- **用户还要做的**：在 设置 › 模型 里添加模型（如果还没做）；配对无线调试（如果选了 A 但还没配完）；只用了 B 的话，提醒重启手机后要再连电脑运行一次那条命令；最后发一个简单的任务试试。做了第 10 步的话：Mika 有没有加进你的 MCP 配置；拔插数据线后要再运行 `adb forward`，重启手机后要再运行第 10 步的命令。

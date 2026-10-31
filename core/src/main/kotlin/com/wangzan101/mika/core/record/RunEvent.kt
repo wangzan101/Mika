@@ -16,8 +16,9 @@ import com.wangzan101.mika.core.observation.Trust
 sealed interface RunEvent {
     val atMs: Long
 
+    /** [origin] 是谁发起的这次运行(`RunOrigin` 的小写名);手机上发起的不写。 */
     @Serializable @SerialName("task_started")
-    data class TaskStarted(override val atMs: Long, val goal: String, val model: String) : RunEvent
+    data class TaskStarted(override val atMs: Long, val goal: String, val model: String, val origin: String? = null) : RunEvent
 
     /** 本任务发给模型的系统提示词与工具定义的摘要([com.wangzan101.mika.core.prompt.PromptVersion])。 */
     @Serializable @SerialName("prompt_version")
@@ -286,10 +287,12 @@ data class RunSummary(
     val inputTokens: Int = 0,
     val outputTokens: Int = 0,
     val cachedTokens: Int = 0,
+    /** 谁发起的(见 [RunEvent.TaskStarted.origin]);手机上发起的为空。 */
+    val origin: String? = null,
 ) {
     /** 把一个事件计入概要。 */
     fun with(e: RunEvent): RunSummary = when (e) {
-        is RunEvent.TaskStarted -> copy(model = e.model)
+        is RunEvent.TaskStarted -> copy(model = e.model, origin = e.origin)
         is RunEvent.Criteria -> copy(criteria = e.criteria)
         is RunEvent.ModelReply -> copy(
             steps = maxOf(steps, e.step),

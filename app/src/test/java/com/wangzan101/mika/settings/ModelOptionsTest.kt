@@ -65,6 +65,87 @@ class ModelOptionsTest {
         assertEquals(emptyList<String>(), ModelOptions.familyOf("https://openrouter.ai/api/v1"))
     }
 
+    private fun ids(listed: List<ListedModel>, tokens: List<String>) = ModelOptions.candidates(ModelOptions.merge(listed, base), tokens)
+
+    /** 自家的模型按版本新的在前,不管接口给的顺序;同版本的照列表顺序,不评 flash、pro、lite 哪个好。 */
+    @Test fun ownModelsNewestVersionFirst() {
+        assertEquals(
+            listOf("x4", "x-3.1-pro", "x-3-flash", "x-3-pro", "x-2.5-flash", "x-2.0-flash-001"),
+            ids(listOf("x-2.5-flash", "x-3-flash", "x-2.0-flash-001", "x-3.1-pro", "x4", "x-3-pro").map { ListedModel(it) }, listOf("x")),
+        )
+        // 横线分开的小版本、带字母的版本号;b / k 结尾的是参数量、上下文长度,不算版本
+        assertEquals(
+            listOf("claude-haiku-4-5-20251001", "claude-opus-4-1-20250805", "claude-3-5-haiku-20241022"),
+            ids(listOf("claude-3-5-haiku-20241022", "claude-opus-4-1-20250805", "claude-haiku-4-5-20251001").map { ListedModel(it) }, listOf("claude")),
+        )
+        assertEquals(listOf("qwen3-max", "qwen2.5-72b-instruct"), ids(listOf(ListedModel("qwen2.5-72b-instruct"), ListedModel("qwen3-max")), listOf("qwen")))
+    }
+
+    /** 同一个版本:正式版在前,再是 latest 别名,预览、试验的在后;同一档里没写日期的在前,再按日期新的在前。 */
+    @Test fun stableBeforePreviewAtTheSameVersion() {
+        assertEquals(
+            listOf("x-2.5-flash", "x-2.5-flash-2025-08-07", "x-2.5-flash-latest", "x-2.5-flash-preview-09-2025", "x-2.5-flash-exp-0827", "x-2.5-flash-preview-05-20"),
+            ids(
+                listOf("x-2.5-flash-exp-0827", "x-2.5-flash-preview-05-20", "x-2.5-flash-latest", "x-2.5-flash-preview-09-2025", "x-2.5-flash-2025-08-07", "x-2.5-flash")
+                    .map { ListedModel(it) },
+                listOf("x"),
+            ),
+        )
+        // 更新的版本哪怕只是预览,也排在老版本的正式版前面
+        assertEquals(listOf("x-3-pro-preview", "x-2.5-pro"), ids(listOf(ListedModel("x-2.5-pro"), ListedModel("x-3-pro-preview")), listOf("x")))
+    }
+
+    /** 读不出版本的(别名之类)在读得出的后面,彼此照列表顺序。 */
+    @Test fun unparsableVersionsAfterParsedOnes() {
+        assertEquals(
+            listOf("x-2-mini", "x-1.5", "x-flash-latest", "x-chat", "x-pro"),
+            ids(listOf("x-flash-latest", "x-chat", "x-1.5", "x-pro", "x-2-mini").map { ListedModel(it) }, listOf("x")),
+        )
+    }
+
+    /** 外层先后不变:自家的在前,再是接口明说能调用工具的;版本只在自家同一档里比,别家的照列表顺序。 */
+    @Test fun versionOrderStaysInsideTheOuterOrder() {
+        val listed = listOf(
+            ListedModel("other-9"),
+            ListedModel("x-1", toolCalls = true),
+            ListedModel("x-3"),
+            ListedModel("x-2", toolCalls = true),
+            ListedModel("other-1", toolCalls = true),
+            ListedModel("other-5"),
+        )
+        assertEquals(listOf("x-2", "x-1", "x-3", "other-1", "other-9", "other-5"), ids(listed, listOf("x")))
+        // 没有自家的词:照旧,不按版本排
+        assertEquals(listOf("x-1", "x-2", "other-1", "other-9", "x-3", "other-5"), ids(listed, emptyList()))
+    }
+
+    /** 接口列出来老的 2.5 在前:先试的是最新的,向量模型、别家的 gemma 不先试。 */
+    @Test fun realisticGeminiListTriesTheNewestFirst() {
+        val listed = listOf(
+            ListedModel("gemini-2.5-flash", displayName = "Gemini 2.5 Flash"),
+            ListedModel("gemini-2.5-pro", displayName = "Gemini 2.5 Pro"),
+            ListedModel("gemini-2.0-flash", displayName = "Gemini 2.0 Flash"),
+            ListedModel("gemini-2.0-flash-001", displayName = "Gemini 2.0 Flash 001"),
+            ListedModel("gemini-2.0-flash-lite", displayName = "Gemini 2.0 Flash-Lite"),
+            ListedModel("gemini-2.5-flash-preview-09-2025", displayName = "Gemini 2.5 Flash Preview Sep 2025"),
+            ListedModel("gemini-flash-latest", displayName = "Gemini Flash Latest"),
+            ListedModel("gemini-3-pro-preview", displayName = "Gemini 3 Pro Preview"),
+            ListedModel("gemma-3-27b-it", displayName = "Gemma 3 27B"),
+            ListedModel("gemini-3.1-pro", displayName = "Gemini 3.1 Pro"),
+            ListedModel("gemini-3-flash", displayName = "Gemini 3 Flash"),
+            ListedModel("gemini-embedding-001", displayName = "Gemini Embedding 001"),
+        )
+        val gemini = ProviderPresets.all.single { it.label == "Gemini" }.familyTokens
+        assertEquals(
+            listOf(
+                "gemini-3.1-pro", "gemini-3-flash", "gemini-3-pro-preview", "gemini-2.5-flash", "gemini-2.5-pro",
+                "gemini-2.5-flash-preview-09-2025", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash-001",
+                "gemini-flash-latest", "gemma-3-27b-it",
+            ),
+            ids(listed, gemini),
+        )
+        assertEquals("gemini-3.1-pro", ModelOptions.defaultMain(ModelOptions.merge(listed, base), gemini))
+    }
+
     @Test fun nonChatModelsAreRecognised() {
         fun opt(id: String, chat: Boolean? = null) = ModelOptions.merge(listOf(ListedModel(id, chat = chat)), base).single()
         for (id in listOf("text-embedding-3-small", "bge-reranker", "whisper-1", "gpt-4o-mini-tts", "gpt-4o-transcribe", "dall-e-3",

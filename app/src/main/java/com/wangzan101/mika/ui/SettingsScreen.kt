@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 设置里能进入的子页面;[Home] 是设置首页。 */
-private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, Developer, RunStats }
+private enum class SettingsPage { Home, Usage, PhoneOps, DuringWork, Capsule, Language, Notifications, WebSites, Sandbox, Routes, Recovery, ComputerAccess, Developer, RunStats }
 
 /**
  * 设置页:总状态卡 + 基本 / 隐私与数据 / 高级 / 关于四组。各子页面在这里切换(返回键先回首页),
@@ -114,6 +114,10 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { routeCount = withContext(Dispatchers.IO) { runCatching { routeStore.count() }.getOrNull() } }
     val sandboxStatus by remember { SandboxState.get(context) }.status.collectAsState()
+    val mcp = remember { (context.applicationContext as com.wangzan101.mika.MikaApp).mcp }
+    val mcpNetworkOn by mcp.settings.enabled.collectAsState()
+    val mcpUsbOn by mcp.usb.enabled.collectAsState()
+    val mcpOn = mcpNetworkOn || mcpUsbOn
     // 「Token 用量」一行的值:近 7 天的合计,账本每记一笔就重算
     val usage = remember { (context.applicationContext as com.wangzan101.mika.MikaApp).usage }
     val usageVersion by usage.version.collectAsState()
@@ -161,6 +165,7 @@ fun SettingsScreen(
             sandbox = sandboxStatus, onOpenSandbox = { page = SettingsPage.Sandbox },
             routes = routeCount, onOpenRoutes = { page = SettingsPage.Routes },
             onOpenRecovery = { page = SettingsPage.Recovery },
+            computerAccess = mcpOn, onOpenComputerAccess = { page = SettingsPage.ComputerAccess },
             showDeveloper = showDeveloper, onOpenDeveloper = { page = SettingsPage.Developer },
             versionName = BuildConfig.VERSION_NAME, updateVersion = updateVersion, onOpenAbout = onOpenAbout,
         )
@@ -188,6 +193,7 @@ fun SettingsScreen(
             onBack = toHome,
         )
         SettingsPage.Recovery -> RecoveryScreen(onBack = toHome)
+        SettingsPage.ComputerAccess -> McpScreen(mcp, onBack = toHome)
         SettingsPage.Developer -> DeveloperOptionsScreen(
             speed, onSpeed = { flags.setSpeed(it); speed = it }, onBack = toHome,
             autonomous = autonomous, onAutonomous = onAutonomous,
@@ -250,6 +256,9 @@ fun SettingsContent(
     routes: Int? = null,
     onOpenRoutes: () -> Unit = {},
     onOpenRecovery: () -> Unit = {},
+    /** 电脑连接(MCP)开着没有;为空时不显示这一行。 */
+    computerAccess: Boolean? = null,
+    onOpenComputerAccess: () -> Unit = {},
     showDeveloper: Boolean = false,
     onOpenDeveloper: () -> Unit = {},
     versionName: String = "",
@@ -309,7 +318,7 @@ fun SettingsContent(
 
         val sandboxRow = sandbox?.takeIf { it !is SandboxStatus.Unsupported }
         val recoveryRow = status.sdkInt >= Prerequisites.MIN_SDK
-        if (sandboxRow != null || routes != null || recoveryRow || showDeveloper) {
+        if (sandboxRow != null || routes != null || recoveryRow || computerAccess != null || showDeveloper) {
             GroupLabel(stringResource(R.string.settings_advanced))
             GroupCard {
                 var first = true
@@ -324,6 +333,11 @@ fun SettingsContent(
                 }
                 if (recoveryRow) {
                     ListRow(MikaIcons.Wrench, stringResource(R.string.settings_recovery), first = take(), onClick = onOpenRecovery) { RowChevron() }
+                }
+                computerAccess?.let { on ->
+                    ListRow(MikaIcons.Desktop, stringResource(R.string.mcp_title), first = take(), onClick = onOpenComputerAccess) {
+                        RowValue(stringResource(if (on) R.string.state_on else R.string.state_off)); RowChevron()
+                    }
                 }
                 if (showDeveloper) {
                     ListRow(MikaIcons.Code, stringResource(R.string.settings_developer), first = take(), onClick = onOpenDeveloper) { RowChevron() }

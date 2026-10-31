@@ -325,7 +325,7 @@ class ModelSetupViewModelTest {
         vm.testAndSave(); runCurrent()
         vm.setModel("gemini"); vm.testAndSave(); runCurrent()
         assertEquals(
-            ListState.Failed("列不出模型，用「gemini」试调用也说找不到：地址或接口类型可能填错了，也可能没有这个模型（模型名例如 gemini-2.5-flash）。"),
+            ListState.Failed("列不出模型，用「gemini」试调用也说找不到：地址或接口类型可能填错了，也可能没有这个模型（模型名例如 gemini-flash-latest）。"),
             vm.state.value.form.test,
         )
         assertTrue(store.providers.value.isEmpty())
@@ -418,7 +418,7 @@ class ModelSetupViewModelTest {
         reply = { throw ModelError.ModelNotFound("gemini") }
         vm.retest(p.id); runCurrent()
         assertEquals(
-            ListState.Failed("模型「gemini」不存在。要填服务商文档里完整的模型 ID（例如 gemini-2.5-flash）。"),
+            ListState.Failed("模型「gemini」不存在。要填服务商文档里完整的模型 ID（例如 gemini-flash-latest）。"),
             vm.state.value.retest[p.id],
         )
         assertEquals(listOf("gemini"), vm.state.value.unverified(vm.state.value.providers.single()))

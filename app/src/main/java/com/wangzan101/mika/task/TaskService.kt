@@ -175,7 +175,8 @@ class TaskService : Service() {
                 allowQueue = true, provenance = RunProvenance(RunOrigin.Mcp,
                     Attendance.entries.firstOrNull { it.name == intent.getStringExtra(EXTRA_ATTENDANCE) } ?: Attendance.Unattended),
                 mcpExternalId = intent.getStringExtra(EXTRA_MCP_ID))
-            ACTION_CANCEL_MCP -> intent.getStringExtra(EXTRA_MCP_ID)?.let { id -> center.runs().firstOrNull { it.mcpExternalId == id }?.cancel() }
+            ACTION_CANCEL_MCP -> intent.getStringExtra(EXTRA_MCP_ID)?.let { id -> center.runs().firstOrNull { it.mcpExternalId == id } }
+                ?.let { r -> if (center.cancelIfQueued(r)) cancelQueued(r) else r.cancel() }
             ACTION_CANCEL -> if (run != null && center.cancelIfQueued(run)) cancelQueued(run) else run?.cancel()
             ACTION_RESUME -> run?.resume()
             ACTION_TAKE_OVER -> run?.takeOver(waitKeyOf(intent))
@@ -227,7 +228,9 @@ class TaskService : Service() {
         }
         val store = ConversationStore.shared(this)
         val conversationId = requestedConversation ?: store.newConversation()
-        when (val r = center.tryStart(conversationId, newGoal, queueInConversation = provenance.origin == RunOrigin.Trigger)) {
+        // 定时和电脑交来的任务不丢:这个对话还有任务时排在它后面
+        val queueHere = provenance.origin == RunOrigin.Trigger || provenance.origin == RunOrigin.Mcp
+        when (val r = center.tryStart(conversationId, newGoal, queueInConversation = queueHere)) {
             StartResult.AlreadyRunningInConversation -> keepForeground()
             is StartResult.Queued -> {
                 nameConversation(store, conversationId, newGoal, provenance)
@@ -276,9 +279,9 @@ class TaskService : Service() {
         }
     }
 
-    /** 用户在新对话里发的第一句话:后台请模型起一个标题记下(只起一次,起不出来就不记)。 */
+    /** 用户(或电脑)在新对话里交来的第一句话:后台请模型起一个标题记下(只起一次,起不出来就不记)。 */
     private fun nameConversation(store: ConversationStore, id: String, first: String, provenance: RunProvenance) {
-        if (provenance.origin != RunOrigin.Ui) return
+        if (provenance.origin != RunOrigin.Ui && provenance.origin != RunOrigin.Mcp) return
         scope.launch(Dispatchers.IO) {
             runCatching {
                 val env = TaskEnvironment.of(this@TaskService)
@@ -366,7 +369,7 @@ class TaskService : Service() {
                 }
             }.onFailure { Log.w(TAG, "result notification failed", it) }
             if (delivered) center.markDelivered(run)
-            run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, end::class.simpleName.orEmpty()) }
+            run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, end) }
             onRunEnded(run, store)
         }
     }
@@ -430,6 +433,7 @@ class TaskService : Service() {
         run.handoffUnconsumed(cancelled = true)
         run.end(TaskState.Cancelled)
         recordTurn(ConversationStore.shared(this), run.conversationId, run.goal, TaskState.Cancelled, null)
+        run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).mcpTasks.ended(it, TaskState.Cancelled) }
         publishRuns()
         center.queued().forEachIndexed { i, q -> q.queue(i + 1) }
     }
@@ -656,6 +660,8 @@ class TaskService : Service() {
         if (center.runs().isNotEmpty()) {
             // 标中断后当场善后(定时窗口、补送、告知、写进对话):进程还在,不等下次启动;用 App 级作用域,服务没了也做完
             center.store.interruptUnfinished()
+            val app = application as com.wangzan101.mika.MikaApp
+            center.runs().forEach { r -> r.mcpExternalId?.let { app.mcpTasks.ended(it, TaskState.Failed(tr(R.string.task_interrupted), FailKind.Environment)) } }
             (application as com.wangzan101.mika.MikaApp).runRecovery.settleInterrupted()
             taskState._state.value = TaskState.Failed(tr(R.string.task_interrupted), FailKind.Environment)
             taskState._runs.value = emptyList()
@@ -792,8 +798,8 @@ class TaskService : Service() {
                 .apply { if (checking) putExtra(EXTRA_TRIGGER_ACTION, goal) })
         }
 
-        fun startMcp(context: Context, goal: String, threadId: String, externalId: String, attendance: Attendance) {
-            val conversation = java.util.UUID.nameUUIDFromBytes("mcp:$threadId:$externalId".toByteArray(Charsets.UTF_8)).toString()
+        /** 电脑交来的任务([McpTaskHub]):记在 [conversation] 这个对话里,来源记成 MCP。 */
+        fun startMcp(context: Context, goal: String, conversation: String, externalId: String, attendance: Attendance) {
             context.startForegroundService(Intent(context, TaskService::class.java).setAction(ACTION_START_MCP)
                 .putExtra(EXTRA_GOAL, goal).putExtra(EXTRA_CONVERSATION, conversation)
                 .putExtra(EXTRA_MCP_ID, externalId).putExtra(EXTRA_ATTENDANCE, attendance.name))

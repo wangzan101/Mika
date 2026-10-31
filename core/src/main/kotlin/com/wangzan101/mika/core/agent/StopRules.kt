@@ -49,7 +49,7 @@ internal fun userReason(e: ModelError): String = when (e) {
     is ModelError.QuotaExceeded -> "模型账户额度已用完,请检查服务商账户的余额或套餐。"
     is ModelError.ModelNotFound ->
         if (e.model.isEmpty()) "找不到该模型,请到设置 › 模型检查模型名和 Base URL 是否正确。"
-        else "模型「${e.model}」在这个服务商那里不存在。去设置 › 模型,检查模型名(要填完整的模型 ID,比如 Gemini 的模型名类似 gemini-2.5-flash)或改用对应的预设。"
+        else "模型「${e.model}」在这个服务商那里不存在。去设置 › 模型,检查模型名(要填完整的模型 ID,比如 Gemini 的模型名类似 gemini-flash-latest)或改用对应的预设。"
     is ModelError.ModelNotAvailable ->
         "模型「${e.model.ifEmpty { "当前模型" }}」这个账号没开通或没权限用。去设置 › 模型换一个模型，或到服务商后台开通。"
     is ModelError.ToolsUnsupported ->

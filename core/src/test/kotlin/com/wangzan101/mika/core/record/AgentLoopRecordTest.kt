@@ -70,6 +70,23 @@ class AgentLoopRecordTest {
         assertTrue(ev.zipWithNext().all { (a, b) -> a.atMs <= b.atMs || (a is RunEvent.ToolResult && b is RunEvent.Observed) })
     }
 
+    @Test fun startRecordsWhoStartedTheRun() {
+        fun started(origin: com.wangzan101.mika.core.run.RunOrigin): RunEvent.TaskStarted {
+            val sink = ListSink()
+            val spec = com.wangzan101.mika.core.run.RunSpec(com.wangzan101.mika.core.run.RunId("r"), "查电量", "t",
+                provenance = com.wangzan101.mika.core.run.RunProvenance(origin, com.wangzan101.mika.core.run.Attendance.Reachable))
+            kotlinx.coroutines.runBlocking {
+                AgentLoop(FakeModel(com.wangzan101.mika.core.testing.answerReply("80%")), toolDispatcher(FakeScreen(), runSpec = spec), "BASE", sink = sink)
+                    .run(spec, com.wangzan101.mika.core.run.RunInbox())
+            }
+            return sink.events.first() as RunEvent.TaskStarted
+        }
+        assertEquals("mcp", started(com.wangzan101.mika.core.run.RunOrigin.Mcp).origin)
+        // 手机上发起的不写,记录和以前一样
+        assertNull(started(com.wangzan101.mika.core.run.RunOrigin.Ui).origin)
+        assertEquals("mcp", RunSummary(id = "x", goal = "g", startedAtMs = 0).with(RunEvent.TaskStarted(0, "g", "m", "mcp")).origin)
+    }
+
     @Test fun tokensRecordedFromUsage() {
         val m = FakeModel(
             reply(call("phone_observe"), usage = Usage(1200, 80, 1000)),

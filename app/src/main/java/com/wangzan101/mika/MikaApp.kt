@@ -80,6 +80,20 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
     /** 各任务的标签池共用的标签总数上限。 */
     val resources = ResourceScheduler()
     val mcpTasks by lazy { McpTaskHub(this) }
+
+    /**
+     * 电脑连接(MCP):开关、访问令牌(和服务商的 Key 一样加密存)、监听。局域网那种默认关着;
+     * USB 那种由电脑经 adb 打开,只到这次关机为止(开机编号和 shell 里 `settings get global boot_count` 读到的一样)。
+     */
+    val mcp by lazy {
+        val settingsDir = java.io.File(filesDir, "settings")
+        com.wangzan101.mika.mcp.McpRuntime(this,
+            com.wangzan101.mika.settings.McpSettings(settingsDir, com.wangzan101.mika.settings.KeystoreKeyCipher("mika-mcp-token")),
+            com.wangzan101.mika.settings.McpUsbSettings(settingsDir,
+                bootId = { android.provider.Settings.Global.getString(contentResolver, android.provider.Settings.Global.BOOT_COUNT) ?: "null" },
+                infoFile = { getExternalFilesDir(null)?.let { java.io.File(it, com.wangzan101.mika.core.mcp.McpUsb.INFO_FILE) } }),
+            mcpTasks)
+    }
     val childRuns by lazy { FileChildRunStore(java.io.File(filesDir, "children-v3.json")) }
     override val tabBudget get() = resources.tabBudget
 
@@ -252,6 +266,8 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         // 上次进程被杀时没结束的运行:现在就标为中断并告知,不等任务服务起来
         runRecovery.recover().let { if (it.isNotEmpty()) Log.w("MikaTask", "${it.size} runs interrupted by process restart") }
         scope.launch(Dispatchers.IO) { runCatching { TriggerRuntime.rearm(this@MikaApp) } }
+        // 给电脑跑的「经 USB 连接」脚本;顺带清掉上次开机留下的 USB 连接信息
+        scope.launch(Dispatchers.IO) { runCatching { mcp.writeUsbScript() }.onFailure { Log.w("MikaMcp", "cannot write USB script", it) } }
         // 上次导出写到一半被杀留下的空壳条目
         scope.launch { runCatching { ShareExporter(this@MikaApp).cleanPending() } }
         // 上次进程留下的网页上传副本

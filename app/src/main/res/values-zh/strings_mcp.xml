@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_title">电脑连接（MCP）</string>
+    <string name="mcp_sub">让电脑上的 AI 工具把任务交给 Mika</string>
+    <string name="mcp_foot">默认关闭。打开后,Mika 在 Wi-Fi 和私有网络上监听(移动数据上不监听),同一网络里电脑上的 MCP 客户端就能把任务交给 Mika;Mika 在这台手机上去做,你在对话列表里看得到。每个请求都要带下面的访问令牌。付款、确认和交给你处理的那一步,只能在这台手机上做。</string>
+    <string name="mcp_status">状态</string>
+    <string name="mcp_starting">正在开启…</string>
+    <string name="mcp_listening">正在监听端口 %1$d</string>
+    <string name="mcp_failed">没能开启:%1$s</string>
+    <string name="mcp_activity">最近连过 %1$d 个客户端 · 最后一次请求 %2$s</string>
+    <string name="mcp_no_requests">还没有电脑连过来</string>
+    <string name="mcp_address">连接地址</string>
+    <string name="mcp_no_address">现在没连着 Wi-Fi 或私有网络</string>
+    <string name="mcp_address_foot">用电脑连得到的那个地址:同一个 Wi-Fi,或同一个私有 VPN 网络。点地址就能复制。</string>
+    <string name="mcp_token">访问令牌</string>
+    <string name="mcp_copy">复制</string>
+    <string name="mcp_regenerate">换一个</string>
+    <string name="mcp_regenerate_title">换一个访问令牌?</string>
+    <string name="mcp_regenerate_body">用旧令牌的电脑会连不上,换上新令牌才能接着用。</string>
+    <string name="mcp_regenerate_confirm">换</string>
+    <string name="mcp_config">客户端配置</string>
+    <string name="mcp_copy_config">复制配置</string>
+    <string name="mcp_config_foot">把它加进电脑上 MCP 客户端的服务器设置里。令牌别给别人:同一网络里拿到它的人都能把任务交给 Mika。</string>
+    <string name="mcp_copied">已复制</string>
+    <string name="mcp_notif_title">电脑连接已打开</string>
+    <string name="mcp_notif_body">正在 Wi-Fi 和私有网络上监听端口 %1$d</string>
+    <string name="mcp_turn_off">关闭</string>
+    <string name="mcp_usb_group">经 USB(推荐)</string>
+    <string name="mcp_usb_title">经 USB 连接</string>
+    <string name="mcp_usb_off_sub">关着。用 USB 调试连着的电脑可以打开它</string>
+    <string name="mcp_usb_on">正经 USB 连接(由电脑打开)</string>
+    <string name="mcp_usb_on_sub">只在这台手机上监听,电脑经数据线连进来</string>
+    <string name="mcp_usb_foot">在用 USB 调试连着的电脑上运行 %1$s(点一下复制)。它会打开这个开关,并把连接地址和访问令牌告诉电脑上的 AI 工具;令牌只有电脑读得到。命令末尾加上 off 就关掉。在这里、在通知上也能关;手机重启后自动关掉。</string>
+    <string name="mcp_network_group">经 Wi-Fi 和私有网络</string>
+    <string name="mcp_network_title">Wi-Fi 和私有网络</string>
+    <string name="mcp_notif_body_usb">经 USB 连接,端口 %1$d(只在本机监听)</string>
+    <string name="mcp_notif_body_both">端口 %1$d:经 USB,也在 Wi-Fi 和私有网络上</string>
+</resources>

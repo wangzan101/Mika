@@ -46,7 +46,7 @@
     <string name="model_manual_name">模型名</string>
     <string name="model_no_list_custom">这个地址列不出模型：可能这家不提供模型列表，也可能地址或接口类型填错了。填一个模型名再点「测试并保存」，用它试调用一次就知道。</string>
     <string name="model_no_list_preset">这家没有列出模型。填一个模型名再点「测试并保存」，用它试调用一次，通了才保存。</string>
-    <string name="model_example_gemini">例如 gemini-2.5-flash</string>
+    <string name="model_example_gemini">例如 gemini-flash-latest</string>
     <string name="model_example_anthropic">例如 claude-sonnet-4-5</string>
     <string name="model_example_openai">例如 gpt-5-mini</string>
     <string name="model_example_compat">例如 deepseek-chat</string>

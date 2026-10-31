@@ -151,6 +151,44 @@ class ModelSetupNetworkTest {
         assertTrue(s.probeNote.orEmpty(), s.probeNote.orEmpty().endsWith("试了 antdigital/Ling-3.1-flash、qwen-plus、qwen-max，都没开通。"))
     }
 
+    /** 先试的模型这个账号额度为零(429 里说 limit: 0):不当成限流卡住,接着试下一个,通了存下、它当主模型。 */
+    @Test fun quotaZeroFirstModelFallsBackToTheNext() {
+        routes["/models"] = {
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"object":"list","data":[{"id":"paid-only"},{"id":"free-ok"}]}""")
+        }
+        chat = { model -> if (model == "free-ok") toolCall() else quotaZero() }
+        val (store, vm) = setUp()
+        vm.testAndWait()
+        assertEquals(listOf("paid-only", "free-ok"), chatModels)
+        val p = store.providers.value.single()
+        assertEquals("free-ok", store.configFor(ModelRole.Main)?.model)
+        assertTrue("free-ok" in p.verifiedModels)
+        assertFalse(vm.state.value.showForm)
+        val note = vm.state.value.probeNote.orEmpty()
+        assertTrue(note, note.startsWith("先试的 paid-only 没测试通过：这个账号没开通或没权限用这个模型（服务商说："))
+        assertTrue(note, note.endsWith("主模型用了测试通过的「free-ok」。"))
+    }
+
+    /** 真的限流(429 没说额度为零):第一个就因为模型以外的原因失败,不存、不试下一个。 */
+    @Test fun plainRateLimitOnTheFirstModelSavesNothing() {
+        routes["/models"] = {
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"object":"list","data":[{"id":"a"},{"id":"b"}]}""")
+        }
+        chat = {
+            MockResponse().setResponseCode(429).setHeader("Content-Type", "application/json")
+                .setBody("""{"error":{"message":"Rate limit reached for requests, limit: 60 per minute"}}""")
+        }
+        val (store, vm) = setUp()
+        vm.testAndWait()
+        assertEquals(listOf("a"), chatModels.distinct())
+        assertTrue(vm.state.value.form.test is ListState.Failed)
+        assertTrue(store.providers.value.isEmpty())
+    }
+
+    private fun quotaZero() = MockResponse().setResponseCode(429).setHeader("Content-Type", "application/json").setBody(
+        """[{"error":{"code":429,"message":"You exceeded your current quota. Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: paid-only","status":"RESOURCE_EXHAUSTED"}}]""",
+    )
+
     private fun thirdPartyFirst() = MockResponse().setHeader("Content-Type", "application/json").setBody(
         """{"object":"list","data":[{"id":"antdigital/Ling-3.1-flash"},{"id":"text-embedding-v4"},{"id":"qwen-plus"},{"id":"qwen-max"}]}""",
     )

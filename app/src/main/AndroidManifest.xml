@@ -127,6 +127,21 @@
                 android:value="Runs a user-requested phone task on the app's own virtual display and shows its progress" />
         </service>
 
+        <!--
+            电脑连接(MCP):用户在设置里打开、或电脑经 USB 调试打开后才运行,让监听端口在后台也开着;关掉就停。
+            对外开放只为让 adb shell 能起它(am start-foreground-service):调用方必须持有 INTERACT_ACROSS_USERS_FULL,
+            shell 有,普通 App 拿不到,adb 也授不了
+        -->
+        <service
+            android:name=".mcp.McpService"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the endpoint the user turned on (local network, or loopback for a computer on USB) open so the user's own computer can hand tasks to the app" />
+        </service>
+
         <!-- 后台准备运行环境(解出随 APK 自带的根文件系统),只在准备期间运行 -->
         <service
             android:name=".sandbox.SandboxService"

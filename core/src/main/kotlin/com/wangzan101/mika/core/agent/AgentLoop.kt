@@ -230,7 +230,8 @@ class AgentLoop(
         // 同意只在一次任务内有效
         confirmations?.reset()
         utterances?.clear()
-        emit(RunEvent.TaskStarted(now(), Redactor.text(task), model.name))
+        emit(RunEvent.TaskStarted(now(), Redactor.text(task), model.name,
+            origin = runProvenance.origin.takeIf { it != RunOrigin.Ui }?.name?.lowercase()))
         var end: TaskState? = null
         replay?.reset()
         lastVerdict = null

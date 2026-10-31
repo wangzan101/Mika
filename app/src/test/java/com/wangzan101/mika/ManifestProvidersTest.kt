@@ -49,6 +49,21 @@ class ManifestProvidersTest {
         assertEquals("\${applicationId}.helper", p.getAttributeNS(androidNs, "authorities"))
     }
 
+    /** 电脑连接的服务对外开放只为让 adb shell 起它:普通 App 没有这个权限,起不了、也开关不了 USB 方式。 */
+    @Test
+    fun computerAccessServiceIsOnlyStartableWithShellLevelPermission() {
+        val doc = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
+            .newDocumentBuilder().parse(File("src/main/AndroidManifest.xml"))
+        val services = doc.getElementsByTagName("service")
+        val s = (0 until services.length).map { services.item(it) as Element }
+            .single { it.getAttributeNS(androidNs, "name") == ".mcp.McpService" }
+        assertEquals("true", s.getAttributeNS(androidNs, "exported"))
+        assertEquals("android.permission.INTERACT_ACROSS_USERS_FULL", s.getAttributeNS(androidNs, "permission"))
+        assertEquals("specialUse", s.getAttributeNS(androidNs, "foregroundServiceType"))
+        // 没有 intent-filter:只能按组件名显式起
+        assertEquals(0, s.getElementsByTagName("intent-filter").length)
+    }
+
     /** 清单里登记的组件都按全名找得到类(搬了代码的入口留着同名的薄壳)。 */
     @Test
     fun everyComponentClassExists() {

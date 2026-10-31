@@ -95,7 +95,7 @@ class GeminiModel(
         ModelAccessErrors.of(status, body, model)?.let { return it }
         return when {
             status == 401 || status == 403 -> ModelError.Auth()
-            // Gemini 的 429 一律按可重试限流处理(其限流与额度文案混用,无法可靠区分)
+            // 这个模型额度为零的 429 上面已认成用不了;其余 429 按可重试限流处理(其限流与额度文案混用,无法可靠区分)
             status == 429 || st == "RESOURCE_EXHAUSTED" -> ModelError.RateLimited(HttpSupport.retryAfterMs(retryAfter))
             status == 404 -> ModelError.ModelNotFound(model)
             status == 413 || (status == 400 && lower.contains("token") &&

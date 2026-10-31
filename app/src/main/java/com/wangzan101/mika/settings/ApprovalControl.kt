@@ -29,8 +29,12 @@ class RunApproval(startAutonomous: Boolean) : ApprovalSettings {
 class ApprovalControl(private val store: ApprovalStore) {
     private val runs = mutableSetOf<RunApproval>()
 
-    @Synchronized fun start(): RunApproval =
-        RunApproval(store.autonomous.value).also { runs += it }
+    /**
+     * [remote] 为 true 是电脑经 MCP 交来的任务:不管开关,一律按询问开工、也不跟着开关变,
+     * 付款这一步在这类任务里永远不做(审批判定对非手机发起的一律拒绝),远端没有办法让它放行。
+     */
+    @Synchronized fun start(remote: Boolean = false): RunApproval =
+        if (remote) RunApproval(false) else RunApproval(store.autonomous.value).also { runs += it }
 
     @Synchronized fun end(run: RunApproval) {
         runs -= run

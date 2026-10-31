@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_title">Computer access (MCP)</string>
+    <string name="mcp_sub">Let AI tools on your computer hand tasks to Mika</string>
+    <string name="mcp_foot">Off by default. When on, Mika listens on Wi-Fi and private networks (never on mobile data), so an MCP client on a computer in the same network can hand Mika tasks; Mika does them here on the phone and you see them as conversations. Every request needs the access token below. Payments, confirmations and steps handed to you can only be done on this phone.</string>
+    <string name="mcp_status">Status</string>
+    <string name="mcp_starting">Starting…</string>
+    <string name="mcp_listening">Listening on port %1$d</string>
+    <string name="mcp_failed">Couldn’t start: %1$s</string>
+    <string name="mcp_activity">Recent clients: %1$d · last request %2$s</string>
+    <string name="mcp_no_requests">No computer has connected yet</string>
+    <string name="mcp_address">Address</string>
+    <string name="mcp_no_address">Not on Wi-Fi or a private network right now</string>
+    <string name="mcp_address_foot">Use an address the computer can reach: the same Wi-Fi, or the same private VPN network. Tap an address to copy it.</string>
+    <string name="mcp_token">Access token</string>
+    <string name="mcp_copy">Copy</string>
+    <string name="mcp_regenerate">New token</string>
+    <string name="mcp_regenerate_title">Replace the access token?</string>
+    <string name="mcp_regenerate_body">Computers using the old token stop working until you give them the new one.</string>
+    <string name="mcp_regenerate_confirm">Replace</string>
+    <string name="mcp_config">Client config</string>
+    <string name="mcp_copy_config">Copy config</string>
+    <string name="mcp_config_foot">Add this to your MCP client’s server settings. Keep the token private: anyone on the same network who has it can hand Mika tasks.</string>
+    <string name="mcp_copied">Copied</string>
+    <string name="mcp_notif_title">Computer access is on</string>
+    <string name="mcp_notif_body">Listening on port %1$d on Wi-Fi and private networks</string>
+    <string name="mcp_turn_off">Turn off</string>
+    <string name="mcp_usb_group">Over USB (recommended)</string>
+    <string name="mcp_usb_title">Connect through USB</string>
+    <string name="mcp_usb_off_sub">Off. A computer with USB debugging can turn it on</string>
+    <string name="mcp_usb_on">Connected through USB (started from a computer)</string>
+    <string name="mcp_usb_on_sub">Listens on this phone only; the computer reaches it over the cable</string>
+    <string name="mcp_usb_foot">On a computer connected with USB debugging, run %1$s (tap to copy). It turns this on and prints the address and access token for AI tools on the computer; only the computer can read the token. Add “off” at the end to turn it off. It also turns off here, from the notification, and when the phone restarts.</string>
+    <string name="mcp_network_group">Over Wi-Fi and private networks</string>
+    <string name="mcp_network_title">Wi-Fi and private networks</string>
+    <string name="mcp_notif_body_usb">Connected through USB on port %1$d (this phone only)</string>
+    <string name="mcp_notif_body_both">Port %1$d: over USB, and on Wi-Fi and private networks</string>
+</resources>

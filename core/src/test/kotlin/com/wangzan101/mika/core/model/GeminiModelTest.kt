@@ -154,6 +154,12 @@ class GeminiModelTest {
         val rl = errorOf(429, err(429, "RESOURCE_EXHAUSTED", "slow down"), "Retry-After" to "3")
         assertEquals(3000L, (rl as ModelError.RateLimited).retryAfterMs)
         assertTrue(errorOf(429, err(429, "RESOURCE_EXHAUSTED", "You exceeded your current quota")) is ModelError.RateLimited)
+        // 这个模型的免费额度为零:等也没用,认成这个账号用不了这个模型,试调用时接着试下一个
+        val zero = errorOf(429, err(429, "RESOURCE_EXHAUSTED", "Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-x"))
+        assertTrue(zero is ModelError.ModelNotAvailable)
+        assertTrue(errorOf(404, err(404, "NOT_FOUND", "models/x is not found for API version v1beta, or is not supported for generateContent.")) is ModelError.ModelNotFound)
+        assertTrue(errorOf(400, err(400, "INVALID_ARGUMENT", "models/x is not found for API version v1beta, or is not supported for generateContent.")) is ModelError.ModelNotFound)
+        assertTrue(errorOf(404, err(404, "NOT_FOUND", "Gemini x is no longer available.")) is ModelError.ModelNotAvailable)
         assertTrue(errorOf(404, err(404, "NOT_FOUND", "models/x not found")) is ModelError.ModelNotFound)
         assertTrue(errorOf(403, err(403, "PERMISSION_DENIED", "Your project does not have access to model x")) is ModelError.ModelNotAvailable)
         assertEquals(503, (errorOf(503, err(503, "UNAVAILABLE", "busy")) as ModelError.Server).status)

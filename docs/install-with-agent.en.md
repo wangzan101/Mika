@@ -231,6 +231,64 @@ Then suggest a harmless first task for the user to send in Mika, for example:
 Open Settings and tell me the Android version
 ```
 
+## Step 10 (optional): Connect your AI tool to Mika (MCP over USB)
+
+Do this step only if the user wants AI tools on the computer (you included) to hand tasks to Mika. Ask first. Mika then works as an MCP server that listens on the phone itself only; the computer reaches it over the USB cable through adb port forwarding. Nothing needs to be tapped on the phone. Details: [Computer access (MCP)](mcp.en.md).
+
+1. Turn it on. This also starts the phone helper from step 7 if it isn't running:
+
+   ```
+   adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh
+   ```
+
+   Success: it ends with "Computer access over USB is on" and prints a JSON object with `url`, `headers` and `token`. If it says the file doesn't exist, open Mika once (step 7), wait a few seconds and try again.
+
+2. Forward the port:
+
+   ```
+   adb forward tcp:8765 tcp:8765
+   ```
+
+3. Read the token again whenever you need it (it is the `token` field):
+
+   ```
+   adb shell cat /sdcard/Android/data/com.wangzan101.mika/files/mcp-usb.json
+   ```
+
+4. Check that it answers (put the token in):
+
+   ```
+   curl -s http://127.0.0.1:8765/mcp \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
+     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
+   ```
+
+   Success: a JSON reply whose `result` has `serverInfo`.
+
+5. The MCP client config: a Streamable HTTP (often called "http") server with URL `http://127.0.0.1:8765/mcp` and the header `Authorization: Bearer <token>`. Most clients take something like:
+
+   ```json
+   {
+     "mcpServers": {
+       "mika": {
+         "type": "http",
+         "url": "http://127.0.0.1:8765/mcp",
+         "headers": { "Authorization": "Bearer <token>" }
+       }
+     }
+   }
+   ```
+
+   If the user wants it, add Mika to **your own** MCP configuration in the format your tool uses. Don't change any other entry. Then tell the user to restart you or reload your MCP configuration if your tool needs that. Don't show the token in the chat unless the user asks for it.
+
+Tell the user:
+
+- After unplugging and replugging the cable (or after adb restarts), `adb forward tcp:8765 tcp:8765` has to be run again. The token stays the same.
+- After a phone restart USB mode is off. Run the command in 1 again; the token changes then, so the MCP configuration needs the new one.
+- To turn it off: `adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/connect-computer.sh off`, the switch in Mika's Settings › Computer access (MCP), or "Turn off" on the notification. The old token stops working at once.
+
 ## Troubleshooting
 
 | Problem | What to do |
@@ -242,10 +300,12 @@ Open Settings and tell me the Android version
 | The phone helper is not running after a restart | With A: connect to Wi-Fi and wait a moment; Mika recovers by itself. If not, tap Pair again in Settings › Phone control. With only B: run the command from step 7 B again from the computer, or set up A. |
 | GitHub cannot be reached | Ask the user to open [Releases](https://github.com/wangzan101/Mika/releases/latest) in a browser and download the APK by hand, then run `adb install -r <path to the APK>`. |
 | Wireless debugging won't turn on | The phone must be on Wi-Fi, and the user must allow wireless debugging on this network in the prompt. If it still won't, use B. |
+| The AI tool can't reach Mika over USB (step 10) | Run `adb forward tcp:8765 tcp:8765` again (needed after every replug). After a phone restart, run the step 10 command that turns it on again and update the token. |
+| The forward fails with `cannot bind`, or the reply isn't from Mika (step 10) | Port 8765 is taken on the computer. Forward from another free port, e.g. `adb forward tcp:18765 tcp:8765`, and use `http://127.0.0.1:18765/mcp` in the config; nothing changes on the phone. |
 
 ## Finally: a short summary for the user
 
 When everything is done, tell the user in their language:
 
 - **What was done**: which version was installed; whether notifications, accessibility and the battery allowlist are set; how the phone helper was started and whether it is ready. Say honestly if a step failed or was skipped.
-- **What the user still needs to do**: add a model in Settings › Model (if not done yet); pair wireless debugging (if they chose A but haven't finished); if only B was used, remind them to run that command again from the computer after a phone restart; then send a simple task to try it out.
+- **What the user still needs to do**: add a model in Settings › Model (if not done yet); pair wireless debugging (if they chose A but haven't finished); if only B was used, remind them to run that command again from the computer after a phone restart; then send a simple task to try it out. If step 10 was done: whether Mika was added to your MCP configuration, and that `adb forward` must be run again after replugging the cable, and the step 10 command after a phone restart.

@@ -36,6 +36,41 @@ class ModelAccessErrorsTest {
         assertNull(ModelAccessErrors.of(404, """{"error":{"code":"model_not_found","message":"The model `x` does not exist or you do not have access to it."}}""", "m"))
     }
 
+    /** 429 里说这个账号在这个模型上额度为零:换模型才行,认成用不了;其余 429(真限流、额度用完)交给调用方。 */
+    @Test fun quotaZeroForThisModelIsNotAvailable() {
+        val freeTierZero = """{"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details. """ +
+            """* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-x-pro",""" +
+            """"status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaMetric":"generate_content_free_tier_requests"}]}]}}"""
+        val e = notAvailable(429, freeTierZero)
+        assertTrue(e.detail, e.detail.startsWith("You exceeded your current quota"))
+        notAvailable(429, """{"error":{"code":429,"message":"Quota exceeded","status":"RESOURCE_EXHAUSTED","details":[{"violations":[{"quotaValue":"0"}]}]}}""")
+        notAvailable(429, """{"error":{"code":429,"message":"This model doesn't have a free quota tier. Please enable billing.","status":"RESOURCE_EXHAUSTED"}}""")
+        // OpenAI 兼容的入口回的是数组
+        notAvailable(429, """[{"error":{"code":429,"message":"Quota exceeded for metric: free_tier_input_token_count, limit: 0","status":"RESOURCE_EXHAUSTED"}}]""")
+        assertNull(ModelAccessErrors.of(429, """{"error":{"code":429,"message":"Quota exceeded for metric: requests_per_minute, limit: 10. Please retry in 7s.","status":"RESOURCE_EXHAUSTED"}}""", "m"))
+        assertNull(ModelAccessErrors.of(429, """{"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}}""", "m"))
+        assertNull(ModelAccessErrors.of(429, """{"error":{"code":429,"message":"limit: 0.5 rps","status":"RESOURCE_EXHAUSTED"}}""", "m"))
+        assertNull(ModelAccessErrors.of(429, "", "m"))
+    }
+
+    /** 模型下线了:404 / 400 里说 no longer available、retired、model … deprecated 的认成用不了,带原话;Gemini 的 not found for API version 认成找不到。 */
+    @Test fun retiredModels() {
+        assertEquals(
+            "Gemini 1.5 Flash is no longer available. Please switch to a newer model.",
+            notAvailable(404, """{"error":{"code":404,"message":"Gemini 1.5 Flash is no longer available. Please switch to a newer model.","status":"NOT_FOUND"}}""").detail,
+        )
+        notAvailable(400, """{"error":{"message":"The model gemini-1.0-pro has been retired."}}""")
+        notAvailable(400, """{"error":{"message":"models/gemini-1.5-pro-001 is deprecated and no longer served"}}""")
+        notAvailable(400, """{"error":{"message":"This model is deprecated."}}""")
+        notAvailable(400, """{"error":{"message":"该模型已下线"}}""")
+        assertTrue(
+            ModelAccessErrors.of(400, """{"error":{"code":400,"message":"models/gemini-x is not found for API version v1beta, or is not supported for generateContent.","status":"INVALID_ARGUMENT"}}""", "m")
+                is ModelError.ModelNotFound,
+        )
+        // 只说某个参数弃用了的不认
+        assertNull(ModelAccessErrors.of(400, """{"error":{"message":"The parameter `max_tokens` is deprecated, use `max_completion_tokens`."}}""", "m"))
+    }
+
     /** Key、额度、请求本身不对的不认;401 一律不看。 */
     @Test fun otherErrorsAreLeftToTheAdapter() {
         assertNull(ModelAccessErrors.of(401, """{"error":{"message":"not activated"}}""", "m"))

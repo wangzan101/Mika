@@ -22,20 +22,19 @@ flowchart LR
     CLI -->|"HTTP, optionally forwarded through ADB"| API
 ```
 
-## Install
+## Installation and maintenance
 
-Requires Python 3.10+ and a Mika APK containing task API v1. Older MCP-only APKs are rejected with a compatibility message. This feature is available in source builds; existing MCP support alone does not prove that a published APK includes it.
+Use the [CLI / Skill installation guide](computer-install.en.md) to choose a terminal CLI or agent Skill. It covers prerequisites on macOS, Linux and Windows, verification, pinned updates/rollback, removal and troubleshooting. The phone needs task API v1, first shipped in Mika v0.1.23.
 
-From the repository root, install with pipx or inside your own Python virtual environment:
+With Python, Git and pipx ready, install the CLI from a fixed release in any directory:
 
 ```bash
-pipx install ./tools/mika
-# Or in an activated virtual environment:
-python3 -m pip install ./tools/mika
+pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
+mika --version
 mika --help
 ```
 
-Alternatively run `python3 tools/mika/scripts/mika_cli.py --help` directly. There are no Python runtime dependencies. Install the computer Skill by copying the complete `tools/mika/` directory into your agent's supported skills directory as `mika`. It includes the client and license and works outside the repository. It does not depend on Mika's internal phone skills.
+The Skill's bundled script works without a global CLI installation. In that case, `mika` below means `python3 <actual-skill-directory>/scripts/mika_cli.py` (`py -3` on Windows).
 
 ## Connect
 

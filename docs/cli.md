@@ -22,20 +22,19 @@ flowchart LR
     CLI -->|"HTTP，可经 ADB 转发"| API
 ```
 
-## 安装
+## 安装与维护
 
-需要 Python 3.10+ 和包含任务 API v1 的 Mika APK。旧 APK 只有 MCP 时,CLI 会明确提示不兼容。此功能随源码构建提供,不能仅凭已有 MCP 能力判断某个已发布 APK 支持它。
+从 [CLI / Skill 安装指南](computer-install.md)选择终端 CLI 或 Agent Skill。指南包含 macOS、Linux、Windows 的依赖、安装检查、固定版本升级/回退、卸载和故障排查;手机需要 Mika v0.1.23 起提供的任务 API v1。
 
-在仓库根目录使用 pipx 安装,或在自己的 Python 虚拟环境里使用 pip:
+已准备好 Python、Git 和 pipx 时,可在任意目录安装固定 release 的 CLI：
 
 ```bash
-pipx install ./tools/mika
-# 或在已激活的虚拟环境中:
-python3 -m pip install ./tools/mika
+pipx install 'git+https://github.com/wangzan101/Mika.git@v0.1.23#subdirectory=tools/mika'
+mika --version
 mika --help
 ```
 
-也可以直接运行 `python3 tools/mika/scripts/mika_cli.py --help`,不安装 Python 依赖。将整个 `tools/mika/` 目录复制到支持 Skills 的 Agent 的技能目录,并命名为 `mika`,即可安装电脑端 Skill。该目录带齐脚本和许可,单独复制后可运行;不依赖手机内部技能目录或另一个仓库检出。
+只装 Skill 也能使用其随附脚本,无需另外安装全局命令。下面的 `mika` 在这种情况下代表 `python3 <实际Skill目录>/scripts/mika_cli.py`（Windows 用 `py -3`）。
 
 ## 连接手机
 

@@ -363,8 +363,16 @@ fun RoutesScreen(count: Int?, onClear: () -> Unit, onBack: () -> Unit) {
     }
 }
 
-/** 设置 › 恢复与修复:手机操作的几个授权开关。 */
+/** 设置 › 恢复与修复:手机操作的几个授权开关,下面是兼容性自检的入口。 */
 @Composable
-fun RecoveryScreen(onBack: () -> Unit) {
-    PageScaffold(stringResource(R.string.settings_recovery), onBack) { RecoverySwitches() }
+fun RecoveryScreen(onBack: () -> Unit, onOpenSelfCheck: () -> Unit = {}) {
+    PageScaffold(stringResource(R.string.settings_recovery), onBack) {
+        RecoverySwitches()
+        GroupCard {
+            ListRow(
+                MikaIcons.Bug, stringResource(R.string.selfcheck_title), stringResource(R.string.selfcheck_row_sub), first = true,
+                onClick = onOpenSelfCheck,
+            ) { RowChevron() }
+        }
+    }
 }

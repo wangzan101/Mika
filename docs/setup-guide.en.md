@@ -242,3 +242,9 @@ Good to know:
 | Accessibility still off after pairing | Check that "Turn on accessibility for me" in Settings › Recovery & repair is on, and wait a few seconds; if it's still off, turn it on by hand as in the row above. |
 | "An app is obscuring a permission request" when turning on accessibility | Close other apps' floating windows or bubbles (chat bubbles, floating buttons), then go back to Accessibility settings and turn Mika on. |
 | Stuck and nothing above fits | Tap "Copy diagnostics" at the bottom of the wizard (also inside the failed step, and under About Mika › Send feedback). Look it over, then tap "Copy" or "Share" and send it to the author (WeChat or a GitHub issue). It has the version, phone model, the state of each step and the last error — no API keys, chat content or screen content. |
+
+## Set up but not working well: run the compatibility self-check
+
+Pairing and connecting worked, but tasks can't open apps, taps don't land, or things freeze after a while? Open Settings › Recovery & repair › **Compatibility self-check** and tap "Start". In about 1 minute Mika opens its own test page and system Settings (look only, no taps) on its own virtual display, tries reading the screen, tapping, typing, scrolling and going back, then checks the built-in browser and the sandbox. It doesn't touch your other apps, doesn't change settings and doesn't use the network. Please stay on that page while it runs.
+
+Each check shows pass, partial, failed or skipped, and the ones that didn't pass say why and what to do next. When it finishes, tap "Report on GitHub": the report is copied and the "Device compatibility report" issue page opens; paste the report into "Self-check report" and submit. The report only has the phone model, system version and the result of each check, with no accounts, app lists or your content. You can read it before posting.

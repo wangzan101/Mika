@@ -710,6 +710,22 @@ class AndroidScreen(
     }
 
     /**
+     * 在 Mika 的屏上打开 Mika 的兼容性自检页([intent] 指明组件;只给兼容性自检用)。那一页只对 shell 这一级的调用方开放,
+     * 交给内置助手以 shell 身份直接启动到这块屏(助手只认这一个组件);shell 启动不受后台启动页面的限制,Mika 在不在前台都一样。
+     * 之后和 [openApp] 一样等它到 Mika 屏的最上面;第一次用时建屏。
+     */
+    suspend fun openOwnPage(intent: Intent): ActionResult = withContext(Dispatchers.IO) {
+        val before = if (opened) topWindowPackage().takeIf { it != chooserPackage } else null
+        val id = display.get().displayId
+        when (runCatching { shell.startSystemAction(id, intent, null) }.getOrDefault(ShellService.START_ERROR)) {
+            ShellService.START_OK -> Unit
+            ShellService.START_INVALID_LINK -> return@withContext ActionResult.Failed("own_page_not_allowed")
+            else -> return@withContext ActionResult.Failed("launch_failed")
+        }
+        awaitOpened(a11y.packageName, before, hint = null)
+    }
+
+    /**
      * 启动发出之后:等 [packageName] 到 Mika 屏的最上面,或系统先问打开哪一个([before] 是启动前最上面的窗口所在的包)。
      * [sharing]:这次是分享(App 有几个收分享的页面时系统问用哪一个,选项里不一定有 App 名):最上面换成了系统包的窗口也算在问。
      */

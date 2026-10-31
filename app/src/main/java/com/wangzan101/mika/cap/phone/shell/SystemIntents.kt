@@ -15,6 +15,9 @@ object SystemIntents {
     const val EVENTS_TYPE = "vnd.android.cursor.dir/event"
     const val EVENTS_URI = "content://${CalendarContract.AUTHORITY}/events"
 
+    /** Mika 的兼容性自检页:内置助手认出这个组件后以 shell 身份直接开到 Mika 的屏上,不按 [allowed] 走。 */
+    const val OWN_PAGE_CLASS = "com.wangzan101.mika.selfcheck.SelfCheckTargetActivity"
+
     /** 能接这个 intent 的一个页面;[system] 是系统自带的 App。 */
     data class Handler(val packageName: String, val className: String, val system: Boolean)
 

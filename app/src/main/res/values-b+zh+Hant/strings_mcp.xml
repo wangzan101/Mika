@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mcp_title">電腦連線（MCP）</string>
+    <string name="mcp_sub">讓電腦上的 AI 工具把任務交給 Mika</string>
+    <string name="mcp_foot">預設關閉。開啟後,Mika 在 Wi-Fi 和私有網路上監聽(行動數據上不監聽),同一網路裡電腦上的 MCP 用戶端就能把任務交給 Mika;Mika 在這臺手機上去做,你在對話列表裡看得到。每個請求都要帶下面的存取權杖。付款、確認和交給你處理的那一步,只能在這臺手機上做。</string>
+    <string name="mcp_status">狀態</string>
+    <string name="mcp_starting">正在開啟…</string>
+    <string name="mcp_listening">正在監聽連接埠 %1$d</string>
+    <string name="mcp_failed">沒能開啟:%1$s</string>
+    <string name="mcp_activity">最近連過 %1$d 個用戶端 · 最後一次請求 %2$s</string>
+    <string name="mcp_no_requests">還沒有電腦連過來</string>
+    <string name="mcp_address">連線位址</string>
+    <string name="mcp_no_address">現在沒連著 Wi-Fi 或私有網路</string>
+    <string name="mcp_address_foot">用電腦連得到的那個位址:同一個 Wi-Fi,或同一個私有 VPN 網路。點位址就能複製。</string>
+    <string name="mcp_token">存取權杖</string>
+    <string name="mcp_copy">複製</string>
+    <string name="mcp_regenerate">換一個</string>
+    <string name="mcp_regenerate_title">換一個存取權杖?</string>
+    <string name="mcp_regenerate_body">用舊權杖的電腦會連不上,換上新權杖才能接著用。</string>
+    <string name="mcp_regenerate_confirm">換</string>
+    <string name="mcp_config">用戶端設定</string>
+    <string name="mcp_copy_config">複製設定</string>
+    <string name="mcp_config_foot">把它加進電腦上 MCP 用戶端的伺服器設定裡。權杖別給別人:同一網路裡拿到它的人都能把任務交給 Mika。</string>
+    <string name="mcp_copied">已複製</string>
+    <string name="mcp_notif_title">電腦連線已開啟</string>
+    <string name="mcp_notif_body">正在 Wi-Fi 和私有網路上監聽連接埠 %1$d</string>
+    <string name="mcp_turn_off">關閉</string>
+    <string name="mcp_usb_group">經 USB(推薦)</string>
+    <string name="mcp_usb_title">經 USB 連線</string>
+    <string name="mcp_usb_off_sub">關著。用 USB 偵錯連著的電腦可以開啟它</string>
+    <string name="mcp_usb_on">正經 USB 連線(由電腦開啟)</string>
+    <string name="mcp_usb_on_sub">只在這臺手機上監聽,電腦經傳輸線連進來</string>
+    <string name="mcp_usb_foot">在用 USB 偵錯連著的電腦上執行 %1$s(點一下複製)。它會開啟這個開關,並把連線位址和存取權杖告訴電腦上的 AI 工具;權杖只有電腦讀得到。命令末尾加上 off 就關掉。在這裡、在通知上也能關;手機重啟後自動關掉。</string>
+    <string name="mcp_network_group">經 Wi-Fi 和私有網路</string>
+    <string name="mcp_network_title">Wi-Fi 和私有網路</string>
+    <string name="mcp_notif_body_usb">經 USB 連線,連接埠 %1$d(只在本機監聽)</string>
+    <string name="mcp_notif_body_both">連接埠 %1$d:經 USB,也在 Wi-Fi 和私有網路上</string>
+</resources>

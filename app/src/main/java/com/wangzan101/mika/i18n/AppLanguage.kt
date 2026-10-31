@@ -11,8 +11,8 @@ import android.os.LocaleList
 import java.util.Locale
 
 /**
- * App 界面的语言:跟随系统、中文、English。资源里英文是默认(`values/`),中文在 `values-zh/`,
- * 所以「跟随系统」时中文系统显示中文,其他语言的系统显示英文。
+ * App 界面的语言:跟随系统、中文、English。资源里英文是默认(`values/`),简体中文在 `values-zh/`、繁体中文(台湾用语)在 `values-b+zh+Hant/`,
+ * 所以「跟随系统」时中文系统显示对应的中文,其他语言的系统显示英文。
  *
  * 安卓 13 起由系统的「应用语言」管(LocaleManager):系统记住选择、套到整个进程、重建界面,
  * 系统设置里的「应用语言」和这里的开关是同一个值。安卓 11、12 没有这项,由这里记在本地,

@@ -9,7 +9,7 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * JVM 单测里的界面文字:直接读 `src/main/res/<folder>/` 下的资源文件,按安卓的规则去掉转义,
- * 免得为了取文字起一个安卓环境。[folder] 是 `values`(英文)或 `values-zh`(中文)。
+ * 免得为了取文字起一个安卓环境。[folder] 是 `values`(英文)或 `values-zh`(简体中文)或 `values-b+zh+Hant`(繁体中文)。
  */
 class ResFileTexts(folder: String, private val locale: Locale) : UiTexts {
     val strings: Map<String, String>
@@ -59,6 +59,7 @@ class ResFileTexts(folder: String, private val locale: Locale) : UiTexts {
 
     companion object {
         val chinese by lazy { ResFileTexts("values-zh", Locale.SIMPLIFIED_CHINESE) }
+        val traditional by lazy { ResFileTexts("values-b+zh+Hant", Locale.TRADITIONAL_CHINESE) }
         val english: ResFileTexts by lazy { ResFileTexts("values", Locale.ENGLISH) }
 
         fun resFiles(folder: String): List<File> =

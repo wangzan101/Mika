@@ -94,36 +94,6 @@ dependencies {
     androidTestImplementation(libs.junit)
 }
 
-/**
- * 界面文字:英文是默认(values/),中文在 values-zh/。安卓按文字体系匹配资源,values-zh 只对简体中文系统生效,
- * 繁体中文系统会落到英文;构建时把同一份中文原样复制一份给繁体(values-b+zh+Hant),所有中文系统都显示中文。
- */
-abstract class HantStringsTask : DefaultTask() {
-    @get:InputDirectory
-    abstract val source: DirectoryProperty
-
-    @get:OutputDirectory
-    abstract val output: DirectoryProperty
-
-    @TaskAction
-    fun copy() {
-        val out = output.get().asFile.resolve("values-b+zh+Hant")
-        out.deleteRecursively()
-        out.mkdirs()
-        source.get().asFile.listFiles { f -> f.name.endsWith(".xml") }!!.forEach { it.copyTo(out.resolve(it.name)) }
-    }
-}
-
-val hantStrings = tasks.register<HantStringsTask>("hantStrings") {
-    source.set(layout.projectDirectory.dir("src/main/res/values-zh"))
-}
-
-androidComponents {
-    onVariants { variant ->
-        variant.sources.res?.addGeneratedSourceDirectory(hantStrings, HantStringsTask::output)
-    }
-}
-
 // LicensesTest 读仓库根目录的 THIRD_PARTY_NOTICES.md:让它参与测试的增量判断
 tasks.withType<Test>().configureEach {
     inputs.file(rootProject.file("THIRD_PARTY_NOTICES.md")).withPropertyName("thirdPartyNotices")

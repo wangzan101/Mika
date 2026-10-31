@@ -290,7 +290,7 @@ fun SettingsContent(
                 PhoneOpsPill(status)
                 RowChevron()
             }
-            ListRow(MikaIcons.Phone, "应用访问", "按应用设置黑名单和屏幕分享许可", onClick = onOpenAppAccess) { RowChevron() }
+            ListRow(MikaIcons.Phone, stringResource(R.string.appaccess_title), stringResource(R.string.appaccess_row_sub), onClick = onOpenAppAccess) { RowChevron() }
             ListRow(MikaIcons.Moon, stringResource(R.string.settings_during_work), stringResource(R.string.settings_during_work_sub), onClick = onOpenDuringWork) { RowChevron() }
             ListRow(MikaIcons.Message, CapsuleSettingsCopy.TITLE, CapsuleSettingsCopy.SUBTITLE, onClick = onOpenCapsule) {
                 RowValue(CapsuleSettingsCopy.label(capsuleMode))

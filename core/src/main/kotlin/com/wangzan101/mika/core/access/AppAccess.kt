@@ -1,9 +1,8 @@
 package com.wangzan101.mika.core.access
 
-/** 应用分类仅用于整理列表,不决定执行权限。 */
-enum class AppCategory(val label: String) {
-    Finance("金融交易"), Social("社交通讯"), Game("游戏"), Shopping("购物生活"),
-    Productivity("办公工具"), Media("影音内容"), Other("其他"), Unknown("未分类");
+/** 应用分类仅用于整理列表,不决定执行权限。名字按界面语言放在 app 侧资源里(values/strings_appaccess.xml)。 */
+enum class AppCategory {
+    Finance, Social, Game, Shopping, Productivity, Media, Other, Unknown;
 }
 
 data class AppClassification(val category: AppCategory, val reason: String = "", val manual: Boolean = false)

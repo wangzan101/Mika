@@ -13,6 +13,11 @@ android {
     namespace = "com.wangzan101.mika"
     compileSdk = 36
 
+    // 真机测试跑在哪个构建类型上:默认 debug。开发包(单独包名、单独数据)要跑仪器测试时用
+    // ./gradlew :app:connectedDevelopmentAndroidTest -PtestBuildType=development;
+    // 安卓插件一次只给一个构建类型建测试组件,所以只能这样切,不能两个同时在。
+    testBuildType = (project.findProperty("testBuildType") as String?) ?: "debug"
+
     defaultConfig {
         applicationId = "com.wangzan101.mika"
         minSdk = 30
@@ -97,6 +102,8 @@ dependencies {
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+    // development 变体不继承 debugImplementation;真机上跑界面测试要用它提供的宿主 Activity
+    "developmentImplementation"(libs.compose.ui.test.manifest)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.junit)

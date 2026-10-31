@@ -11,9 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.wangzan101.mika.MikaApp
+import com.wangzan101.mika.R
 import com.wangzan101.mika.cap.phone.a11y.launchableApps
 import com.wangzan101.mika.core.access.*
 import com.wangzan101.mika.core.model.ModelRole
@@ -23,16 +26,45 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 分类名只在界面上出现,core 里不存中文;分类本身是 AI 判断的用途,不改变权限。 */
+@Composable
+private fun AppCategory.title(): String = stringResource(
+    when (this) {
+        AppCategory.Finance -> R.string.appaccess_category_finance
+        AppCategory.Social -> R.string.appaccess_category_social
+        AppCategory.Game -> R.string.appaccess_category_game
+        AppCategory.Shopping -> R.string.appaccess_category_shopping
+        AppCategory.Productivity -> R.string.appaccess_category_productivity
+        AppCategory.Media -> R.string.appaccess_category_media
+        AppCategory.Other -> R.string.appaccess_category_other
+        AppCategory.Unknown -> R.string.appaccess_category_unknown
+    },
+)
+
+/** 要显示给用户的失败:界面语言的一句话,后面可以带上原始说明方便排查。 */
+private class Failure(val message: Int, val detail: String? = null)
+
+/**
+ * 分类时让模型用界面的语言写理由:同一个应用换语言后旧理由仍是旧语言,这没关系,下次分类会覆盖。
+ * 中文按文字体系分,和资源目录(values-zh / values-b+zh+Hant)一致。
+ */
+private fun classifierLanguage(locale: java.util.Locale): String = when {
+    locale.language != "zh" -> "English"
+    locale.script == "Hant" || locale.country in setOf("TW", "HK", "MO") -> "Traditional Chinese"
+    else -> "Simplified Chinese"
+}
+
 @Composable
 fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
     val app = LocalContext.current.applicationContext as MikaApp
     val store = app.appAccess
     val state by store.state.collectAsState()
     val scope = rememberCoroutineScope()
+    val language = classifierLanguage(LocalConfiguration.current.locales[0])
     var apps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var search by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var failure by remember { mutableStateOf<Failure?>(null) }
     var confirmingClassify by remember { mutableStateOf(false) }
     var recommending by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<String?>(null) }
@@ -43,13 +75,15 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
         state.classifications[pkg]?.category == AppCategory.Finance && pkg !in state.blocked
     }
 
-    fun save(action: () -> Unit) { runCatching(action).onFailure { error = it.message ?: "保存失败" } }
+    fun save(action: () -> Unit) {
+        runCatching(action).onFailure { failure = Failure(R.string.appaccess_error_save, it.message) }
+    }
     suspend fun loadApps() {
         apps = withContext(Dispatchers.IO) { launchableApps(app.packageManager, app.packageName) }
     }
     suspend fun refresh(classifyNow: Boolean) {
         busy = true
-        error = null
+        failure = null
         try {
             loadApps()
             if (!classifyNow || !classifyApps) return
@@ -59,10 +93,10 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
             if (pending.isEmpty()) return
             val model = app.providers.modelFor(ModelRole.Light) ?: app.providers.modelFor(ModelRole.Main)
             if (model == null) {
-                error = "没有可用的模型，应用列表已刷新，但无法分类。"
+                failure = Failure(R.string.appaccess_error_no_model)
                 return
             }
-            val classifier = AppClassifier(model, app.providers.modelFor(ModelRole.Main))
+            val classifier = AppClassifier(model, app.providers.modelFor(ModelRole.Main), language)
             for (batch in pending.chunked(30)) {
                 val classified = withContext(Dispatchers.IO) { classifier.classify(batch) }
                 save {
@@ -72,7 +106,7 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "刷新失败"
+            failure = Failure(R.string.appaccess_error_refresh, e.message)
         } finally {
             busy = false
         }
@@ -84,42 +118,65 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "读取应用列表失败"
+            failure = Failure(R.string.appaccess_error_load, e.message)
         }
     }
 
-    PageScaffold("应用访问", onBack) {
-        Text("新应用默认允许。分类只用于整理，禁用状态按单个应用保存。任意 shell 仍可执行，本版限制标准手机工具。")
-        Text("分类需要把应用名称和包名发送给 AI 模型；点「刷新应用列表」时会先征求你的同意。")
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    PageScaffold(stringResource(R.string.appaccess_title), onBack) {
+        Text(stringResource(R.string.appaccess_intro))
+        Text(stringResource(R.string.appaccess_privacy))
+        failure?.let { f ->
+            val detail = f.detail?.takeIf { it.isNotBlank() }
+            Text(
+                if (detail == null) stringResource(f.message) else "${stringResource(f.message)} — $detail",
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
         if (!state.available) {
-            Text("权限文件无法读取，标准手机访问已暂停。重置将清除已有权限和分类。")
-            TextButton({ save { store.reset() } }) { Text("重置应用访问设置") }
+            Text(stringResource(R.string.appaccess_unavailable))
+            TextButton({ save { store.reset() } }) { Text(stringResource(R.string.appaccess_reset)) }
         } else {
-            OutlinedTextField(search, { search = it }, label = { Text("搜索名称或包名") }, singleLine = true)
+            OutlinedTextField(
+                search, { search = it },
+                label = { Text(stringResource(R.string.appaccess_search)) }, singleLine = true,
+            )
             TextButton({
                 if (busy) return@TextButton
                 val pending = apps.filter { state.classifications[it.first] == null }
                 if (classifyApps && pending.isNotEmpty()) confirmingClassify = true else scope.launch { refresh(false) }
-            }, enabled = !busy) { Text(if (busy) "正在分类…" else "刷新应用列表") }
-            TextButton({ recommending = true }) { Text(if (recommended.isEmpty()) "推荐禁用" else "推荐禁用 · ${recommended.size}") }
-            TextButton({ save { store.allowAll() } }) { Text("全部允许") }
+            }, enabled = !busy) { Text(stringResource(if (busy) R.string.appaccess_refreshing else R.string.appaccess_refresh)) }
+            TextButton({ recommending = true }) {
+                Text(
+                    if (recommended.isEmpty()) stringResource(R.string.appaccess_recommend)
+                    else stringResource(R.string.appaccess_recommend_count, recommended.size),
+                )
+            }
+            TextButton({ save { store.allowAll() } }) { Text(stringResource(R.string.appaccess_allow_all)) }
             AppCategory.entries.forEach { category ->
                 val rows = apps.filter { (pkg, label) ->
                     (state.classifications[pkg]?.category ?: AppCategory.Unknown) == category &&
                         (pkg.contains(search, true) || label.contains(search, true))
                 }
                 if (rows.isNotEmpty()) {
-                    GroupLabel("${category.label} · ${rows.size}")
-                    if (category == AppCategory.Game || category == AppCategory.Social) Text("自动操作可能带来账号限制风险，可按需禁用。")
+                    GroupLabel("${category.title()} · ${rows.size}")
+                    if (category == AppCategory.Game || category == AppCategory.Social) Text(stringResource(R.string.appaccess_risk_note))
                     GroupCard {
                         rows.forEachIndexed { index, (pkg, label) ->
-                            ListRow(null, label, pkg, first = index == 0,
-                                detail = state.classifications[pkg]?.reason, onClick = { editing = pkg }) {
-                                Text(if (pkg in state.blocked) "已禁用" else "允许")
+                            val classification = state.classifications[pkg]
+                            val detail = when {
+                                classification == null -> null
+                                classification.manual -> stringResource(R.string.appaccess_category_manual)
+                                else -> classification.reason.ifBlank { null }
+                            }
+                            ListRow(null, label, pkg, first = index == 0, detail = detail, onClick = { editing = pkg }) {
+                                Text(stringResource(if (pkg in state.blocked) R.string.appaccess_blocked else R.string.appaccess_allowed))
                                 Switch(pkg !in state.blocked, { allowed -> save { store.setBlocked(pkg, !allowed) } })
                             }
-                            if (pkg in state.shareAllowed) TextButton({ save { store.setShareAllowed(pkg, false) } }) { Text("撤销 $label 的屏幕分享许可") }
+                            if (pkg in state.shareAllowed) {
+                                TextButton({ save { store.setShareAllowed(pkg, false) } }) {
+                                    Text(stringResource(R.string.appaccess_revoke_share, label))
+                                }
+                            }
                         }
                     }
                 }
@@ -129,24 +186,24 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
     if (confirmingClassify) {
         AlertDialog(
             onDismissRequest = { confirmingClassify = false },
-            title = { Text("把应用列表发送给 AI？") },
-            text = { Text("刷新会读取已安装的应用，并把应用名称和包名发送给你配置的 AI 模型，用于判断风险分类。应用里的内容不会被发送。") },
+            title = { Text(stringResource(R.string.appaccess_send_title)) },
+            text = { Text(stringResource(R.string.appaccess_send_body)) },
             confirmButton = { TextButton({
                 confirmingClassify = false
                 scope.launch { refresh(true) }
-            }) { Text("继续并分类") } },
-            dismissButton = { TextButton({ confirmingClassify = false }) { Text("取消") } },
+            }) { Text(stringResource(R.string.appaccess_send_confirm)) } },
+            dismissButton = { TextButton({ confirmingClassify = false }) { Text(stringResource(R.string.appaccess_cancel)) } },
         )
     }
     if (recommending) {
         AlertDialog(
             onDismissRequest = { recommending = false },
-            title = { Text("推荐禁用金融交易应用") },
+            title = { Text(stringResource(R.string.appaccess_recommend_title)) },
             text = {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
-                    Text("以下应用被识别为金融交易，且当前仍允许 Mika 自动操作。可以逐个禁用，或一次全部禁用。")
+                    Text(stringResource(R.string.appaccess_recommend_body))
                     if (recommended.isEmpty()) {
-                        Text("没有需要禁用的应用。", Modifier.padding(top = 12.dp))
+                        Text(stringResource(R.string.appaccess_recommend_empty), Modifier.padding(top = 12.dp))
                     }
                     recommended.forEach { (pkg, label) ->
                         Row(
@@ -154,7 +211,7 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) { Text(label) }
-                            TextButton({ save { store.blockPackages(setOf(pkg)) } }) { Text("禁用") }
+                            TextButton({ save { store.blockPackages(setOf(pkg)) } }) { Text(stringResource(R.string.appaccess_block)) }
                         }
                     }
                 }
@@ -163,16 +220,19 @@ fun AppAccessScreen(onBack: () -> Unit, classifyApps: Boolean = true) {
                 TextButton(
                     { save { store.blockPackages(recommended.map { it.first }.toSet()) }; recommending = false },
                     enabled = recommended.isNotEmpty(),
-                ) { Text("全部禁用") }
+                ) { Text(stringResource(R.string.appaccess_block_all)) }
             },
-            dismissButton = { TextButton({ recommending = false }) { Text("取消") } },
+            dismissButton = { TextButton({ recommending = false }) { Text(stringResource(R.string.appaccess_cancel)) } },
         )
     }
     editing?.let { pkg ->
-        AlertDialog(onDismissRequest = { editing = null }, title = { Text("修改分类") }, text = {
+        AlertDialog(onDismissRequest = { editing = null }, title = { Text(stringResource(R.string.appaccess_edit_category)) }, text = {
             Column { AppCategory.entries.forEach { category ->
-                TextButton({ save { store.classify(mapOf(pkg to AppClassification(category, "用户选择", manual = true))) }; editing = null }) { Text(category.label) }
+                TextButton({
+                    save { store.classify(mapOf(pkg to AppClassification(category, "", manual = true))) }
+                    editing = null
+                }) { Text(category.title()) }
             } }
-        }, confirmButton = { TextButton({ editing = null }) { Text("取消") } })
+        }, confirmButton = { TextButton({ editing = null }) { Text(stringResource(R.string.appaccess_cancel)) } })
     }
 }

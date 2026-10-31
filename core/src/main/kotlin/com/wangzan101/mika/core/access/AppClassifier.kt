@@ -6,10 +6,23 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 
-class AppClassifier(private val model: ChatModel, private val fallback: ChatModel? = null) {
+/**
+ * 按主要用途给应用分类(只用于整理和推荐,不改变权限)。
+ * [language] 是分类理由用的语言(界面语言),由调用方给;分类名本身是固定的英文枚举。
+ */
+class AppClassifier(
+    private val model: ChatModel,
+    private val fallback: ChatModel? = null,
+    private val language: String = "English",
+) {
     suspend fun classify(apps: List<Pair<String, String>>): Map<String, AppClassification> {
         if (apps.isEmpty()) return emptyMap()
-        val input = JsonArray(apps.map { (pkg, label) -> buildJsonObject { put("package", pkg); put("label", label) } })
+        val input = buildJsonObject {
+            put("language", language)
+            putJsonArray("apps") {
+                apps.forEach { (pkg, label) -> add(buildJsonObject { put("package", pkg); put("label", label) }) }
+            }
+        }
         for (candidate in listOfNotNull(model, fallback?.takeUnless { it === model })) {
             val result = try {
                 withTimeoutOrNull(30_000L) {

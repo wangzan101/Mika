@@ -97,6 +97,8 @@ The only cost of skipping: in the next steps you type the 6-digit pairing code y
 
 > Note: "Allow restricted settings" only appears in the ⋮ menu **after you've tried once** to turn on accessibility and the system blocked it.
 
+If the system says "An app is obscuring a permission request" when you turn it on: close other apps' floating windows or bubbles (chat bubbles, floating buttons), then try again.
+
 ## Step 4: Turn on Wireless debugging
 
 **First make sure the phone is on Wi-Fi** (internet access not required).
@@ -237,4 +239,5 @@ Good to know:
 | "Phone helper stopped" | The helper was started from a computer and stopped when the phone restarted. Run `adb shell sh /sdcard/Android/data/com.wangzan101.mika/files/usb-start.sh` on the computer again, or pair wireless debugging once so it comes back by itself after restarts. |
 | Mika's accessibility switch is greyed out / "Restricted setting" | Recommended: skip that step; Mika turns it on after pairing. To do it by hand: try turning it on once so the system blocks it, then go to Settings › Apps › Mika, tap ⋮ at the top right › Allow restricted settings, and go back to Accessibility settings to turn Mika on. |
 | Accessibility still off after pairing | Check that "Turn on accessibility for me" in Settings › Recovery & repair is on, and wait a few seconds; if it's still off, turn it on by hand as in the row above. |
+| "An app is obscuring a permission request" when turning on accessibility | Close other apps' floating windows or bubbles (chat bubbles, floating buttons), then go back to Accessibility settings and turn Mika on. |
 | Stuck and nothing above fits | Tap "Copy diagnostics" at the bottom of the wizard (also inside the failed step, and under About Mika › Send feedback). Look it over, then tap "Copy" or "Share" and send it to the author (WeChat or a GitHub issue). It has the version, phone model, the state of each step and the last error — no API keys, chat content or screen content. |

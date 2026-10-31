@@ -21,6 +21,7 @@ import com.wangzan101.mika.settings.ProbeResult
 import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.settings.RoleChoices
+import com.wangzan101.mika.settings.ChatGptSignIns
 import com.wangzan101.mika.core.chatgpt.ChatGptAuth
 import com.wangzan101.mika.core.chatgpt.SignInException
 import com.wangzan101.mika.core.chatgpt.SignInFailure
@@ -57,8 +58,8 @@ data class ChatGptAccount(val email: String, val signedIn: Boolean)
 interface ChatGptBrowser {
     fun open(url: String)
     fun returnToApp()
-    /** [params] 里有 `error` 表示用户在授权页取消了。 */
-    fun page(params: Map<String, String>): String
+    /** 换完令牌、核对完之后回给浏览器的网页:[failure] 为 null 是登录成功,否则写失败的原因。 */
+    fun page(failure: SignInException?): String
 }
 
 /**
@@ -220,17 +221,30 @@ class ModelSetupViewModel(
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val chatGptBrowser: ChatGptBrowser? = null,
+    /** 登录跑在哪:界面给的是 App 那一份(退到后台、界面重建都不断,期间开前台服务);测试里就用 [scope]。 */
+    private val signIns: ChatGptSignIns = ChatGptSignIns(scope),
 ) {
     private val _state = MutableStateFlow(snapshot(ModelSetupUi(AddForm.of(ProviderPresets.all.first()))))
     val state: StateFlow<ModelSetupUi> = _state.asStateFlow()
 
     private var testJob: Job? = null
-    private var signInJob: Job? = null
     private val refreshJobs = mutableMapOf<String, Job>()
 
     init {
         // 别处(开发者选项等)改了存储时跟着更新
         scope.launch { merge(store.providers, store.configs, store.roles).collect { sync() } }
+        // 登录在别处结束(通知上取消了)或界面重建前就开始了:跟着它的进度
+        scope.launch {
+            signIns.running.collect { running ->
+                _state.update {
+                    when {
+                        running && it.chatGptSignIn == ListState.Idle -> it.copy(chatGptSignIn = ListState.Running)
+                        !running && it.chatGptSignIn == ListState.Running -> snapshot(it.copy(chatGptSignIn = ListState.Idle))
+                        else -> it
+                    }
+                }
+            }
+        }
     }
 
     private fun snapshot(ui: ModelSetupUi): ModelSetupUi {
@@ -474,13 +488,14 @@ class ModelSetupViewModel(
 
     /**
      * 打开浏览器登录 ChatGPT,回调后换令牌、核对,列出模型,存成(或更新)ChatGPT 服务商,回到 Mika。
-     * 还没有主模型时选它的一个模型为主模型。第一次注册成功后说明一次在用套餐额度。失败说原因。
+     * 还没有主模型时选它的一个模型为主模型。第一次注册成功后说明一次在用套餐额度。失败说原因(并记下给诊断信息)。
+     * 跑在 [signIns] 里:用户在浏览器里登录时 Mika 在后台,不能跟着界面走。
      */
     fun signInWithChatGpt() {
         val browser = chatGptBrowser ?: return
         if (_state.value.chatGptSignIn == ListState.Running) return
         _state.update { it.copy(chatGptSignIn = ListState.Running, chatGptRevokeUnconfirmed = false) }
-        signInJob = scope.launch {
+        signIns.start {
             val (listProblem, first) = try {
                 withContext(io) {
                     val (hostId, clientId) = store.chatGptRegistration()
@@ -500,10 +515,11 @@ class ModelSetupViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                val reason = (e as? SignInException)?.reason ?: SignInFailure.Network
+                val failure = e as? SignInException ?: SignInException(SignInFailure.Network, e.message.orEmpty(), e)
+                signIns.recordFailure(failure)
                 browser.returnToApp()
-                _state.update { it.copy(chatGptSignIn = ListState.Failed(ModelsCopy.chatGptFailure(reason))) }
-                return@launch
+                _state.update { it.copy(chatGptSignIn = ListState.Failed(ModelsCopy.chatGptFailure(failure.reason, failure.code))) }
+                return@start
             }
             browser.returnToApp()
             val id = store.chatGptProvider()?.id
@@ -518,7 +534,7 @@ class ModelSetupViewModel(
 
     /** 放弃正在进行的登录(本机回调随之关掉)。 */
     fun cancelChatGptSignIn() {
-        signInJob?.cancel()
+        signIns.cancel()
         _state.update { it.copy(chatGptSignIn = ListState.Idle) }
     }
 

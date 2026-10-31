@@ -10,6 +10,7 @@ import com.wangzan101.mika.core.shell.RecoveryConsent
 import com.wangzan101.mika.core.shell.SetupInputs
 import com.wangzan101.mika.core.shell.SetupStep
 import com.wangzan101.mika.settings.AccessibilityState
+import com.wangzan101.mika.settings.ChatGptSignInFailureRecord
 import java.net.URI
 
 /**
@@ -67,6 +68,8 @@ data class DiagnosticsSnapshot(
         val vision: RoleModel?,
         val light: RoleModel?,
         val chatGptSignedIn: Boolean,
+        /** 这次运行以来最近一次用 ChatGPT 登录失败(说明已脱敏);没有为 null。 */
+        val chatGptLastFailure: ChatGptSignInFailureRecord? = null,
     )
 
     /** 一个服务商:接口类型、地址(只取主机名)、列过几个模型(没列过为 null)。 */
@@ -118,6 +121,10 @@ object Diagnostics {
         line("vision", m.vision?.let(::role) ?: "off")
         line("light", m.light?.let(::role) ?: "off")
         line("ChatGPT sign-in", yes(m.chatGptSignedIn))
+        m.chatGptLastFailure?.let { f ->
+            line("ChatGPT last sign-in failure", "${ago(s.generatedAtMs - f.atMs)}: ${f.kind}" +
+                (f.code?.let { " (code $it)" } ?: "") + f.detail.takeIf { it.isNotBlank() }?.let { " — ${it.take(MAX_ERROR)}" }.orEmpty())
+        }
 
         section("Recent runs")
         if (s.runs.isEmpty()) appendLine("none")

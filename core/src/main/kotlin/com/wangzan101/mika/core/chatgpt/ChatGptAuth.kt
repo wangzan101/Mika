@@ -39,18 +39,26 @@ data class TokenSet(
 /** 换令牌的结果:拿到了、被拒(带服务端的错误代码;[terminal] 为真表示这个刷新令牌不能再用)、或一时失败(网络、5xx)。 */
 sealed interface TokenResult {
     data class Ok(val tokens: TokenSet) : TokenResult
-    /** [detail] 是服务端给的错误说明(error_description 或 error.message),只用于给人看,不含令牌。 */
-    data class Rejected(val code: String, val terminal: Boolean, val detail: String? = null) : TokenResult
+    /**
+     * [detail] 是服务端给的错误说明(error_description 或 error.message),只用于给人看,不含令牌。
+     * [nonJson] 为真表示返回的不是 JSON(多半是防护页面的 HTML),这时 [code] 是 `http_<状态码>`。
+     */
+    data class Rejected(val code: String, val terminal: Boolean, val detail: String? = null, val nonJson: Boolean = false) : TokenResult
     data class Failed(val error: ModelError) : TokenResult
 }
 
 /** ID 令牌里核对过的身份:[sub] 是账号标识,[email] 只用来给人看(可能为空)。 */
 data class IdClaims(val sub: String, val email: String)
 
-/** 登录为什么没成;界面按它说原因。 */
-enum class SignInFailure { Denied, StateMismatch, ClientMismatch, NoClientId, TimedOut, Exchange, IdToken, NoPlanScope, Network }
+/**
+ * 登录为什么没成;界面按它说原因(见 [ChatGptAuth.failureOf])。[CodeExpired] 是授权码过期、用过或对不上;
+ * [Region] 是所在地区不被支持;[Blocked] 是请求被防护拦下(返回的是网页不是 JSON);[NoPlanScope] 只在服务端
+ * 说了套餐、权限,或授予的权限里没有套餐那一项时用;别的被拒都是 [Exchange](带上错误代码)。
+ */
+enum class SignInFailure { Denied, StateMismatch, ClientMismatch, NoClientId, TimedOut, Exchange, CodeExpired, Region, Blocked, IdToken, NoPlanScope, Network }
 
-class SignInException(val reason: SignInFailure, detail: String = "", cause: Throwable? = null) :
+/** [code] 是服务端给的错误代码(不是机密,可以给人看、写进诊断信息);没有为 null。 */
+class SignInException(val reason: SignInFailure, detail: String = "", cause: Throwable? = null, val code: String? = null) :
     Exception(if (detail.isEmpty()) reason.name else "${reason.name}: $detail", cause)
 
 /**
@@ -108,8 +116,12 @@ class ChatGptAuth(
      */
     fun readCallback(params: Map<String, String>, attempt: SignInAttempt, clientId: String?): Pair<String, String> {
         if (params["state"] != attempt.state) throw SignInException(SignInFailure.StateMismatch)
-        params["error"]?.let { throw SignInException(SignInFailure.Denied, it) }
-        val code = params["code"]?.takeIf { it.isNotEmpty() } ?: throw SignInException(SignInFailure.Exchange, "no code")
+        params["error"]?.let { err ->
+            // 授权页带回的错误:地区、套餐说得出来的照说,其余都当用户没同意
+            val f = failureOf(err, params["error_description"])
+            throw SignInException(if (f == SignInFailure.Region || f == SignInFailure.NoPlanScope) f else SignInFailure.Denied, err, code = err)
+        }
+        val code = params["code"]?.takeIf { it.isNotEmpty() } ?: throw SignInException(SignInFailure.Exchange, "no code", code = "no_code")
         val issued = params["client_id"]?.takeIf { it.isNotEmpty() }
         if (clientId != null && issued != null && issued != clientId) throw SignInException(SignInFailure.ClientMismatch)
         val id = issued ?: clientId ?: throw SignInException(SignInFailure.NoClientId)
@@ -150,7 +162,7 @@ class ChatGptAuth(
         if (raw.status != 200) {
             val code = root?.let { (it["error"] as? JsonObject)?.str("code") ?: it.str("error") ?: it.str("code") } ?: "http_${raw.status}"
             val detail = root?.let { it.str("error_description") ?: (it["error"] as? JsonObject)?.str("message") }
-            return TokenResult.Rejected(code, code in TERMINAL_REFRESH_ERRORS, detail)
+            return TokenResult.Rejected(code, code in TERMINAL_REFRESH_ERRORS, detail, nonJson = root == null)
         }
         val access = root?.str("access_token") ?: return TokenResult.Failed(ModelError.BadResponse("换令牌的返回里没有 access_token"))
         return TokenResult.Ok(
@@ -235,6 +247,34 @@ class ChatGptAuth(
         val TERMINAL_REFRESH_ERRORS = setOf(
             "invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired",
             "refresh_token_invalidated", "refresh_token_reused",
+        )
+
+        /** 用户没同意、没登录完一类的错误代码。 */
+        private val DENIED_ERRORS = setOf("access_denied", "consent_required", "login_required", "interaction_required")
+        /** 说的是套餐或权限的错误代码。 */
+        private val PLAN_ERRORS = setOf("invalid_scope", "insufficient_scope", "subscription_sharing_user_not_eligible")
+        private val REGION = Regex("""unsupported_country|region|territor""", RegexOption.IGNORE_CASE)
+        private val PLAN = Regex("""(?<![a-z])(plan|subscription|scope)s?(?![a-z])""", RegexOption.IGNORE_CASE)
+
+        /**
+         * 被拒的原因归到哪一类,界面照它说人话:被防护拦下(403、429 且返回的不是 JSON)、地区不支持、
+         * 授权码过期或用过(`invalid_grant`)、用户没同意、套餐或权限(代码或说明里提到),其余是 [SignInFailure.Exchange]。
+         */
+        fun failureOf(code: String, detail: String?, nonJson: Boolean = false): SignInFailure {
+            val text = "$code ${detail.orEmpty()}"
+            return when {
+                nonJson && (code == "http_403" || code == "http_429") -> SignInFailure.Blocked
+                REGION.containsMatchIn(text) -> SignInFailure.Region
+                code == "invalid_grant" -> SignInFailure.CodeExpired
+                code in DENIED_ERRORS -> SignInFailure.Denied
+                code in PLAN_ERRORS || PLAN.containsMatchIn(text) -> SignInFailure.NoPlanScope
+                else -> SignInFailure.Exchange
+            }
+        }
+
+        /** 换令牌被拒时抛的异常:原因按 [failureOf] 归类,带上错误代码和说明。 */
+        fun rejected(r: TokenResult.Rejected): SignInException = SignInException(
+            failureOf(r.code, r.detail, r.nonJson), listOfNotNull(r.code, r.detail).joinToString(" — "), code = r.code,
         )
 
         fun b64url(b: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(b)

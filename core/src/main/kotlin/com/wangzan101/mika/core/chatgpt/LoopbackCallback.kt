@@ -13,8 +13,8 @@ import java.net.URLDecoder
 
 /**
  * 登录回调用的本机小服务:只绑 127.0.0.1(别的设备连不进来),端口由系统挑一个空闲的。浏览器登录完跳回
- * `http://127.0.0.1:<端口>/auth/callback?…`,这里读出参数、回一页「可以回到 App 了」。别的路径(如浏览器顺手要的图标)回 404。
- * 只收一次回调;用完或放弃都要 [close]。
+ * `http://127.0.0.1:<端口>/auth/callback?…`,这里读出参数,把这次登录做完(换令牌、核对)再回一页结果;做的期间浏览器那边
+ * 一直等着这个连接。别的路径(如浏览器顺手要的图标)回 404。只收一次回调;用完或放弃都要 [close]。
  */
 class LoopbackCallback private constructor(private val server: ServerSocket) : Closeable {
     val port: Int get() = server.localPort
@@ -24,13 +24,14 @@ class LoopbackCallback private constructor(private val server: ServerSocket) : C
     val redirectUri: String get() = "http://$HOST:$port$PATH"
 
     /**
-     * 等回调,最多 [timeoutMs];超时为 null。[page] 按收到的参数给出回给浏览器的网页。协程取消时立即返回(连接关掉)。
+     * 等回调,最多 [timeoutMs];超时为 null。收到回调后先调 [page](可以挂起:在里面把登录做完),
+     * 它给出的网页再回给浏览器,所以网页上能写最终结果。协程取消时立即返回(连接关掉)。
      * [accept] 不认的回调(如 state 对不上:不是这次登录发起的)回 400、接着等。
      */
     suspend fun await(
         timeoutMs: Long,
         accept: (Map<String, String>) -> Boolean = { true },
-        page: (Map<String, String>) -> String,
+        page: suspend (Map<String, String>) -> String,
     ): Map<String, String>? = withContext(Dispatchers.IO) {
         val deadline = System.currentTimeMillis() + timeoutMs
         server.soTimeout = POLL_MS

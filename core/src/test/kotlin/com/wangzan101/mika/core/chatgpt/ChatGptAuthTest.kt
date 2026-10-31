@@ -152,6 +152,46 @@ class ChatGptAuthTest {
         assertTrue((auth.refresh("c", "r") as TokenResult.Failed).error is ModelError.Server)
     }
 
+    @Test fun rejectionsMapToPlainReasons() {
+        fun f(code: String, detail: String? = null, nonJson: Boolean = false) = ChatGptAuth.failureOf(code, detail, nonJson)
+        assertEquals(SignInFailure.CodeExpired, f("invalid_grant", "Invalid authorization code"))
+        assertEquals(SignInFailure.Region, f("unsupported_country_region_territory", "Country, region, or territory not supported"))
+        assertEquals(SignInFailure.Region, f("forbidden", "Your region is not supported"))
+        assertEquals(SignInFailure.Region, f("unsupported_country"))
+        assertEquals(SignInFailure.Blocked, f("http_403", nonJson = true))
+        assertEquals(SignInFailure.Blocked, f("http_429", nonJson = true))
+        assertEquals("JSON 的 403 不算防护拦截", SignInFailure.Exchange, f("http_403"))
+        assertEquals(SignInFailure.Denied, f("access_denied"))
+        assertEquals(SignInFailure.Denied, f("consent_required"))
+        assertEquals(SignInFailure.NoPlanScope, f("invalid_scope"))
+        assertEquals(SignInFailure.NoPlanScope, f("forbidden", "Your plan does not include this"))
+        assertEquals(SignInFailure.NoPlanScope, f("subscription_sharing_user_not_eligible"))
+        assertEquals("说明里的词要整词才算", SignInFailure.Exchange, f("server_error", "no explanation"))
+        assertEquals(SignInFailure.Exchange, f("invalid_client", "Client authentication failed"))
+    }
+
+    @Test fun htmlBlockPageOnTheTokenEndpointIsRecognised() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403).setHeader("Content-Type", "text/html").setBody("<!DOCTYPE html><html><body>Just a moment...</body></html>"))
+        val r = auth.exchange("client-1", "c", auth.newAttempt("http://127.0.0.1:9/auth/callback")) as TokenResult.Rejected
+        assertEquals(TokenResult.Rejected("http_403", false, null, nonJson = true), r)
+        val e = ChatGptAuth.rejected(r)
+        assertEquals(SignInFailure.Blocked, e.reason)
+        assertEquals("http_403", e.code)
+    }
+
+    @Test fun callbackErrorsKeepTheirCode() {
+        val a = auth.newAttempt("r")
+        try {
+            auth.readCallback(mapOf("state" to a.state, "error" to "access_denied"), a, null); fail()
+        } catch (e: SignInException) {
+            assertEquals(SignInFailure.Denied, e.reason)
+            assertEquals("access_denied", e.code)
+        }
+        expect(SignInFailure.Region) {
+            auth.readCallback(mapOf("state" to a.state, "error" to "unsupported_country_region_territory"), a, null)
+        }
+    }
+
     @Test fun revokePostsTheRefreshToken() = runTest {
         server.enqueue(MockResponse().setResponseCode(200))
         assertTrue(auth.revoke("client-1", "rt"))
@@ -269,12 +309,18 @@ class ChatGptAuthTest {
         }
     }
 
-    /** 「浏览器」:读授权地址,带着授权码和 [extra] 跳回回调地址。 */
-    private fun browser(seen: MutableMap<String, String>, extra: (Map<String, String>) -> String): (String) -> Unit = { url ->
+    /** 「浏览器」:读授权地址,带着授权码和 [extra] 跳回回调地址;回调页的内容放进 [shown]。 */
+    private fun browser(
+        seen: MutableMap<String, String>,
+        shown: java.util.concurrent.CompletableFuture<String> = java.util.concurrent.CompletableFuture(),
+        extra: (Map<String, String>) -> String,
+    ): (String) -> Unit = { url ->
         val q = query(url)
         seen.putAll(q)
         Thread {
-            OkHttpClient().newCall(Request.Builder().url("${q["redirect_uri"]}?${extra(q)}").build()).execute().close()
+            runCatching {
+                OkHttpClient().newCall(Request.Builder().url("${q["redirect_uri"]}?${extra(q)}").build()).execute().use { shown.complete(it.body!!.string()) }
+            }.onFailure { shown.completeExceptionally(it) }
         }.start()
     }
 
@@ -282,11 +328,15 @@ class ChatGptAuthTest {
         val seen = mutableMapOf<String, String>()
         authServer({ seen["nonce"]!! }, "openid email ${ChatGptAuth.PLAN_SCOPE}")
         var registered: String? = null
+        val shown = java.util.concurrent.CompletableFuture<String>()
         val session = signInWithChatGpt(
             auth, "urn:uuid:h", clientId = null, previous = null,
-            openBrowser = browser(seen) { q -> "code=c1&state=${q["state"]}&client_id=issued-1" },
-            onRegistered = { registered = it }, page = { "done" }, now = { clock },
+            openBrowser = browser(seen, shown) { q -> "code=c1&state=${q["state"]}&client_id=issued-1" },
+            onRegistered = { registered = it },
+            // 网页在换完令牌、验完 ID 令牌之后才给出:这时 JWKS 和换令牌都已请求过
+            page = { f -> "result=${f?.reason ?: "ok"} requests=${server.requestCount}" }, now = { clock },
         )
+        assertEquals("result=ok requests=2", shown.get(5, java.util.concurrent.TimeUnit.SECONDS))
         assertEquals("dynamic_agent_client", seen["client_id"])
         assertEquals("issued-1", registered)
         assertEquals(
@@ -310,6 +360,45 @@ class ChatGptAuthTest {
             assertEquals(SignInFailure.NoPlanScope, e.reason)
         }
         assertEquals("issued-1", seen["client_id"])
+    }
+
+    @Test fun failedExchangeIsShownOnTheCallbackPageAndThrown() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                MockResponse().setResponseCode(400).setBody("""{"error":"invalid_grant","error_description":"Invalid authorization code"}""")
+        }
+        val shown = java.util.concurrent.CompletableFuture<String>()
+        try {
+            signInWithChatGpt(
+                auth, "urn:uuid:h", clientId = "issued-1", previous = null,
+                openBrowser = browser(mutableMapOf(), shown) { q -> "code=c1&state=${q["state"]}" },
+                onRegistered = {}, page = { f -> "failed=${f?.reason} code=${f?.code}" }, now = { clock },
+            )
+            fail()
+        } catch (e: SignInException) {
+            assertEquals(SignInFailure.CodeExpired, e.reason)
+            assertEquals("invalid_grant", e.code)
+        }
+        assertEquals("failed=CodeExpired code=invalid_grant", shown.get(5, java.util.concurrent.TimeUnit.SECONDS))
+    }
+
+    @Test fun slowExchangeIsBoundedAndTheBrowserStillGetsAnAnswer() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse =
+                MockResponse().setBody("{}").setHeadersDelay(3, java.util.concurrent.TimeUnit.SECONDS)
+        }
+        val shown = java.util.concurrent.CompletableFuture<String>()
+        try {
+            signInWithChatGpt(
+                auth, "urn:uuid:h", clientId = "issued-1", previous = null,
+                openBrowser = browser(mutableMapOf(), shown) { q -> "code=c1&state=${q["state"]}" },
+                onRegistered = {}, page = { f -> "failed=${f?.reason}" }, finishTimeoutMs = 300, now = { clock },
+            )
+            fail()
+        } catch (e: SignInException) {
+            assertEquals(SignInFailure.Network, e.reason)
+        }
+        assertEquals("failed=Network", shown.get(5, java.util.concurrent.TimeUnit.SECONDS))
     }
 
     @Test fun abandonedSignInTimesOut() = runBlocking {

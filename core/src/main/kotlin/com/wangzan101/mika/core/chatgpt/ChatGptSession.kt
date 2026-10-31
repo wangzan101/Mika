@@ -2,8 +2,11 @@ package com.wangzan101.mika.core.chatgpt
 
 import com.wangzan101.mika.core.model.BearerToken
 import com.wangzan101.mika.core.model.ModelError
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -90,9 +93,9 @@ class ChatGptTokens(
 
 /**
  * 走一遍登录:开本机回调 → [openBrowser] 打开授权页 → 等回调 → 核对 → 换令牌 → 验 ID 令牌 → 看有没有授予套餐额度。
+ * 回调到了以后的这几步(至多 [finishTimeoutMs])做完,才把结果网页回给浏览器:[page] 收到 null 是成功,否则是失败的原因。
  * [clientId] 是以前注册过的(第一次为 null,注册成功后经 [onRegistered] 交出,换令牌前就该存下);
  * [previous] 是上次的登录(用来带上 ID 令牌和邮箱,省掉选账号)。失败抛 [SignInException]。
- * [page] 给出回调后浏览器里显示的网页(参数里有 `error` 表示用户取消了)。
  */
 suspend fun signInWithChatGpt(
     auth: ChatGptAuth,
@@ -101,26 +104,56 @@ suspend fun signInWithChatGpt(
     previous: ChatGptSession?,
     openBrowser: (String) -> Unit,
     onRegistered: (String) -> Unit,
-    page: (Map<String, String>) -> String,
+    page: (SignInException?) -> String,
     timeoutMs: Long = 5 * 60_000L,
+    finishTimeoutMs: Long = 20_000L,
     now: () -> Long = System::currentTimeMillis,
 ): ChatGptSession {
-    val (params, attempt) = LoopbackCallback.open().use { cb ->
+    var outcome: Result<ChatGptSession>? = null
+    LoopbackCallback.open().use { cb ->
         val attempt = auth.newAttempt(cb.redirectUri)
         val hint = previous?.takeIf { it.signedIn && it.clientId == clientId }
         openBrowser(auth.authorizeUrl(attempt, clientId, hostId, hint?.idToken, previous?.email?.takeIf { clientId != null }))
-        (cb.await(timeoutMs, { it["state"] == attempt.state }, page) ?: throw SignInException(SignInFailure.TimedOut)) to attempt
+        cb.await(timeoutMs, { it["state"] == attempt.state }) { params ->
+            val r = finishSignIn(finishTimeoutMs) { completeSignIn(auth, params, attempt, clientId, onRegistered, now) }
+            outcome = r
+            page(r.exceptionOrNull() as SignInException?)
+        } ?: throw SignInException(SignInFailure.TimedOut)
     }
+    return outcome!!.getOrThrow()
+}
+
+/** 做完回调之后的几步,至多 [timeoutMs]:超时算连不上;别的异常都归成 [SignInException];取消照常往外抛。 */
+private suspend fun finishSignIn(timeoutMs: Long, block: suspend () -> ChatGptSession): Result<ChatGptSession> = try {
+    Result.success(withTimeout(timeoutMs) { block() })
+} catch (e: TimeoutCancellationException) {
+    Result.failure(SignInException(SignInFailure.Network, "no answer in ${timeoutMs / 1000}s", e))
+} catch (e: CancellationException) {
+    throw e
+} catch (e: SignInException) {
+    Result.failure(e)
+} catch (e: Exception) {
+    Result.failure(SignInException(SignInFailure.Network, e.message.orEmpty(), e))
+}
+
+private suspend fun completeSignIn(
+    auth: ChatGptAuth,
+    params: Map<String, String>,
+    attempt: SignInAttempt,
+    clientId: String?,
+    onRegistered: (String) -> Unit,
+    now: () -> Long,
+): ChatGptSession {
     val (code, issued) = auth.readCallback(params, attempt, clientId)
     if (issued != clientId) onRegistered(issued)
     val tokens = when (val r = auth.exchange(issued, code, attempt)) {
         is TokenResult.Ok -> r.tokens
-        is TokenResult.Rejected -> throw SignInException(SignInFailure.Exchange, listOfNotNull(r.code, r.detail).joinToString(" — "))
+        is TokenResult.Rejected -> throw ChatGptAuth.rejected(r)
         is TokenResult.Failed -> throw SignInException(SignInFailure.Network, r.error.message.orEmpty(), r.error)
     }
     val idToken = tokens.idToken ?: throw SignInException(SignInFailure.IdToken, "no id_token")
     val who = auth.verifyIdToken(idToken, issued, attempt.nonce)
-    if (ChatGptAuth.PLAN_SCOPE !in tokens.scopes) throw SignInException(SignInFailure.NoPlanScope)
+    if (ChatGptAuth.PLAN_SCOPE !in tokens.scopes) throw SignInException(SignInFailure.NoPlanScope, "scope", code = "no_plan_scope")
     return ChatGptSession(
         clientId = issued, sub = who.sub, email = who.email,
         accessToken = tokens.accessToken, refreshToken = tokens.refreshToken.orEmpty(), idToken = idToken,

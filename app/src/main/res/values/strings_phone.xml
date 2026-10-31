@@ -15,7 +15,7 @@
     <string name="phone_open_dev_options">Open Developer options</string>
     <string name="phone_step_usb_brief">Keeps working without Wi-Fi</string>
     <string name="phone_step_a11y">Turn on Mika’s accessibility</string>
-    <string name="phone_step_a11y_body">Find Mika in your system’s “Accessibility” settings and turn it on. Then Mika reads the pairing code by itself when pairing — no typing needed. You can also skip this (recommended): after pairing, Mika turns it on by itself without being blocked by Android’s “restricted setting”, and this time you enter the code from the notification.</string>
+    <string name="phone_step_a11y_body">Find Mika in your system’s “Accessibility” settings and turn it on. Then Mika reads the pairing code by itself when pairing — no typing needed. You can also skip this (recommended): after pairing, Mika turns it on by itself without being blocked by Android’s “restricted setting”, and this time you enter the code from the notification. If the system says “An app is obscuring a permission request”, close other apps’ floating windows or bubbles and try again.</string>
     <string name="phone_step_a11y_action">Open Accessibility settings</string>
     <string name="phone_step_a11y_brief">Mika reads the pairing code itself</string>
     <string name="phone_step_wireless">Turn on Wireless debugging</string>

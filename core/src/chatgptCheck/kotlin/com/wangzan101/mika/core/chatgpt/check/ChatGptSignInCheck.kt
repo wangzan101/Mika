@@ -149,8 +149,8 @@ private class Check(private val timeoutSec: Long, private val modelArg: String?,
         println("等待回调…(最多 $timeoutSec 秒;Ctrl+C 放弃)")
     }
 
-    private fun callbackPage(params: Map<String, String>): String {
-        val text = if (params.containsKey("error")) "已取消登录,可以关掉这个页面。" else "登录完成,可以关掉这个页面,回到终端看结果。"
+    private fun callbackPage(failure: SignInException?): String {
+        val text = if (failure != null) "登录没有成功(${failure.reason}),回到终端看原因。" else "登录完成,可以关掉这个页面,回到终端看结果。"
         return "<!doctype html><html><head><meta charset=\"utf-8\"><title>Mika</title></head>" +
             "<body style=\"font-family:system-ui;margin:3em\"><p>$text</p></body></html>"
     }
@@ -158,7 +158,7 @@ private class Check(private val timeoutSec: Long, private val modelArg: String?,
     private fun signInStep(r: SignInFailure): String = when (r) {
         SignInFailure.Denied, SignInFailure.StateMismatch, SignInFailure.ClientMismatch, SignInFailure.NoClientId -> "核对回调"
         SignInFailure.TimedOut -> "等待回调"
-        SignInFailure.Exchange -> "用授权码换令牌"
+        SignInFailure.Exchange, SignInFailure.CodeExpired, SignInFailure.Region, SignInFailure.Blocked -> "用授权码换令牌"
         SignInFailure.IdToken -> "验 ID 令牌"
         SignInFailure.NoPlanScope -> "授予 ${ChatGptAuth.PLAN_SCOPE}"
         SignInFailure.Network -> "连接 OpenAI 登录服务"
@@ -309,7 +309,10 @@ private fun explain(e: Throwable): String = when (e) {
         SignInFailure.ClientMismatch -> "回调给出的 client_id 和保存的不一致:删掉 ~/.mika-dev/chatgpt-check/host.json 里的 clientId 后重来"
         SignInFailure.NoClientId -> "第一次注册,回调里却没有给出 client_id"
         SignInFailure.TimedOut -> "等回调超时:浏览器里没有完成登录,或回调没回到 127.0.0.1"
-        SignInFailure.Exchange -> "换令牌被拒(${e.message?.substringAfter(": ", "")}):授权码过期或已用过、redirect_uri 或 PKCE 不符"
+        SignInFailure.Exchange -> "换令牌被拒(${e.message?.substringAfter(": ", "")}):redirect_uri 或 PKCE 不符,或别的原因"
+        SignInFailure.CodeExpired -> "换令牌被拒(${e.message?.substringAfter(": ", "")}):授权码过期、已用过或和这次对不上"
+        SignInFailure.Region -> "换令牌被拒(${e.message?.substringAfter(": ", "")}):当前网络所在的地区不被支持"
+        SignInFailure.Blocked -> "换令牌被拒(${e.message?.substringAfter(": ", "")}):返回的是网页不是 JSON,请求被防护拦下了"
         SignInFailure.IdToken -> "ID 令牌没通过校验(${e.message?.substringAfter(": ", "")})"
         SignInFailure.NoPlanScope -> "没授予 ${ChatGptAuth.PLAN_SCOPE}:这个账号的套餐不能在其他 App 里用额度(需要 Plus 或 Pro),或授权时没勾选"
         SignInFailure.Network -> "连不上 OpenAI 登录服务(${e.message?.substringAfter(": ", "")})"

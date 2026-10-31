@@ -585,19 +585,23 @@ object ModelsCopy {
     val CHATGPT_SIGNED_OUT_NOTE: String get() = tr(R.string.chatgpt_signed_out_note)
     val CHATGPT_REVOKE_UNCONFIRMED: String get() = tr(R.string.chatgpt_revoke_unconfirmed)
 
-    /** 用 ChatGPT 登录没成的原因。 */
-    fun chatGptFailure(reason: SignInFailure): String = tr(
-        when (reason) {
-            SignInFailure.Denied -> R.string.chatgpt_fail_denied
-            SignInFailure.StateMismatch, SignInFailure.ClientMismatch -> R.string.chatgpt_fail_mismatch
-            SignInFailure.NoClientId -> R.string.chatgpt_fail_no_client
-            SignInFailure.TimedOut -> R.string.chatgpt_fail_timed_out
-            SignInFailure.Exchange -> R.string.chatgpt_fail_exchange
-            SignInFailure.IdToken -> R.string.chatgpt_fail_id_token
-            SignInFailure.NoPlanScope -> R.string.chatgpt_fail_no_plan
-            SignInFailure.Network -> R.string.chatgpt_fail_network
-        },
-    )
+    /**
+     * 用 ChatGPT 登录没成的原因(界面和回调网页共用)。说得出具体原因的照说;只有服务端说了套餐、权限,
+     * 或授予的权限里没有套餐那一项时才提 Plus、Pro;别的被拒带上错误代码 [code](不是机密)。
+     */
+    fun chatGptFailure(reason: SignInFailure, code: String? = null): String = when (reason) {
+        SignInFailure.Denied -> tr(R.string.chatgpt_fail_denied)
+        SignInFailure.StateMismatch, SignInFailure.ClientMismatch -> tr(R.string.chatgpt_fail_mismatch)
+        SignInFailure.NoClientId -> tr(R.string.chatgpt_fail_no_client)
+        SignInFailure.TimedOut -> tr(R.string.chatgpt_fail_timed_out)
+        SignInFailure.Exchange -> tr(R.string.chatgpt_fail_exchange, code?.takeIf { it.isNotBlank() } ?: "unknown")
+        SignInFailure.CodeExpired -> tr(R.string.chatgpt_fail_code_expired)
+        SignInFailure.Region -> tr(R.string.chatgpt_fail_region)
+        SignInFailure.Blocked -> tr(R.string.chatgpt_fail_blocked)
+        SignInFailure.IdToken -> tr(R.string.chatgpt_fail_id_token)
+        SignInFailure.NoPlanScope -> tr(R.string.chatgpt_fail_no_plan)
+        SignInFailure.Network -> tr(R.string.chatgpt_fail_network)
+    }
 
     /** 用途卡上的一行:[title] 是模型名([isModel])、「用主模型」「不用」或「未设置」([unset]),[subtitle] 是补充说明。 */
     data class RoleLine(val title: String, val subtitle: String, val isModel: Boolean = false, val unset: Boolean = false)

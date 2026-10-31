@@ -15,7 +15,7 @@
     <string name="phone_open_dev_options">打开开发者选项</string>
     <string name="phone_step_usb_brief">断开 Wi-Fi 时也能继续操作</string>
     <string name="phone_step_a11y">打开 Mika 的无障碍</string>
-    <string name="phone_step_a11y_body">在系统的「无障碍」设置里找到 Mika 并打开。打开后,配对时 Mika 会自己读出配对码,不用手动填。也可以先跳过(推荐):配对后 Mika 会自己打开它,不会被系统的「受限制的设置」拦住,配对码这次从通知里填。</string>
+    <string name="phone_step_a11y_body">在系统的「无障碍」设置里找到 Mika 并打开。打开后,配对时 Mika 会自己读出配对码,不用手动填。也可以先跳过(推荐):配对后 Mika 会自己打开它,不会被系统的「受限制的设置」拦住,配对码这次从通知里填。如果系统提示「应用遮挡了权限请求」,先关掉其他 App 的悬浮窗或气泡,再试一次。</string>
     <string name="phone_step_a11y_action">去无障碍设置</string>
     <string name="phone_step_a11y_brief">配对时由 Mika 自己读出配对码</string>
     <string name="phone_step_wireless">打开无线调试</string>

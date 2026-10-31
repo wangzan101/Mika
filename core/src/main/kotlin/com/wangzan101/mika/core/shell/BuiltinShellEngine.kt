@@ -262,7 +262,8 @@ class BuiltinShellEngine(
 
     override fun startDiscovery() {
         synchronized(this) {
-            if (discoveryJob?.isActive == true) return
+            // 还在找也重新开始:用户又回到配对这件事上了,找的时限从现在算
+            discoveryJob?.cancel()
             _discovery.value = PairingDiscovery.Searching
             discoveryJob = scope.launch {
                 val port = withContext(io) { platform.findPairingPort(discoveryTimeoutMs) }

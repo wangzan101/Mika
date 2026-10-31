@@ -4,6 +4,7 @@ import com.wangzan101.mika.core.adb.AdbConnectionException
 import com.wangzan101.mika.core.adb.AdbPairingException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -33,7 +34,8 @@ class BuiltinShellEngineTest {
         override fun setPaired(paired: Boolean) { pairedFlag = paired; calls += "paired=$paired" }
         override fun wirelessDebugging() = wireless
         override fun wifiConnected() = wifi
-        override suspend fun findPairingPort(timeoutMs: Long) = pairingPort
+        /** 配对窗口没开([pairingPort] 为 null)时找满时限才说没找到。 */
+        override suspend fun findPairingPort(timeoutMs: Long) = pairingPort ?: run { delay(timeoutMs); null }
         override fun pair(port: Int, code: String) {
             calls += "pair $port $code"
             pairError?.let { throw AdbPairingException(it, "x") }
@@ -481,6 +483,20 @@ class BuiltinShellEngineTest {
         advanceUntilIdle()
         assertEquals(PairingDiscovery.Found(37000), e.pairingDiscovery.value)
         e.stopDiscovery()
+        assertEquals(PairingDiscovery.Idle, e.pairingDiscovery.value)
+    }
+
+    /** 还在找时再开始一次(用户又回到配对这件事上),找的时限从这时重新算,不按第一次开始的时候收工。 */
+    @Test
+    fun startingDiscoveryAgainRestartsTheSearchTime() = runTest {
+        val e = engine()
+        platform.pairingPort = null
+        e.startDiscovery()
+        advanceTimeBy(9 * 60_000L)
+        e.startDiscovery()
+        advanceTimeBy(9 * 60_000L)
+        assertEquals(PairingDiscovery.Searching, e.pairingDiscovery.value)
+        advanceTimeBy(2 * 60_000L)
         assertEquals(PairingDiscovery.Idle, e.pairingDiscovery.value)
     }
 }

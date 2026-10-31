@@ -4,6 +4,7 @@ import android.app.RemoteInput
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import com.wangzan101.mika.cap.phone.a11y.ScreenAccessibility
 import com.wangzan101.mika.cap.phone.PhoneServices
 import com.wangzan101.mika.core.shell.BuiltinShellControl
@@ -25,7 +26,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 一次配对的全过程:找配对窗口、无障碍开着时自己读配对码([PairingCodeReader])、
@@ -37,6 +37,7 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
     /** 配对、重试、解除配对这类动作也放这里跑:界面关了也要做完。 */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var watch: Job? = null
+    private val deadline = SlidingDeadline(WINDOW_MS) { SystemClock.elapsedRealtime() }
     /** 通知上此刻显示的;再次提醒前对一下,已经换成别的(比如刚填了码)就不再弹旧的。 */
     @Volatile private var shown: PairingNotice? = null
     private val _repairing = MutableStateFlow(false)
@@ -54,13 +55,15 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
         job.join()
     }
 
+    /** 开始看着配对;已经在看就把时限从现在起重新算 [WINDOW_MS],不重来一遍(免得通知又从头弹)。 */
     @Synchronized
     fun begin() {
+        deadline.extend()
         control.startDiscovery()
         if (watch?.isActive == true) return
         watch = scope.launch {
             val reader = launch { PairingCodeReader.run(app, control, this@PairingCoordinator) }
-            withTimeoutOrNull(WINDOW_MS) {
+            val notices = launch {
                 combine(control.status, control.pairingDiscovery, _repairing) { s, d, r ->
                     PairingNotice.of(PhoneSetupFlow.effectiveStatus(s, r), d) to (s == BuiltinShellStatus.Running && !r)
                 }
@@ -68,7 +71,11 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
                     .transformWhile { emit(it.first); !it.second }
                     // 状态一变就丢掉还没到点的弹出和再次提醒
                     .collectLatest { notice -> notice?.let { post(it) } }
-            } ?: cancelNotice()
+            }
+            if (!deadline.await(notices)) {
+                notices.cancel()
+                cancelNotice()
+            }
             reader.cancel()
             control.stopDiscovery()
         }
@@ -120,7 +127,7 @@ class PairingCoordinator(context: Context, private val control: BuiltinShellCont
     }
 
     private companion object {
-        /** 配对窗口开着的时间有限;超过这么久没配上就不再找,下次进引导再开始。 */
+        /** 配对窗口开着的时间有限;从最后一次 [begin] 起超过这么久没配上就不再找,下次 [begin] 再开始。 */
         const val WINDOW_MS = 10 * 60_000L
     }
 }

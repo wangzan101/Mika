@@ -75,7 +75,7 @@ interface BuiltinShellControl {
     /** 配对过无线调试(Mika 能自己经它起助手、跑命令)。助手也可能是电脑经 USB 起的,所以在运行不等于配对过。 */
     val paired: Boolean get() = status.value != BuiltinShellStatus.NotPaired
 
-    /** 开始找配对端口(用户正在去打开配对窗口)。重复调用无害。 */
+    /** 开始找配对端口(用户正在去打开配对窗口)。重复调用无害:还在找就从这时起重新计时。 */
     fun startDiscovery()
     fun stopDiscovery()
 

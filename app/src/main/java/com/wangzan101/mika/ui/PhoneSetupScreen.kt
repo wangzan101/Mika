@@ -55,6 +55,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.wangzan101.mika.core.shell.BuiltinShellFailure
 import com.wangzan101.mika.core.shell.BuiltinShellFix
 import com.wangzan101.mika.core.shell.BuiltinShellStatus
@@ -147,6 +149,11 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
     // 到了配对一步:开始找配对窗口;通知没允许就在这时请求(配对码要填在通知里)。
     // 「配对」通知被关掉要去系统设置里开,不自动跳过去,页面上给按钮
     LaunchedEffect(view.current) {
+        if (view.current == SetupStep.PairingCode) pairing.begin()
+    }
+    // 停在配对一步时离开引导页,多半是自己切去系统设置打开配对窗口(不一定点「去无线调试」):从这时起再看 10 分钟,
+    // 免得引导页放久了,读配对码、弹填码通知都已经停了
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
         if (view.current == SetupStep.PairingCode) pairing.begin()
     }
     val notificationsOff = view.notifyIssue == PairingNotifyIssue.NotificationsOff

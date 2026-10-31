@@ -1,6 +1,7 @@
 package com.wangzan101.mika.core.mcp
 
 import com.wangzan101.mika.core.agent.TaskState
+import com.wangzan101.mika.core.device.DeviceAccess
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -126,7 +127,9 @@ object RemoteStatus {
 class McpTaskTools(
     private val tasks: RemoteTasks,
     private val pollMs: Long = 250,
+    device: DeviceAccess? = null,
 ) {
+    private val deviceTools = device?.let(::McpDeviceTools)
     class ToolError(message: String) : Exception(message)
 
     data class Tool(val name: String, val description: String, val schema: JsonObject, val readOnly: Boolean)
@@ -165,7 +168,7 @@ class McpTaskTools(
             schema(required = emptyList()) {
                 putJsonObject("limit") { put("type", "integer"); put("minimum", 1); put("maximum", MAX_LIST); put("description", "How many (default $DEFAULT_LIST).") }
             }, readOnly = true),
-    )
+    ) + deviceTools?.tools.orEmpty()
 
     /** MCP 的工具定义(tools/list 的一项)。 */
     fun definitions(): JsonArray = buildJsonArray {
@@ -251,7 +254,8 @@ class McpTaskTools(
                 }
             }
         }
-        else -> throw ToolError("Unknown tool: $name")
+        else -> if (deviceTools?.tools?.any { it.name == name } == true) deviceTools.call(name, args)
+            else throw ToolError("Unknown tool: $name")
     }
 
     private fun task(args: JsonObject): RemoteTask {

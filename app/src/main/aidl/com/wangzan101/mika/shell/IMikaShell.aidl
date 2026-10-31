@@ -94,6 +94,11 @@ interface IMikaShell {
     // 该包在 userId 那份用户里的任务所在的 Mika 虚拟屏;不在 Mika 的任何一块屏上返回 -1
     int displayOfPackageInUser(String packageName, int userId) = 40;
 
+    // 主屏设备准备,与虚拟屏按键白名单分开;凭据只经 Binder 传入,不经 shell 命令行。
+    boolean wakeDevice() = 41;
+    boolean dismissDeviceKeyguard() = 42;
+    boolean enterDeviceCredential(int kind, in byte[] credential) = 43;
+
     // 沿用早先定下的销毁事务号;AIDL 要求要么全部方法编号要么都不编号
     void destroy() = 16777114;
 }

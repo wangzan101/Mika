@@ -217,6 +217,10 @@
 - 安全上的几道保证:付款和确认永远不能从电脑放行——`mika_answer` 只把回答交给等着追问的任务;`request_confirmation` 在非手机发起的运行里直接拒绝(`declined_remote`),`ApprovalPolicy` 对非手机发起的付款一律 Deny;MCP 发起的运行不管自主开关都按询问开工(`ApprovalControl.start(remote = true)`),所以自主模式也放不行付款。手机上照常弹出提问、接管的通知。运行记录的开始事件写明来源(`RunEvent.TaskStarted.origin` = `mcp`,手机上发起的不写),概要里也有。
 - 设置页(`ui/McpScreen.kt`):先是 USB 那种(开着显示「正经 USB 连接(由电脑打开)」,能关;下面写出电脑上要跑的命令,点了复制),再是局域网那种的开关;有一种开着就列状态(监听的端口或没开起来的原因、最近客户端数、最后一次请求),局域网那种打开时再列连接地址(开着的网卡上的私有 IPv4,点了复制)、访问令牌(复制、换一个)、客户端配置片段(复制)。地址和动静两秒重读一次。
 
+电脑连接另提供主屏准备工具 `mika_device_state`、`mika_wake_device`、`mika_unlock_device`。它们属于宿主设备管理(同配对与恢复),不注册为模型的 `AgentTool`,不进入模型上下文、动作历史或凭据日志。MCP 原有认证之后由 `McpDeviceTools` 调 `core/device/DeviceAccess.kt`:主屏状态 → 唤醒 → 请求显示凭据页 → 必要时输入本机凭据 → 核实系统状态。核心只依赖 `DeviceAccessPort`、`DeviceAccessStore`;安卓适配在 `app/device/`,主屏输入的 shell 实现在 `cap/phone/shell/DeviceUnlockInput.kt`,AIDL 有单独方法,普通虚拟屏按键白名单保持不变。
+
+`DeviceAccess` 每进程一份、Mutex 串行化;远程许可默认关,凭据只能手机端设置。`DeviceAccessSettings` 用独立 Keystore 密钥加密原子写整个配置,仅缓存非秘密状态。输入前持久化失败占位,只有系统已解锁才清掉;失败/中断后必须本机重新保存凭据。Android 适配只在主屏 SystemUI 的唯一、类型匹配密码框上输入,不处理 SIM PIN 或无法辨认的厂商页。`TaskGate` 不变,系统实际亮屏解锁后自动继续。设置 UI 是电脑连接页的分组卡片,使用已有行/输入/按钮组件及中英文资源,凭据不进可恢复 UI 状态、编辑时禁止截图。此功能不改变任务来源和付款策略。
+
 ## 7. 上下文与压缩
 
 - **缓存分区**(`core/agent/ContextBuilder.kt`、`ContextCompressor.kt`):区 0 是系统提示词和工具定义,一个任务内只在展开一组工具时变(每组至多一次,只改从那一组起的部分),其余时候一字不变;区 1 是开局上下文,写一次不改(以前的对话、记忆与画像、任务原话、可用渠道、App/网站知识、技能索引、个人技能;除用户原话外都包在 `<context kind=… source=… trust=…>` 里);区 2 是历史,只追加;区 3 是本步的结果、画面和运行时状态(在哪个界面、第几步、当地时间,附在最后一条消息末尾)。主循环写给模型的文字(外壳的来源与可信度、运行时状态、提醒、确认与接管的说明、回放经过、工具结果、折叠摘要)一律是英文,和系统提示词、工具说明一致,免得模型跟着中文回答;给用户看的文字照旧按界面语言。

@@ -94,6 +94,7 @@ fun McpScreen(runtime: McpRuntime, onBack: () -> Unit) {
             }
         }
         FooterNote(stringResource(R.string.mcp_foot))
+        DeviceAccessSection(runtime.device.settings)
         if (enabled || usbOn) {
             GroupLabel(stringResource(R.string.mcp_status))
             GroupCard {

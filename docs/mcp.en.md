@@ -140,6 +140,24 @@ Statuses:
 
 Suggested flow: `mika_run_task` → `mika_wait_task` repeatedly → on `waiting_for_answer`, reply with `mika_answer` → until `done` / `failed` / `cancelled`.
 
+## Remote wake and unlock
+
+On the phone, open Settings › Computer connection (MCP) and turn on “Allow remote wake and unlock” (off by default). Swipe/no-credential locks need no saved credential. Configure the current PIN or password twice on that page; the computer cannot set or read it.
+
+| Tool | Arguments | Purpose |
+| --- | --- | --- |
+| `mika_device_state` | None | Read screen, keyguard, helper and local permission state. |
+| `mika_wake_device` | None | Wake the main screen without authenticating. |
+| `mika_unlock_device` | None | Wake and dismiss a swipe lock, or authenticate with the credential saved on the phone. |
+
+Call `mika_unlock_device` before starting a task. Proceed when `status` is `unlocked` and `device.ready` is true. Existing tasks waiting for unlock resume automatically after Android confirms it. An `awake` result only means the screen is on.
+
+PINs must have 4–16 digits. Passwords support 4–64 printable ASCII characters. Pattern locks, SIM PINs and unrecognized vendor credential screens are not entered (`unsupported_keyguard`). Phone control and accessibility must be available; some Xiaomi devices also require permission for debugging input injection.
+
+Credentials are encrypted locally and never sent to models, computers or logs. These tools reject all arguments. A credential attempt is persisted before input: failure, timeout, cancellation or process interruption blocks subsequent attempts (`attempt_blocked`) until the credential is checked and saved again on the phone. Toggling permission or restarting the app does not reset this protection.
+
+Other statuses include `disabled`, `helper_unavailable`, `credential_required`, and `unlock_failed`. Success is based on Android state, not the input command exit code. Unlock the phone manually once after reboot; this feature does not enable remote access before the first unlock, change system lock credentials, or approve task payments/confirmations.
+
 ## Security
 
 - **Off by default**; it listens only while on and stops at once when turned off.

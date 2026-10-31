@@ -23,20 +23,18 @@ class PrerequisitesTest {
     }
 
     @Test
-    fun android11And12CanStartWithoutPhoneControl() {
-        for (sdk in 30..32) {
-            val c = Prerequisites.check(ready.copy(sdkInt = sdk), hasMainModel = true)
-            assertTrue("API $sdk should allow non-phone tasks", c.canStartTask)
-            assertTrue(c.blockers.isEmpty())
-            assertFalse("API $sdk cannot operate phone apps", c.phoneReady)
-            assertEquals(listOf(Problem.SystemTooOld), c.problems)
-        }
+    fun android11CanStartWithoutPhoneControl() {
+        val c = Prerequisites.check(ready.copy(sdkInt = 30), hasMainModel = true)
+        assertTrue(c.canStartTask)
+        assertTrue(c.blockers.isEmpty())
+        assertFalse(c.phoneReady)
+        assertEquals(listOf(Problem.SystemTooOld), c.problems)
     }
 
     @Test
     fun oldAndroidDoesNotAskToSetUpUnsupportedPhoneFeatures() {
         val c = Prerequisites.check(
-            ready.copy(sdkInt = 31, builtinShell = BuiltinShellStatus.NotPaired, accessibility = AccessibilityState.Off),
+            ready.copy(sdkInt = 30, builtinShell = BuiltinShellStatus.NotPaired, accessibility = AccessibilityState.Off),
             hasMainModel = true,
         )
         assertTrue(c.canStartTask)
@@ -46,7 +44,7 @@ class PrerequisitesTest {
 
     @Test
     fun oldAndroidStillNeedsAMainModel() {
-        val c = Prerequisites.check(ready.copy(sdkInt = 31), hasMainModel = false)
+        val c = Prerequisites.check(ready.copy(sdkInt = 30), hasMainModel = false)
         assertFalse(c.canStartTask)
         assertFalse(c.phoneReady)
         assertEquals(listOf(Problem.NoModel), c.blockers)
@@ -78,12 +76,28 @@ class PrerequisitesTest {
     }
 
     @Test
-    fun android13OnlyWarnsAboutFocus() {
-        val c = Prerequisites.check(ready.copy(sdkInt = 33), hasMainModel = true)
-        assertTrue(c.canStartTask)
-        assertEquals(listOf(Problem.FocusMayLeak), c.problems)
+    fun android12And13CanControlAppsWithAFocusWarning() {
+        for (sdk in 31..33) {
+            val c = Prerequisites.check(ready.copy(sdkInt = sdk), hasMainModel = true)
+            assertTrue(c.canStartTask)
+            assertTrue(c.phoneReady)
+            assertEquals(listOf(Problem.FocusMayLeak), c.problems)
+        }
         assertTrue(Prerequisites.check(ready.copy(sdkInt = 34), hasMainModel = true).problems.isEmpty())
-        assertEquals(listOf(Problem.SystemTooOld), Prerequisites.check(ready.copy(sdkInt = 32), hasMainModel = true).problems)
+        assertEquals(listOf(Problem.SystemTooOld), Prerequisites.check(ready.copy(sdkInt = 30), hasMainModel = true).problems)
+    }
+
+    @Test
+    fun android12StillNeedsHelperAndAccessibilityForPhoneControl() {
+        for (sdk in 31..32) {
+            val c = Prerequisites.check(
+                ready.copy(sdkInt = sdk, builtinShell = BuiltinShellStatus.NotPaired, accessibility = AccessibilityState.Off),
+                hasMainModel = true,
+            )
+            assertTrue(c.canStartTask)
+            assertFalse(c.phoneReady)
+            assertEquals(listOf(Problem.PhoneHelper(BuiltinShellStatus.NotPaired), Problem.Accessibility(AccessibilityState.Off), Problem.FocusMayLeak), c.problems)
+        }
     }
 
     @Test
@@ -141,10 +155,10 @@ class PrerequisitesTest {
             assertFalse(c.phoneReady)
             assertEquals(listOf<Problem>(Problem.PhoneHelper(s)), c.problems)
         }
-        // 安卓 13 以下只报系统太旧
+        // 安卓 12 以下只报系统太旧
         assertEquals(
             listOf<Problem>(Problem.SystemTooOld),
-            Prerequisites.check(ready.copy(sdkInt = 32, builtinShell = BuiltinShellStatus.NotPaired), hasMainModel = true).problems,
+            Prerequisites.check(ready.copy(sdkInt = 30, builtinShell = BuiltinShellStatus.NotPaired), hasMainModel = true).problems,
         )
     }
 }

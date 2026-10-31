@@ -26,7 +26,7 @@ import com.wangzan101.mika.shell.IMikaShell
 
 /**
  * 真机测试:内置助手经无线调试起来、交接 Binder、在自己的虚拟屏上注入点击,解绑后助手留着、再绑定直接可用。
- * 前提:安卓 13+,无线调试开着。配对二选一:
+ * 前提:安卓 12+,无线调试开着。配对二选一:
  * - 带 `-e pairingCode <6 位码>`(可加 `-e pairingPort <端口>`),此时系统的「使用配对码配对」窗口要开着;
  * - 已经用 Mika 的钥匙配对过:带 `-e assumePaired true`。
  */

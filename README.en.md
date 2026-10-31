@@ -162,7 +162,7 @@ Apps and websites that already have usage knowledge (names as they appear in the
 | Item | Requirement |
 |---|---|
 | Install, chat, web and sandbox tasks | Android 11 or later (sandbox requires arm64) |
-| Phone app control | Android 13 or later (required by the background screen and the built-in phone helper) |
+| Phone app control | Android 12 or later; background work may affect main-screen focus on Android 12–13 |
 | Recommended | Android 14 or later: the background screen has its own focus, so it does not interfere with your typing on the main screen; running tasks from different conversations at the same time also needs it |
 | Linux sandbox | arm64 devices only; on other devices the app installs normally and the sandbox shows "not supported on this device" |
 | Model | An API key for an LLM that supports tool calling |
@@ -248,8 +248,8 @@ The system sometimes stops accessibility services (e.g. after the process is cle
 **Some app screens cannot be read or captured?**
 Some screens (e.g. payment or password entry) block screenshots, so Mika cannot see them and will not try to read text on them. You need to take over on those screens and hand back to Mika when done.
 
-**Why Android 13?**
-Mika operates apps on a separate background screen, and the built-in phone helper and that screen need Android 13 or later. From Android 14 the background screen has its own focus and does not interfere with your typing on the main screen, so it is recommended. Web, sandbox and chat also work on Android 11 and 12.
+**Why recommend Android 14? What about older systems?**
+Mika operates apps on a separate background screen. Phone control is available from Android 12, but background work can affect main-screen focus on Android 12–13. From Android 14 the background screen has its own focus and does not interfere with your typing on the main screen, so it is recommended. Web, sandbox and chat also work on Android 11. Systems such as HarmonyOS are checked using the Android compatibility version they report; behavior on different vendor systems still needs device testing.
 
 **Can I use a model running on my own computer or LAN?**
 Yes. When adding a provider choose "Custom" (自定义); the base URL may start with `http://`, e.g. `http://192.168.1.10:11434/v1` (with the phone on the same Wi-Fi). Local and LAN addresses show no warning; an unencrypted address outside your LAN shows a short warning, since your API key and chats could be seen by others on the network. Use `https://` when you can.

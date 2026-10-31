@@ -20,9 +20,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
 
-/** Android 11/12: no phone helper or accessibility service is required for a task. */
+/** Android 11: no phone helper or accessibility service is required for a non-phone task. */
 @RunWith(AndroidJUnit4::class)
-@SdkSuppress(minSdkVersion = 30, maxSdkVersion = 32)
+@SdkSuppress(minSdkVersion = 30, maxSdkVersion = 30)
 class OlderAndroidTaskDeviceTest {
     @get:Rule(order = Int.MIN_VALUE) val chinese = ChineseUi()
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()

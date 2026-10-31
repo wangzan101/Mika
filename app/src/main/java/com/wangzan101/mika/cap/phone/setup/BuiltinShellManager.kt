@@ -229,8 +229,8 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
     }
 
     companion object {
-        /** 内置助手只在安卓 13 及以上启用(手机功能本来就要求这个版本)。 */
-        const val MIN_SDK = Build.VERSION_CODES.TIRAMISU
+        /** 内置助手从安卓 12 起启用;旧系统使用不带较新屏幕标志的兼容路径。 */
+        const val MIN_SDK = Build.VERSION_CODES.S
         private const val PREFS = "builtin_shell"
         /** 安卓原版 adbd 把无线调试的连接端口写在这个系统属性里;读不到时靠缓存、mDNS、扫本机端口和用户填的端口。 */
         private const val TLS_PORT_PROPERTY = "service.adb.tls.port"

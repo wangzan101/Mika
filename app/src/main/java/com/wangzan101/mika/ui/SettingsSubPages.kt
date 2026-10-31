@@ -66,7 +66,7 @@ fun PhoneOpsScreen(
                 MikaIcons.Hand, stringResource(R.string.settings_a11y), stringResource(R.string.settings_a11y_sub), first = true,
                 onClick = check.problems.firstOrNull { it is Problem.Accessibility }?.let { { onProblem(it) } },
             ) { RowValue(a11yText, a11yTone) }
-            // 安卓 13 以下手机功能整个不可用,不列这一行(系统版本那一行已说明)
+            // 安卓 12 以下手机功能不可用,不列这一行(系统版本那一行已说明)
             if (status.sdkInt >= Prerequisites.MIN_SDK) {
                 val helper = status.builtinShell
                 val (hText, hTone) = PhoneSetupCopy.statusValue(helper)

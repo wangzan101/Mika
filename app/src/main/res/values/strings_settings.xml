@@ -41,7 +41,7 @@
     <string name="settings_a11y_sub">Reads and controls Mika’s virtual screen</string>
     <string name="settings_notif_progress_sub">Progress and “Needs you” alerts</string>
     <string name="settings_system_version">System version</string>
-    <string name="settings_android_focus">Android %1$s · On Android 13 background work may steal focus from your screen; Android 14+ recommended</string>
+    <string name="settings_android_focus">Android %1$s · On Android 12–13 background work may steal focus from your screen; Android 14+ recommended</string>
     <string name="settings_android">Android %1$s</string>
     <string name="settings_meets">Supported</string>
     <string name="settings_notif_master">All notifications</string>

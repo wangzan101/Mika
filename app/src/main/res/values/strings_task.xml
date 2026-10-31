@@ -46,7 +46,7 @@
     </plurals>
     <string name="task_interrupted">The task was interrupted. You can start it again</string>
     <string name="task_takeover_queued">Finish the other task’s takeover first, then this one</string>
-    <string name="task_too_old">Phone app control needs Android 13 or later. Chat, web and sandbox tasks are still available.</string>
+    <string name="task_too_old">Phone app control needs Android 12 or later. Chat, web and sandbox tasks are still available.</string>
     <string name="task_shell_died">The phone control helper disconnected and the virtual screen closed. Try again once it reconnects.</string>
     <string name="task_running">Running</string>
     <string name="task_step_note">Step %1$d: %2$s</string>

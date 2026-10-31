@@ -2,6 +2,7 @@ package com.wangzan101.mika.cap.phone.display
 
 import android.hardware.display.DisplayManager
 import android.os.ParcelFileDescriptor
+import android.os.Build
 import android.view.Display
 import android.view.KeyEvent
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -67,13 +68,15 @@ class AgentDisplayTest {
     private fun newDisplay() = AgentDisplay(shell, 720, 1600, 320).also { display = it }
 
     @Test
-    fun createsTrustedPublicDisplay() {
+    fun createsVersionAppropriatePublicDisplay() {
         val d = newDisplay()
         val dm = context.getSystemService(DisplayManager::class.java)
         val shown = dm.getDisplay(d.displayId)
         assertNotNull("display ${d.displayId} not visible to the app", shown)
         assertEquals(0, shown.flags and Display.FLAG_PRIVATE)
-        assertTrue("display is not trusted", shown.flags and displayFlagTrusted() != 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            assertTrue("display is not trusted", shown.flags and displayFlagTrusted() != 0)
+        }
     }
 
     @Test

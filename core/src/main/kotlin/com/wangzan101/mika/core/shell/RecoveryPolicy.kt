@@ -83,7 +83,7 @@ object RecoveryPolicy {
 
 /** 开机时「重启后自动恢复」要不要动手:看它是否已经生效(默认打开、补上过的也算),不看用户有没有拨过开关。 */
 object BootRestore {
-    const val MIN_SDK = 33
+    const val MIN_SDK = 31
 
     enum class Gate { Act, Skip, PermissionMissing }
 

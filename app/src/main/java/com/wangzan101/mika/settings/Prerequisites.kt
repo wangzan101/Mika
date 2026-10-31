@@ -41,7 +41,7 @@ fun SystemStatus.notificationOverview() = NotificationOverview.of(
 )
 
 sealed interface Problem {
-    /** 安卓 13 以下没有 Mika 需要的虚拟屏能力。 */
+    /** 安卓 12 以下未启用 Mika 的手机操作能力。 */
     data object SystemTooOld : Problem
     /** 内置助手没在运行(没设置、无线调试关着、正在连、出错)。 */
     data class PhoneHelper(val status: BuiltinShellStatus) : Problem
@@ -51,14 +51,14 @@ sealed interface Problem {
     data object NotificationsOff : Problem
     /** 「需要你处理」(接管、提问、确认)或「任务结果」的通知被调低了,不弹出,可能看不到;[attention]、[result] 说明是哪个。 */
     data class AttentionLowered(val attention: Boolean, val result: Boolean) : Problem
-    /** 不挡任务:安卓 13 的虚拟屏没有独立焦点,后台操作可能让主屏的输入焦点短暂丢失。 */
+    /** 不挡任务:安卓 12、13 的虚拟屏没有独立焦点,后台操作可能让主屏的输入焦点短暂丢失。 */
     data object FocusMayLeak : Problem
 }
 
 /** 开始任务前的检查;界面据此提示,任务入口据此拦住。 */
 object Prerequisites {
     /** 手机 App 操作的最低版本;聊天、网页和沙箱不需要这项能力。 */
-    const val MIN_SDK = 33
+    const val MIN_SDK = 31
     /** 安卓 14 起虚拟屏能有自己的焦点,不再影响主屏。 */
     const val OWN_FOCUS_SDK = 34
     private fun isWarning(p: Problem) = p == Problem.NotificationsOff || p == Problem.FocusMayLeak || p is Problem.AttentionLowered
@@ -76,7 +76,7 @@ object Prerequisites {
     fun check(status: SystemStatus, hasMainModel: Boolean): Check = Check(
         buildList {
             if (status.sdkInt < MIN_SDK) add(Problem.SystemTooOld)
-            // 安卓 13 以下手机功能整个不可用,已由 SystemTooOld 说明
+            // 安卓 12 以下手机功能不可用,已由 SystemTooOld 说明
             if (status.sdkInt >= MIN_SDK && status.builtinShell != BuiltinShellStatus.Running) {
                 add(Problem.PhoneHelper(status.builtinShell))
             }

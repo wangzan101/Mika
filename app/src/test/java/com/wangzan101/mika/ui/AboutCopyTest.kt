@@ -66,7 +66,9 @@ class AboutCopyTest {
         assertEquals(AboutCopy.GroupTaskGap.Model, gap(model = false, shell = BuiltinShellStatus.NotPaired))
         assertEquals(AboutCopy.GroupTaskGap.Phone, gap(shell = BuiltinShellStatus.NotPaired))
         assertEquals(AboutCopy.GroupTaskGap.Phone, gap(a11y = AccessibilityState.Off))
-        assertEquals(AboutCopy.GroupTaskGap.TooOld, gap(sdk = 31))
+        assertEquals(AboutCopy.GroupTaskGap.TooOld, gap(sdk = 30))
+        assertNull(gap(sdk = 31))
+        assertNull(gap(sdk = 32))
         assertEquals(Fix.AddModel, AboutCopy.GroupTaskGap.Model.fix)
         assertEquals(Fix.OpenPhoneSetup, AboutCopy.GroupTaskGap.Phone.fix)
     }

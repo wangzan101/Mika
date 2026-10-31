@@ -119,8 +119,8 @@ class RecoveryPolicyTest {
     fun bootRestoreGate() {
         // 默认打开、连接可用时补上的:没拨过开关,生效了就算同意
         val on = RecoveryConsent(applied = setOf(RecoveryCapability.RestoreAfterReboot))
-        assertEquals(BootRestore.Gate.Act, BootRestore.gate(sdkInt = 33, consent = on, holdsPermission = true))
-        assertEquals(BootRestore.Gate.Skip, BootRestore.gate(sdkInt = 32, consent = on, holdsPermission = true))
+        for (sdk in 31..33) assertEquals(BootRestore.Gate.Act, BootRestore.gate(sdkInt = sdk, consent = on, holdsPermission = true))
+        assertEquals(BootRestore.Gate.Skip, BootRestore.gate(sdkInt = 30, consent = on, holdsPermission = true))
         // 默认要但还没生效(从没配对过),或用户亲手关掉:不动手
         assertEquals(BootRestore.Gate.Skip, BootRestore.gate(sdkInt = 34, consent = RecoveryConsent(), holdsPermission = true))
         val declined = RecoveryConsent(declined = setOf(RecoveryCapability.RestoreAfterReboot))

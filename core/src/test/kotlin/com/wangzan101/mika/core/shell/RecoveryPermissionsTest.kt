@@ -38,6 +38,15 @@ class RecoveryPermissionsTest {
     }
 
     @Test
+    fun accessibilityComponentKeepsTheClassNamespaceWithAnApplicationIdSuffix() {
+        assertEquals("com.wangzan101.mika/.a11y.MikaAccessibilityService", PermissionCommands.accessibilityService("com.wangzan101.mika"))
+        assertEquals(
+            "com.wangzan101.mika.compat/com.wangzan101.mika.a11y.MikaAccessibilityService",
+            PermissionCommands.accessibilityService("com.wangzan101.mika.compat"),
+        )
+    }
+
+    @Test
     fun commandsAreTheExpectedShellCommands() {
         assertEquals("pm grant $pkg android.permission.WRITE_SECURE_SETTINGS", PermissionCommands.grantWriteSecureSettings(pkg))
         assertEquals("pm revoke $pkg android.permission.WRITE_SECURE_SETTINGS", PermissionCommands.revokeWriteSecureSettings(pkg))

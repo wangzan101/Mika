@@ -37,7 +37,7 @@
     <string name="settings_a11y_sub">读取和操作 Mika 的虚拟屏</string>
     <string name="settings_notif_progress_sub">进度和「需要你」提醒</string>
     <string name="settings_system_version">系统版本</string>
-    <string name="settings_android_focus">安卓 %1$s · 安卓 13 上后台操作可能影响主屏焦点,建议安卓 14+</string>
+    <string name="settings_android_focus">安卓 %1$s · 安卓 12、13 上后台操作可能影响主屏焦点,建议安卓 14+</string>
     <string name="settings_android">安卓 %1$s</string>
     <string name="settings_meets">满足</string>
     <string name="settings_notif_master">通知总开关</string>

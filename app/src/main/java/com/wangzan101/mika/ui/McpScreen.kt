@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -25,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wangzan101.mika.R
+import com.wangzan101.mika.core.mcp.McpUsb
 import com.wangzan101.mika.core.remote.RemoteActivity
 import com.wangzan101.mika.mcp.McpRuntime
 import com.wangzan101.mika.mcp.McpServerState
@@ -37,7 +37,9 @@ import com.wangzan101.mika.ui.components.ListRow
 import com.wangzan101.mika.ui.components.MikaButton
 import com.wangzan101.mika.ui.components.MikaSwitch
 import com.wangzan101.mika.ui.components.PageScaffold
+import com.wangzan101.mika.ui.components.RadioRow
 import com.wangzan101.mika.ui.components.RowActions
+import com.wangzan101.mika.ui.components.SegmentedControl
 import com.wangzan101.mika.ui.components.TileTone
 import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.theme.MikaTheme
@@ -48,11 +50,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/**
- * 设置 › 电脑连接(MCP):先是经 USB 的那种(电脑用 adb 打开,这里显示开着没有、能关掉,并写出电脑上要跑的命令),
- * 再是局域网那种的开关;局域网那种打开时列出连接地址、访问令牌(复制、换一个)、客户端配置片段。
- * 有一种开着就显示一点点动静(最近连过几个客户端、最后一次请求的时间)。地址和动静每两秒重读一次。
- */
+/** 展示现有连接状态,不把启用开关或监听端口当作电脑已连接。刷新仍只在本页,沿用两秒间隔。 */
 @Composable
 fun McpScreen(runtime: McpRuntime, onBack: () -> Unit) {
     val context = LocalContext.current
@@ -65,83 +63,22 @@ fun McpScreen(runtime: McpRuntime, onBack: () -> Unit) {
     var token by remember { mutableStateOf<String?>(null) }
     var confirmRegenerate by remember { mutableStateOf(false) }
     LaunchedEffect(enabled, usbOn) {
-        if (!enabled && !usbOn) return@LaunchedEffect
-        if (enabled) token = withContext(Dispatchers.IO) { runCatching { runtime.settings.token() }.getOrNull() }
+        token = if (enabled) withContext(Dispatchers.IO) { runCatching { runtime.settings.token() }.getOrNull() } else null
+        if (!enabled) addresses = emptyList()
+        if (!enabled && !usbOn) { activity = RemoteActivity(); return@LaunchedEffect }
         while (true) {
             if (enabled) addresses = withContext(Dispatchers.IO) { McpRuntime.addresses() }
             activity = runtime.activity
             delay(2_000)
         }
     }
-    val port = (state as? McpServerState.Listening)?.port ?: runtime.settings.port
-
-    PageScaffold(stringResource(R.string.mcp_title), onBack) {
-        GroupLabel(stringResource(R.string.mcp_usb_group))
-        GroupCard {
-            ListRow(MikaIcons.Link, stringResource(if (usbOn) R.string.mcp_usb_on else R.string.mcp_usb_title),
-                stringResource(if (usbOn) R.string.mcp_usb_on_sub else R.string.mcp_usb_off_sub), first = true,
-                tone = if (usbOn) TileTone.Ok else TileTone.Neutral, onClick = { runtime.setUsbEnabled(!usbOn) }) {
-                MikaSwitch(usbOn, { runtime.setUsbEnabled(it) }, Modifier.testTag("mcp-usb"))
-            }
-        }
-        FooterNote(stringResource(R.string.mcp_usb_foot, usbCommand), Modifier.clickable { copy(context, usbCommand) })
-
-        GroupLabel(stringResource(R.string.mcp_network_group))
-        GroupCard {
-            ListRow(MikaIcons.Desktop, stringResource(R.string.mcp_network_title), stringResource(R.string.mcp_sub), first = true,
-                onClick = { runtime.setEnabled(!enabled) }) {
-                MikaSwitch(enabled, { runtime.setEnabled(it) }, Modifier.testTag("mcp-enabled"))
-            }
-        }
-        FooterNote(stringResource(R.string.mcp_foot))
-        DeviceAccessSection(runtime.device.settings)
-        if (enabled || usbOn) {
-            GroupLabel(stringResource(R.string.mcp_status))
-            GroupCard {
-                val (title, tone) = when (val s = state) {
-                    is McpServerState.Listening -> stringResource(R.string.mcp_listening, s.port) to TileTone.Ok
-                    is McpServerState.Failed -> stringResource(R.string.mcp_failed, s.message) to TileTone.Bad
-                    McpServerState.Off -> stringResource(R.string.mcp_starting) to TileTone.Neutral
-                }
-                val detail = activity.lastRequestAtMs?.let { stringResource(R.string.mcp_activity, activity.recentClients, clock(it)) }
-                    ?: stringResource(R.string.mcp_no_requests)
-                ListRow(MikaIcons.Check.takeIf { tone == TileTone.Ok } ?: MikaIcons.Exclaim, title, detail, first = true, tone = tone)
-            }
-        }
-        if (enabled) {
-
-            GroupLabel(stringResource(R.string.mcp_address))
-            GroupCard {
-                if (addresses.isEmpty()) ListRow(MikaIcons.Link, stringResource(R.string.mcp_no_address), first = true)
-                addresses.forEachIndexed { i, a ->
-                    val url = McpRuntime.url(a, port)
-                    ListRow(MikaIcons.Link, url, first = i == 0, onClick = { copy(context, url) })
-                }
-            }
-            FooterNote(stringResource(R.string.mcp_address_foot))
-
-            GroupLabel(stringResource(R.string.mcp_token))
-            GroupCard {
-                ListRow(MikaIcons.Key, token?.let { it.take(6) + "…" + it.takeLast(4) } ?: "…", first = true)
-                RowActions {
-                    MikaButton(stringResource(R.string.mcp_copy), { token?.let { copy(context, it) } }, size = ButtonSize.Small, enabled = token != null)
-                    MikaButton(stringResource(R.string.mcp_regenerate), { confirmRegenerate = true }, kind = ButtonKind.Tonal, size = ButtonSize.Small)
-                }
-            }
-
-            val config = McpRuntime.clientConfig(McpRuntime.url(addresses.firstOrNull() ?: "<phone-address>", port), token ?: "<token>")
-            GroupLabel(stringResource(R.string.mcp_config))
-            GroupCard {
-                Text(config, Modifier.fillMaxWidth().padding(16.dp), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 17.sp,
-                    color = MikaTheme.colors.ink2)
-                RowActions {
-                    MikaButton(stringResource(R.string.mcp_copy_config), { copy(context, config) }, size = ButtonSize.Small, enabled = token != null)
-                }
-            }
-            FooterNote(stringResource(R.string.mcp_config_foot))
-        }
-    }
-
+    ComputerAccessPage(
+        ComputerAccessUi(state, enabled, usbOn, (state as? McpServerState.Listening)?.port ?: runtime.settings.port,
+            activity, addresses, token, usbCommand),
+        onBack, runtime::setUsbEnabled, runtime::setEnabled,
+        onCopy = { copy(context, it) }, onRegenerate = { confirmRegenerate = true },
+        deviceSettings = { DeviceAccessSection(runtime.device.settings) },
+    )
     if (confirmRegenerate) AlertDialog(
         onDismissRequest = { confirmRegenerate = false },
         title = { Text(stringResource(R.string.mcp_regenerate_title)) },
@@ -149,6 +86,187 @@ fun McpScreen(runtime: McpRuntime, onBack: () -> Unit) {
         confirmButton = { TextButton({ confirmRegenerate = false; token = runtime.regenerateToken() }) { Text(stringResource(R.string.mcp_regenerate_confirm)) } },
         dismissButton = { TextButton({ confirmRegenerate = false }) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** 一份只读页面快照。引导选择和折叠状态不写入连接设置。 */
+internal data class ComputerAccessUi(
+    val server: McpServerState,
+    val networkEnabled: Boolean,
+    val usbEnabled: Boolean,
+    val port: Int,
+    val activity: RemoteActivity,
+    val addresses: List<String>,
+    val token: String?,
+    val usbCommand: String,
+)
+
+@Composable
+internal fun ComputerAccessPage(
+    ui: ComputerAccessUi,
+    onBack: () -> Unit,
+    onUsbEnabled: (Boolean) -> Unit,
+    onNetworkEnabled: (Boolean) -> Unit,
+    onCopy: (String) -> Unit,
+    onRegenerate: () -> Unit,
+    deviceSettings: @Composable () -> Unit,
+) {
+    var client by remember { mutableStateOf(0) }
+    var advanced by remember { mutableStateOf(false) }
+    var network by remember { mutableStateOf(false) }
+    PageScaffold(stringResource(R.string.mcp_title), onBack) {
+        ConnectionStatus(ui)
+        GroupLabel(stringResource(R.string.mcp_choose_client))
+        SegmentedControl(listOf("CLI / Skill", "MCP"), client, { client = it },
+            Modifier.padding(bottom = 12.dp), tags = listOf("computer-cli", "computer-mcp"))
+        GroupLabel(stringResource(R.string.mcp_choose_transport))
+        SegmentedControl(listOf(stringResource(R.string.mcp_transport_usb), stringResource(R.string.mcp_transport_network)),
+            if (network) 1 else 0, { network = it == 1 }, Modifier.padding(bottom = 12.dp),
+            tags = listOf("computer-usb", "computer-network"))
+        if (client == 0) CliInstallGuide(onCopy)
+        when {
+            network -> NetworkGuide(ui, mcp = client == 1, onNetworkEnabled, onCopy)
+            client == 0 -> GuideStep(stringResource(R.string.mcp_cli_connect), stringResource(R.string.mcp_cli_connect_sub),
+                stringResource(R.string.mcp_copy_command), { onCopy("mika connect") }, command = "mika connect")
+            else -> McpUsbGuide(ui, onCopy)
+        }
+
+        GroupCard {
+            ListRow(MikaIcons.Gear, stringResource(if (advanced) R.string.mcp_advanced_hide else R.string.mcp_advanced),
+                stringResource(R.string.mcp_advanced_sub), first = true, onClick = { advanced = !advanced })
+        }
+        if (advanced) {
+            GroupCard {
+                ListRow(MikaIcons.Link, stringResource(R.string.mcp_usb_title),
+                    stringResource(if (ui.usbEnabled) R.string.mcp_usb_on else R.string.mcp_usb_off_sub), first = true,
+                    onClick = { onUsbEnabled(!ui.usbEnabled) }) {
+                    MikaSwitch(ui.usbEnabled, onUsbEnabled, Modifier.testTag("mcp-usb"))
+                }
+                ListRow(MikaIcons.Desktop, stringResource(R.string.mcp_network_title), stringResource(R.string.mcp_network_scope),
+                    onClick = { onNetworkEnabled(!ui.networkEnabled) }) {
+                    MikaSwitch(ui.networkEnabled, onNetworkEnabled, Modifier.testTag("mcp-enabled"))
+                }
+            }
+            FooterNote(stringResource(R.string.mcp_port_detail, ui.port))
+            if (ui.networkEnabled) {
+                GroupLabel(stringResource(R.string.mcp_token))
+                GroupCard {
+                    ListRow(MikaIcons.Key, ui.token?.let { it.take(6) + "…" + it.takeLast(4) } ?: "…", first = true)
+                    RowActions {
+                        MikaButton(stringResource(R.string.mcp_copy), { ui.token?.let(onCopy) }, size = ButtonSize.Small, enabled = ui.token != null)
+                        MikaButton(stringResource(R.string.mcp_regenerate), onRegenerate, kind = ButtonKind.Tonal, size = ButtonSize.Small)
+                    }
+                }
+            }
+            deviceSettings()
+        }
+    }
+}
+
+@Composable
+private fun ConnectionStatus(ui: ComputerAccessUi) {
+    val enabled = ui.networkEnabled || ui.usbEnabled
+    val received = enabled && ui.server is McpServerState.Listening && ui.activity.lastRequestAtMs != null
+    val title = when {
+        !enabled -> stringResource(R.string.mcp_access_off)
+        ui.server is McpServerState.Failed -> stringResource(R.string.mcp_failed, ui.server.message)
+        ui.server is McpServerState.Off -> stringResource(R.string.mcp_starting)
+        received -> stringResource(R.string.mcp_request_received)
+        else -> stringResource(R.string.mcp_waiting)
+    }
+    val detail = if (received) stringResource(R.string.mcp_last_request, clock(ui.activity.lastRequestAtMs!!))
+        else stringResource(R.string.mcp_follow_steps)
+    val tone = when { ui.server is McpServerState.Failed && enabled -> TileTone.Bad; received -> TileTone.Ok; else -> TileTone.Neutral }
+    GroupCard(Modifier.testTag("computer-status")) {
+        ListRow(if (received) MikaIcons.Check else MikaIcons.Desktop, title, detail, first = true, tone = tone)
+    }
+}
+
+@Composable
+private fun CliInstallGuide(onCopy: (String) -> Unit) {
+    val install = stringResource(R.string.mcp_cli_install_prompt)
+    GuideStep(stringResource(R.string.mcp_cli_install), stringResource(R.string.mcp_cli_install_sub),
+        stringResource(R.string.mcp_copy_install), { onCopy(install) })
+}
+
+@Composable
+private fun McpUsbGuide(ui: ComputerAccessUi, onCopy: (String) -> Unit) {
+    GuideStep(stringResource(R.string.mcp_usb_start), stringResource(R.string.mcp_usb_start_sub),
+        stringResource(R.string.mcp_copy_command), { onCopy(ui.usbCommand) }, command = ui.usbCommand)
+    val forward = McpUsb.forward(ui.port)
+    GuideStep(stringResource(R.string.mcp_usb_forward), stringResource(R.string.mcp_usb_forward_sub),
+        stringResource(R.string.mcp_copy_command), { onCopy(forward) }, command = forward)
+    val instructions = stringResource(R.string.mcp_usb_client_instructions, ui.port)
+    GuideStep(stringResource(R.string.mcp_usb_client), stringResource(R.string.mcp_usb_client_sub),
+        stringResource(R.string.mcp_copy_instructions), { onCopy(instructions) })
+}
+
+@Composable
+private fun NetworkGuide(ui: ComputerAccessUi, mcp: Boolean, onNetworkEnabled: (Boolean) -> Unit, onCopy: (String) -> Unit) {
+    var selectedAddress by remember { mutableStateOf<String?>(null) }
+    var preview by remember { mutableStateOf(false) }
+    if (!ui.networkEnabled) {
+        GuideStep(stringResource(R.string.mcp_network_enable), stringResource(R.string.mcp_network_scope),
+            stringResource(R.string.mcp_network_enable_action), { onNetworkEnabled(true) })
+        return
+    }
+    val address = selectedAddress?.takeIf { it in ui.addresses } ?: ui.addresses.firstOrNull()
+    GroupLabel(stringResource(if (mcp) R.string.mcp_network_address_step else R.string.mcp_address))
+    GroupCard {
+        if (ui.addresses.isEmpty()) ListRow(MikaIcons.Link, stringResource(R.string.mcp_no_address), first = true)
+        ui.addresses.forEachIndexed { i, a ->
+            RadioRow(if (mcp) McpRuntime.url(a, ui.port) else "http://$a:${ui.port}",
+                a == address, { selectedAddress = a }, first = i == 0)
+        }
+    }
+    FooterNote(stringResource(R.string.mcp_address_foot))
+    if (!mcp) {
+        val command = address?.let { "mika connect --url http://$it:${ui.port} --token-file /path/to/token" }
+        GroupCard {
+            ListRow(MikaIcons.Code, stringResource(R.string.mcp_cli_connect), stringResource(R.string.mcp_cli_network_sub), first = true)
+            command?.let { CommandText(it) }
+            RowActions {
+                MikaButton(stringResource(R.string.mcp_copy_command), { command?.let(onCopy) }, size = ButtonSize.Small,
+                    enabled = command != null && ui.token != null && ui.server is McpServerState.Listening,
+                    modifier = Modifier.testTag("computer-copy-cli-network"))
+                MikaButton(stringResource(R.string.mcp_copy_token), { ui.token?.let(onCopy) }, kind = ButtonKind.Tonal,
+                    size = ButtonSize.Small, enabled = ui.token != null)
+            }
+        }
+        FooterNote(stringResource(R.string.mcp_cli_connection_check))
+        return
+    }
+    GroupCard {
+        ListRow(MikaIcons.Code, stringResource(R.string.mcp_network_config_step), stringResource(R.string.mcp_network_config_sub), first = true)
+        val canCopy = address != null && ui.token != null && ui.server is McpServerState.Listening
+        RowActions {
+            MikaButton(stringResource(R.string.mcp_copy_config), {
+                if (canCopy) onCopy(McpRuntime.clientConfig(McpRuntime.url(address!!, ui.port), ui.token!!))
+            }, size = ButtonSize.Small, enabled = canCopy, modifier = Modifier.testTag("computer-copy-config"))
+            MikaButton(stringResource(if (preview) R.string.mcp_hide_preview else R.string.mcp_show_preview), { preview = !preview },
+                kind = ButtonKind.Text, size = ButtonSize.Small)
+        }
+        if (preview) {
+            // 预览只用占位符;真实令牌只在用户点击复制时进入剪贴板。
+            val config = McpRuntime.clientConfig(address?.let { McpRuntime.url(it, ui.port) } ?: "<address>", "<token>")
+            CommandText(config, Modifier.testTag("computer-config-preview"))
+        }
+    }
+    FooterNote(stringResource(R.string.mcp_network_verify))
+}
+
+@Composable
+private fun GuideStep(title: String, body: String, button: String, onClick: () -> Unit, command: String? = null) {
+    GroupCard {
+        ListRow(null, title, body, first = true)
+        if (command != null) CommandText(command)
+        RowActions { MikaButton(button, onClick, size = ButtonSize.Small) }
+    }
+}
+
+@Composable
+private fun CommandText(text: String, modifier: Modifier = Modifier) {
+    Text(text, modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        fontFamily = FontFamily.Monospace, fontSize = 14.sp, lineHeight = 20.sp, color = MikaTheme.colors.ink)
 }
 
 private fun clock(ms: Long): String =

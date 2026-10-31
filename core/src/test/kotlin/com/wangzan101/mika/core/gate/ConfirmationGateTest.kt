@@ -109,6 +109,13 @@ class ConfirmationGateTest {
         assertTrue(approved(order(null)).permits(hit(IrrevAction.order), page, 2) is Permit.Mismatch)
     }
 
+    @Test fun dollarAndTraditionalTotalsBindTheAmount() {
+        fun order(amount: String) = ConfirmationRequest(IrrevAction.order, "耳機", "買一副耳機", amount, "com.a")
+        val page = ScreenSnapshot("s", "com.a", listOf(el("耳機", top = 300), el("運費 NT$60", top = 350), el("總計 NT$1,290", top = 400), el("結帳", top = 900)), 1080, 2400)
+        assertEquals(Permit.Allowed, approved(order("NT$1290")).permits(hit(IrrevAction.order), page, 2))
+        assertTrue(approved(order("NT$60")).permits(hit(IrrevAction.order), page, 2) is Permit.Mismatch)
+    }
+
     // C3:只给紧接着的那一步
     @Test fun approvalExpiresOnOtherWritesAndAfterThreeSteps() {
         for (t in listOf("phone_tap", "phone_swipe", "phone_scroll", "phone_back", "phone_launch_app", "phone_press_key")) {

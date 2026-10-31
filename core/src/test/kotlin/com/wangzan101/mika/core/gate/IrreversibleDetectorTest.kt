@@ -191,6 +191,24 @@ class IrreversibleDetectorTest {
         assertNull(d.classify("phone_tap", args("""{"ref":"@e1","snapshotId":"s1"}"""), snap(el("@e1", "", listOf(0, 0, 99, 99), res = "com.x:id/post_list"))))
     }
 
+    // 繁体界面和 $ 金额:按同一套词表判
+    @Test fun traditionalChineseAndDollarAmounts() {
+        for ((w, a) in listOf("刪除" to IrrevAction.delete, "確認付款" to IrrevAction.pay, "結帳" to IrrevAction.order, "轉帳" to IrrevAction.pay,
+            "立即購買" to IrrevAction.order, "傳送" to IrrevAction.send, "送出" to IrrevAction.submit, "儲值" to IrrevAction.pay)) {
+            assertEquals(w, a, d.matchName(w))
+        }
+        assertNull(d.matchName("已付款"))
+        assertNull(d.matchName("購買記錄"))
+        for (amount in listOf("合計 NT$ 390", "總計 $12.99", "US$12.99")) {
+            val sheet = snap(el("@e1", amount, listOf(0, 300, 999, 400), clickable = false), el("@e2", "確定", listOf(500, 500, 999, 600)))
+            assertEquals(amount, IrrevAction.order, d.classify("phone_tap", args("""{"ref":"@e2","snapshotId":"s1"}"""), sheet)?.action)
+        }
+        val pay = snap(el("@e1", "付款方式", listOf(0, 300, 999, 360), clickable = false),
+            el("@e2", "NT$390", listOf(0, 400, 999, 460), clickable = false), el("@e3", "確認", listOf(500, 600, 999, 700)))
+        assertEquals(IrrevAction.pay, d.classify("phone_tap", args("""{"ref":"@e3","snapshotId":"s1"}"""), pay)?.action)
+        assertNotNull(d.paymentPage(pay))
+    }
+
     // I3:够长的横滑从列表行起手 = 滑动删除
     @Test fun longHorizontalSwipeOnRowIsDelete() {
         val s = snap(el("@e1", "张三 昨天", listOf(0, 300, 999, 400)), el("@e2", "", listOf(0, 0, 999, 999), clickable = false, scrollable = true))

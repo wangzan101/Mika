@@ -177,6 +177,16 @@ class CapsuleThreadTest {
         assertEquals(t.items.size, t.items.map { it.key }.toSet().size)
     }
 
+    @Test fun withdrawnSteersAreNotShown() {
+        val base = live("a", TaskState.Running(1, "n"), CapsuleKind.Running)
+        val run = base.copy(run = base.run.copy(steers = listOf(
+            SteerNote("s1", "已撤回的话", SteerState.Withdrawn),
+            SteerNote("s2", "留下的话", SteerState.Received),
+        )))
+        val t = CapsuleThreads.build(emptyList(), 10, listOf(run))
+        assertEquals(listOf("问题a", "留下的话"), t.items.filterIsInstance<ThreadItem.User>().map { it.text })
+    }
+
     // 插话打断的那段回复排在那句插话前面(和对话页一样);记下的一轮和进行中的一件同样排,key 不重复
     @Test fun interruptedReplySitsAboveItsSteer() {
         val past = listOf(PastTurn(Turn("查天气", "明天多云", "succeeded", runId = "r1",

@@ -43,8 +43,8 @@ class RunInbox {
     }
 
     suspend fun send(input: RunInput): InputReceipt = when (input) {
-        is RunInput.Steer -> queue(input.messageId, input.text)
-        is RunInput.Redirect -> queue(input.messageId, input.text)
+        is RunInput.Steer -> steer(input.messageId, input.text)
+        is RunInput.Redirect -> steer(input.messageId, input.text)
         RunInput.Cancel -> cancel()
         is RunInput.Answer -> if (closed) InputReceipt.Closed else
             if (handler?.answer(input.text, input.askId) == true) InputReceipt.Accepted else InputReceipt.NoPendingInteraction
@@ -54,13 +54,21 @@ class RunInbox {
             if (handler?.handBack(input.result, input.askId) == true) InputReceipt.Accepted else InputReceipt.NoPendingInteraction
     }
 
-    private fun queue(id: String, text: String): InputReceipt = synchronized(lock) {
+    fun steer(id: String, text: String): InputReceipt = synchronized(lock) {
         if (closed) InputReceipt.NextTask else {
             steers += UserSteer(id, text)
             pending.value = true
             redirects.trySend(Unit)
             InputReceipt.Accepted
         }
+    }
+
+    /** 只撤回还在收件箱里的消息;和交给模型、收尾互斥。 */
+    fun withdrawSteer(id: String): Boolean = synchronized(lock) {
+        if (closed || !steers.removeAll { it.messageId == id }) return@synchronized false
+        pending.value = steers.isNotEmpty()
+        if (steers.isEmpty()) while (redirects.tryReceive().isSuccess) Unit
+        true
     }
 
     /** 有没有还没交给模型的插话;只看不取(批量执行在子步之间据此停下)。 */

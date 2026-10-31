@@ -49,6 +49,7 @@ interface TaskActions {
     fun start(goal: String, conversationId: String)
     /** 任务进行中在它的对话里插的话;[messageId] 用来跟这句话的去向。 */
     fun steer(conversationId: String, messageId: String, text: String) = start(text, conversationId)
+    fun withdrawSteer(conversationId: String, messageId: String): Boolean = false
     fun cancel()
     fun resume()
     fun takeOver()
@@ -172,7 +173,7 @@ fun liveLine(ex: Exchange): String? {
 
 /** 插话下面那行小字;还没有去向时不写。 */
 fun steerLabel(state: SteerState): String? = when (state) {
-    SteerState.Pending -> null
+    SteerState.Pending, SteerState.Withdrawn -> null
     SteerState.Received -> tr(R.string.steer_received)
     SteerState.Joined -> tr(R.string.steer_joined)
     SteerState.Next -> tr(R.string.steer_next)
@@ -681,6 +682,28 @@ class ChatViewModel(
         }
         if (pendingStart?.isActive == true) held += note else actions.steer(id, note.id, text)
         return true
+    }
+
+    fun withdrawSteer(messageId: String): Boolean {
+        val ui = _ui.value
+        val id = ui.conversationId ?: return false
+        val note = ui.exchanges.getOrNull(liveIndex)?.steers?.firstOrNull { it.id == messageId } ?: return false
+        if (!note.state.unconsumed) return false
+        if (!held.removeAll { it.id == messageId } && !actions.withdrawSteer(id, messageId)) return false
+        _ui.update { now -> now.copy(exchanges = now.exchanges.map { ex ->
+            ex.copy(steers = ex.steers.map { if (it.id == messageId) it.copy(state = SteerState.Withdrawn) else it })
+        }) }
+        return true
+    }
+
+    fun editSteer(messageId: String): String? {
+        val ui = _ui.value
+        if (ui.quote != null || ui.attachments.isNotEmpty() || ui.importing) return null
+        val note = ui.exchanges.getOrNull(liveIndex)?.steers?.firstOrNull { it.id == messageId } ?: return null
+        if (!withdrawSteer(messageId)) return null
+        val parsed = QuoteMessage.parse(note.text)
+        _ui.update { it.copy(quote = parsed.quote) }
+        return parsed.words
     }
 
     /** 原话的任务还没交给服务时插的话。 */

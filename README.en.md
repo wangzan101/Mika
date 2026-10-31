@@ -128,6 +128,7 @@ Any app installed on your phone works, with no per-app integration: Mika looks a
 ### Interrupt or stop anytime
 
 - Keep talking while a task runs to add to or correct your request; Mika reads it before its next step.
+- Long-press a message sent during a task to withdraw or edit it before the model picks it up. Editing restores its quote too and is available when the composer has no draft.
 - When you press stop, Mika adds a short wrap-up: what it did, what it saw, how many times it sent something, and what is left. Say "continue" next time and it knows where to pick up.
 
 ### Ask / Autonomous

@@ -46,9 +46,14 @@ class ChatViewModelTest {
     private val acts = MutableStateFlow<List<RunEvent.Activity>>(emptyList())
     private val steerFlow = MutableStateFlow<List<SteerNote>>(emptyList())
     private val steerIds = mutableListOf<String>()
+    private var canWithdraw = true
     private val actions = object : TaskActions {
         override fun start(goal: String, conversationId: String) { calls += "start:$goal" }
         override fun steer(conversationId: String, messageId: String, text: String) { calls += "steer:$text"; steerIds += messageId }
+        override fun withdrawSteer(conversationId: String, messageId: String): Boolean {
+            calls += "withdraw:$messageId"
+            return canWithdraw
+        }
         override fun cancel() { calls += "cancel" }
         override fun resume() { calls += "resume" }
         override fun takeOver() { calls += "takeOver" }
@@ -1153,6 +1158,68 @@ class ChatViewModelTest {
         assertEquals("点版本号", ex.line)
         assertEquals(ExchangeStatus.Working, ex.status)
         assertEquals(1, vm.ui.value.exchanges.size)
+    }
+
+    @Test fun withdrawRemovesOnlyTheUnprocessedMessage() = runTest {
+        val vm = vm()
+        vm.send("当前任务", ok)
+        emit(TaskState.Running(1, "在做"))
+        vm.send("撤回这句", ok)
+        vm.send("留下这句", ok)
+        val id = steerIds.first()
+        assertTrue(vm.withdrawSteer(id))
+        assertEquals(listOf(SteerState.Withdrawn, SteerState.Pending), vm.ui.value.exchanges.single().steers.map { it.state })
+        assertFalse(vm.withdrawSteer(id))
+        assertEquals(1, calls.count { it == "withdraw:$id" })
+        assertEquals("留下这句", vm.ui.value.exchanges.single().steers.last().text)
+    }
+
+    @Test fun editingRestoresQuoteAndTextWithoutOverwritingAnotherQuote() = runTest {
+        val vm = vm()
+        vm.send("当前任务", ok)
+        emit(TaskState.Running(1, "在做"))
+        val quote = QuoteMessage.Quote(QuoteMessage.From.Mika, "明天有雨")
+        vm.quote(quote.from, quote.text)
+        vm.send("改这句话", ok)
+        val id = steerIds.single()
+        vm.quote(QuoteMessage.From.You, "正在写的引用")
+        assertNull(vm.editSteer(id))
+        vm.clearQuote()
+        assertEquals("改这句话", vm.editSteer(id))
+        assertEquals(quote, vm.ui.value.quote)
+        assertEquals(SteerState.Withdrawn, vm.ui.value.exchanges.single().steers.single().state)
+        vm.send("改好的话", ok)
+        assertEquals("steer:${QuoteMessage.compose(quote, "改好的话")}", calls.last())
+    }
+
+    @Test fun failedWithdrawalDoesNotPretendTheModelMissedTheMessage() = runTest {
+        val vm = vm()
+        vm.send("当前任务", ok)
+        emit(TaskState.Running(1, "在做"))
+        vm.send("模型刚取走", ok)
+        val id = steerIds.single()
+        canWithdraw = false
+        assertNull(vm.editSteer(id))
+        assertEquals(SteerState.Pending, vm.ui.value.exchanges.single().steers.single().state)
+        assertNull(vm.ui.value.quote)
+        steerFlow.value = listOf(SteerNote(id, "模型刚取走", SteerState.Joined))
+        runCurrent()
+        assertFalse(vm.withdrawSteer(id))
+        assertEquals(SteerState.Joined, vm.ui.value.exchanges.single().steers.single().state)
+    }
+
+    @Test fun withdrawingBeforeTheTaskStartsPreventsLaterDelivery() = runTest {
+        val busy = MutableStateFlow(true)
+        val vm = ChatViewModel(backgroundScope, state, stage, actions, ConversationStore(tmp.newFolder()), serviceBusy = busy)
+        runCurrent()
+        vm.send("当前任务", ok)
+        vm.send("别发这句", ok)
+        val id = vm.ui.value.exchanges.single().steers.single().id
+        assertTrue(vm.withdrawSteer(id))
+        busy.value = false
+        runCurrent()
+        assertEquals(listOf("start:当前任务"), calls)
+        assertEquals(SteerState.Withdrawn, vm.ui.value.exchanges.single().steers.single().state)
     }
 
     // 任务在跑时输入框照样能发:发出去的话挂在这一问一答下面,交给当前任务;去向由服务报回来

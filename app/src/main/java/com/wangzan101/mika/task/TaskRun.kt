@@ -287,10 +287,10 @@ class TaskRun(
      * [messageId] 是界面给这句话的编号,界面据此标出它的去向(见 [SteerNote])。
      */
     fun steer(text: String, messageId: String = UUID.randomUUID().toString()) {
-        synchronized(service.taskState.shownLock) { _steers.value = _steers.value + SteerNote(messageId, text, SteerState.Pending) }
-        scope.launch {
+        synchronized(service.taskState.shownLock) {
+            _steers.value = _steers.value + SteerNote(messageId, text, SteerState.Pending)
             // 收件箱收下了就马上告诉用户:模型此刻的请求已撤掉,下一步就带着这句话想(交给模型时再改成已加入)
-            if (inbox.send(RunInput.Steer(messageId, text)) == InputReceipt.Accepted) markSteers(setOf(messageId), SteerState.Received, from = SteerState.Pending)
+            if (inbox.steer(messageId, text) == InputReceipt.Accepted) markSteers(setOf(messageId), SteerState.Received, from = SteerState.Pending)
             else {
                 if (stopPressed) markSteers(setOf(messageId), SteerState.Cancelled)
                 else {
@@ -299,6 +299,12 @@ class TaskRun(
                 }
             }
         }
+    }
+
+    fun withdrawSteer(messageId: String): Boolean = synchronized(service.taskState.shownLock) {
+        if (!inbox.withdrawSteer(messageId)) return@synchronized false
+        markSteers(setOf(messageId), SteerState.Withdrawn)
+        true
     }
 
     /** 收尾时还没交给模型的插话:作为这个对话的下一件事;停止了([cancelled])就一起作废。 */

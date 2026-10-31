@@ -109,6 +109,7 @@ import com.wangzan101.mika.confirm.ConfirmationCopy
 import com.wangzan101.mika.settings.Prerequisites
 import com.wangzan101.mika.takeover.Takeover
 import com.wangzan101.mika.task.SteerNote
+import com.wangzan101.mika.task.SteerState
 import com.wangzan101.mika.task.TaskService
 import com.wangzan101.mika.task.unconsumed
 import com.wangzan101.mika.ui.components.BarIconButton
@@ -179,6 +180,7 @@ fun ChatScreen(
     val frame = live ?: lastFrame.takeIf { ui.pip.visible && ui.pip.mode == PipMode.Done }
     val webContent = if (ui.pip.mode == PipMode.Done) lastFrameWasWeb else webLive
     var input by rememberSaveable { mutableStateOf("") }
+    var editRequest by remember { mutableIntStateOf(0) }
     var composerHeight by rememberSaveable { mutableIntStateOf(0) }
     var topHeight by rememberSaveable { mutableIntStateOf(0) }
     val density = LocalDensity.current
@@ -332,6 +334,7 @@ fun ChatScreen(
             onDismissRejected = vm::dismissRejected,
             quote = ui.quote,
             onRemoveQuote = vm::clearQuote,
+            editRequest = editRequest,
         )
 
         AgentPip(
@@ -355,6 +358,10 @@ fun ChatScreen(
 
         // 长按消息的菜单盖在最上面:复制纯文字;引用放到输入框上方;选择文字让那条换回系统的长按选中
         menu?.let { m ->
+            val pending = ui.exchanges.mapIndexedNotNull { i, ex ->
+                if (ex.status.isActive()) ex.steers.firstOrNull { m.key == "m$i-${it.id}" && it.state.unconsumed } else null
+            }.firstOrNull()
+            val canEdit = input.isBlank() && ui.quote == null && ui.attachments.isEmpty() && !ui.importing
             MessageMenu(
                 m, progress = { lift.value },
                 onCopy = { closeMenu { copyMessage(context, m.text) } },
@@ -366,6 +373,10 @@ fun ChatScreen(
                     }
                 },
                 onDismiss = { closeMenu() },
+                onEdit = if (pending != null && canEdit) ({ closeMenu {
+                    vm.editSteer(pending.id)?.let { input = it; editRequest++ }
+                } }) else null,
+                onWithdraw = pending?.let { n -> ({ closeMenu { vm.withdrawSteer(n.id) } }) },
             )
         }
     }
@@ -463,8 +474,9 @@ private fun LazyListScope.exchange(
  * 正在长出来的回答排在两段中间。
  */
 internal fun steersAroundDraft(steers: List<SteerNote>): Pair<List<SteerNote>, List<SteerNote>> {
-    val first = steers.indexOfFirst { it.state.unconsumed }.let { if (it < 0) steers.size else it }
-    return steers.take(first) to steers.drop(first)
+    val visible = steers.filterNot { it.state == SteerState.Withdrawn }
+    val first = visible.indexOfFirst { it.state.unconsumed }.let { if (it < 0) visible.size else it }
+    return visible.take(first) to visible.drop(first)
 }
 
 private fun ExchangeStatus.isActive() =
@@ -999,6 +1011,7 @@ internal fun Composer(
     /** 要随下一句话发出去的引用;有时输入框上方一张小条,× 去掉。 */
     quote: QuoteMessage.Quote? = null,
     onRemoveQuote: () -> Unit = {},
+    editRequest: Int = 0,
     /** 输入栏后面那层内容的画面;为 null 时输入栏不做模糊、用不透明底。 */
     backdrop: GlassBackdrop? = null,
     reduceMotion: Boolean = false,
@@ -1014,6 +1027,13 @@ internal fun Composer(
     val ime = WindowInsets.ime
     val nav = WindowInsets.navigationBars
     var panel by rememberSaveable { mutableStateOf(Panel.Closed) }
+    LaunchedEffect(editRequest) {
+        if (editRequest > 0) {
+            panel = Panel.Closed
+            field.requestFocus()
+            keyboard?.show()
+        }
+    }
     // 面板和键盘一样高:记下见过的键盘高度(在导航栏之上的那段),没见过时用默认高度
     var keyboardPx by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(ime, nav, density) {

@@ -200,6 +200,7 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
             object : TaskActions {
                 override fun start(goal: String, conversationId: String) = TaskService.start(app, goal, conversationId)
                 override fun steer(conversationId: String, messageId: String, text: String) = TaskService.start(app, text, conversationId, messageId)
+                override fun withdrawSteer(conversationId: String, messageId: String) = taskState.run(conversationId)?.withdrawSteer(messageId) ?: false
                 override fun cancel() = TaskService.cancel(app)
                 override fun resume() = TaskService.resume(app)
                 override fun takeOver() = TaskService.takeOver(app)

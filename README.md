@@ -40,9 +40,11 @@
 
 它会检查手机、下载安装、打开需要的权限，需要你在手机上点的时候会停下来告诉你。API Key 由你自己在 Mika 里填，不经过它。
 
-**装好之后：从电脑使用 Mika（CLI / Skill / MCP）**
+**装好之后：从电脑使用 Mika（CLI + Skill 或 MCP）**
 
-在终端、脚本、Codex 或 Claude Code 中使用 Mika，见[电脑端 CLI / Skill 的安装、升级和卸载](docs/computer-install.md)。Skill 自带 CLI 脚本，这条路径无需配置 MCP；手机 APK 仍需单独安装和设置。
+**通常二选一：CLI + Skill 或 MCP，无需两套都配置。** 手机 APK 是两者的共同前提；需要同时接入不同客户端时，也可以并用。
+
+**CLI + Skill**：适合支持 Skill、能执行命令的电脑 Agent（如 Codex、Claude Code）。Skill 自带 CLI 脚本，无需另装全局 CLI 或配置 MCP；只在终端或脚本里使用时，单独装 CLI 即可。安装、升级和卸载见[电脑端 CLI / Skill 指南](docs/computer-install.md)。
 
 **使用 MCP 客户端：通过 USB 快速连接**
 

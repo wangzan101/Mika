@@ -2,6 +2,8 @@
 
 [English](computer-install.en.md) · [连接与任务命令](cli.md) · [MCP 配置](mcp.md)
 
+**电脑接入通常二选一：CLI + Skill 或 MCP，无需两套都配置。** 按下表选择适合的方式；手机 APK 是两者的共同前提。需要同时接入不同客户端时，也可以并用。
+
 | 用途 | 安装什么 |
 | --- | --- |
 | 在手机上运行 Mika | 从 [Releases](https://github.com/wangzan101/Mika/releases) 安装 APK,完成[手机设置](setup-guide.md)。 |
@@ -9,7 +11,7 @@
 | 让 Codex、Claude Code 使用 Mika | 安装 Skill;它自带 CLI 脚本,无需另装全局命令。 |
 | 使用已有 MCP 客户端 | 按 [MCP 指南](mcp.md)配置。 |
 
-APK、CLI、Skill 分别安装。官方 APK 从 **v0.1.23** 提供 task API v1;自编译包以 `connect` 的兼容性检查为准。下面以 `v0.1.23` 演示固定版本安装,可替换为 Releases 中更新的正式 tag。
+官方 APK 从 **v0.1.23** 提供 task API v1;自编译包以 `connect` 的兼容性检查为准。下面以 `v0.1.23` 演示固定版本安装,可替换为 Releases 中更新的正式 tag。
 
 ## CLI：安装
 

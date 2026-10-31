@@ -2,6 +2,8 @@
 
 [简体中文](computer-install.md) · [Connection and task commands](cli.en.md) · [MCP configuration](mcp.en.md)
 
+**For computer access, normally choose either CLI + Skill or MCP; you do not need to set up both.** Use the table below to choose. Both require the phone APK; you can use both if you need to connect different clients.
+
 | Goal | What to install |
 | --- | --- |
 | Run Mika on Android | Install the APK from [Releases](https://github.com/wangzan101/Mika/releases) and complete [phone setup](setup-guide.en.md). |
@@ -9,7 +11,7 @@
 | Use Mika from Codex or Claude Code | Install the Skill; its bundled CLI script works without a global command. |
 | Use an existing MCP client | Follow the [MCP guide](mcp.en.md). |
 
-The APK, CLI and Skill are separate installations. Official APKs provide task API v1 starting in **v0.1.23**; for custom builds, rely on the compatibility check in `connect`. Examples pin `v0.1.23`; you can substitute a newer stable tag from Releases.
+Official APKs provide task API v1 starting in **v0.1.23**; for custom builds, rely on the compatibility check in `connect`. Examples pin `v0.1.23`; you can substitute a newer stable tag from Releases.
 
 ## CLI: install
 

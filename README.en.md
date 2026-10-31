@@ -40,9 +40,11 @@ Follow https://github.com/wangzan101/Mika/blob/main/docs/install-with-agent.en.m
 
 It checks the phone, downloads and installs Mika, turns on the permissions it needs, and stops to tell you whenever something needs a tap on the phone. You enter your API key in Mika yourself; it never goes through the agent.
 
-**After installing: use Mika from your computer (CLI / Skill / MCP)**
+**After installing: use Mika from your computer (CLI + Skill or MCP)**
 
-For terminals, scripts, Codex or Claude Code, see [installing, updating and removing the computer CLI / Skill](docs/computer-install.en.md). The Skill includes its own CLI script, and this path needs no MCP configuration; phone APK setup is separate.
+**Normally choose either CLI + Skill or MCP; you do not need to set up both.** Both require the phone APK. You can use both if you need to connect different clients.
+
+**CLI + Skill** suits computer agents that support Skills and can run commands, such as Codex or Claude Code. The Skill includes its own CLI script, so you do not need a separate global CLI installation or MCP configuration. For terminal or script use alone, install just the CLI. See the [computer CLI / Skill guide](docs/computer-install.en.md) for installation, updates and removal.
 
 **Using an MCP client: quick USB connection**
 

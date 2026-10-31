@@ -161,8 +161,8 @@ Apps and websites that already have usage knowledge (names as they appear in the
 
 | Item | Requirement |
 |---|---|
-| Install | Android 11 or later |
-| Run tasks | Android 13 or later (required by the background screen and the built-in phone helper) |
+| Install, chat, web and sandbox tasks | Android 11 or later (sandbox requires arm64) |
+| Phone app control | Android 13 or later (required by the background screen and the built-in phone helper) |
 | Recommended | Android 14 or later: the background screen has its own focus, so it does not interfere with your typing on the main screen; running tasks from different conversations at the same time also needs it |
 | Linux sandbox | arm64 devices only; on other devices the app installs normally and the sandbox shows "not supported on this device" |
 | Model | An API key for an LLM that supports tool calling |

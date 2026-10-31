@@ -370,7 +370,6 @@ class TaskRun(
     fun shownState(): TaskState? = synchronized(publishLock) { if (ended) null else _state.value }
 
     suspend fun execute(priorTurns: List<Turn>): TaskState {
-        if (Build.VERSION.SDK_INT < Prerequisites.MIN_SDK) return TaskState.Failed(TaskService.TOO_OLD, FailKind.Environment)
         // 手机一侧(内置助手、无障碍、虚拟屏)第一次 launch_app 时才接上:只用网页、沙箱的任务不需要它们
         var connection: com.wangzan101.mika.cap.phone.shell.ShellBinding? = null
         var phone: PhoneSide? = null
@@ -420,6 +419,8 @@ class TaskRun(
 
             /** 接上手机:连内置助手、等无障碍、备好(到第一次 launch_app 才建的)虚拟屏;缺一样就报 phone_unavailable。 */
             suspend fun connectPhone(): AndroidScreen {
+                // 版本要求只属于手机操作;旧系统仍可聊天、使用网页和沙箱,也不应被引导去配对不支持的助手。
+                if (Build.VERSION.SDK_INT < Prerequisites.MIN_SDK) throw PhoneUnavailable(TaskService.TOO_OLD)
                 val conn = connection ?: phoneServices.sharedShell.acquire().also { connection = it }
                 val shell = withTimeoutOrNull(SHELL_WAIT_MS) { conn.shell.filterNotNull().first() }
                     ?: run {

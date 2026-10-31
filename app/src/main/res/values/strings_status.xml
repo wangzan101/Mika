@@ -36,8 +36,8 @@
     <string name="heads_up_also">"The same goes for “%1$s”. "</string>
     <string name="heads_up_body">%1$s, these notifications now land quietly in the shade and are easy to miss. %2$sTap “%3$s” and turn on “Pop on screen”.</string>
     <string name="heads_up_path">Settings › Apps › Mika › Notifications › %1$s › Pop on screen (some phones call it “Banner” or “Floating notification”)</string>
-    <string name="banner_too_old">System version too old</string>
-    <string name="banner_too_old_detail">Mika needs Android 13 or later</string>
+    <string name="banner_too_old">Phone control unavailable</string>
+    <string name="banner_too_old_detail">Chat, web and sandbox tasks are available; phone control needs Android 13 or later</string>
     <string name="learn_more">Learn more</string>
     <string name="banner_not_paired">Phone control isn’t set up</string>
     <string name="banner_not_paired_detail">Set it up so Mika can use apps on your phone</string>
@@ -62,8 +62,8 @@
     <string name="allow">Allow</string>
     <string name="banner_focus">On Android 13, background work may steal focus from your screen</string>
     <string name="banner_focus_detail">Android 14+ recommended</string>
-    <string name="explain_too_old">Requires Android 13 or later</string>
-    <string name="explain_too_old_body">Mika uses apps on a separate virtual screen so you can keep using your phone. That needs Android 13 or later; this phone runs Android %1$s, so tasks can’t start yet.</string>
+    <string name="explain_too_old">Phone control requires Android 13 or later</string>
+    <string name="explain_too_old_body">Mika uses apps on a separate virtual screen so you can keep using your phone. That needs Android 13 or later; this phone reports Android %1$s compatibility. You can still use chat, web and sandbox tasks.</string>
     <string name="explain_a11y_off">Turn on the accessibility service</string>
     <string name="explain_a11y_off_body">Mika uses the accessibility service to read and control its own virtual screen. Find Mika under Accessibility in system settings (on some phones it’s under “Downloaded apps” or “Installed services”) and turn it on.</string>
     <string name="explain_a11y_not_running_body">System settings show Mika’s accessibility service as on, but it isn’t actually running (this often happens after Mika is force-stopped). Turn Mika off in accessibility settings, then on again.</string>

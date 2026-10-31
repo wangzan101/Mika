@@ -57,20 +57,21 @@ sealed interface Problem {
 
 /** 开始任务前的检查;界面据此提示,任务入口据此拦住。 */
 object Prerequisites {
+    /** 手机 App 操作的最低版本;聊天、网页和沙箱不需要这项能力。 */
     const val MIN_SDK = 33
     /** 安卓 14 起虚拟屏能有自己的焦点,不再影响主屏。 */
     const val OWN_FOCUS_SDK = 34
     private fun isWarning(p: Problem) = p == Problem.NotificationsOff || p == Problem.FocusMayLeak || p is Problem.AttentionLowered
 
     data class Check(val problems: List<Problem>) {
-        /** 挡住任务的问题。内置助手、无障碍只在操作手机 App 时需要:缺了照样能开始(网页、沙箱的任务照常做),用到手机时再报。 */
+        /** 挡住任务的问题。手机操作的系统版本、内置助手、无障碍只在操作手机 App 时需要。 */
         val blockers: List<Problem> get() = problems.filter { !isWarning(it) && !phoneOnly(it) }
         val canStartTask: Boolean get() = blockers.isEmpty()
         /** 能操作手机 App。 */
         val phoneReady: Boolean get() = problems.none(::phoneOnly)
     }
 
-    private fun phoneOnly(p: Problem) = p is Problem.PhoneHelper || p is Problem.Accessibility
+    private fun phoneOnly(p: Problem) = p is Problem.SystemTooOld || p is Problem.PhoneHelper || p is Problem.Accessibility
 
     fun check(status: SystemStatus, hasMainModel: Boolean): Check = Check(
         buildList {
@@ -79,7 +80,7 @@ object Prerequisites {
             if (status.sdkInt >= MIN_SDK && status.builtinShell != BuiltinShellStatus.Running) {
                 add(Problem.PhoneHelper(status.builtinShell))
             }
-            if (status.accessibility != AccessibilityState.On) add(Problem.Accessibility(status.accessibility))
+            if (status.sdkInt >= MIN_SDK && status.accessibility != AccessibilityState.On) add(Problem.Accessibility(status.accessibility))
             if (!hasMainModel) add(Problem.NoModel)
             if (!status.notificationsAllowed) add(Problem.NotificationsOff)
             else if (status.attentionLowered || status.resultLowered) add(Problem.AttentionLowered(status.attentionLowered, status.resultLowered))

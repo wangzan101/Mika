@@ -23,10 +23,33 @@ class PrerequisitesTest {
     }
 
     @Test
-    fun belowApi33BlocksStart() {
-        val c = Prerequisites.check(ready.copy(sdkInt = 32), hasMainModel = true)
+    fun android11And12CanStartWithoutPhoneControl() {
+        for (sdk in 30..32) {
+            val c = Prerequisites.check(ready.copy(sdkInt = sdk), hasMainModel = true)
+            assertTrue("API $sdk should allow non-phone tasks", c.canStartTask)
+            assertTrue(c.blockers.isEmpty())
+            assertFalse("API $sdk cannot operate phone apps", c.phoneReady)
+            assertEquals(listOf(Problem.SystemTooOld), c.problems)
+        }
+    }
+
+    @Test
+    fun oldAndroidDoesNotAskToSetUpUnsupportedPhoneFeatures() {
+        val c = Prerequisites.check(
+            ready.copy(sdkInt = 31, builtinShell = BuiltinShellStatus.NotPaired, accessibility = AccessibilityState.Off),
+            hasMainModel = true,
+        )
+        assertTrue(c.canStartTask)
+        assertFalse(c.phoneReady)
+        assertEquals(listOf(Problem.SystemTooOld), c.problems)
+    }
+
+    @Test
+    fun oldAndroidStillNeedsAMainModel() {
+        val c = Prerequisites.check(ready.copy(sdkInt = 31), hasMainModel = false)
         assertFalse(c.canStartTask)
-        assertEquals(listOf(Problem.SystemTooOld), c.blockers)
+        assertFalse(c.phoneReady)
+        assertEquals(listOf(Problem.NoModel), c.blockers)
     }
 
     @Test

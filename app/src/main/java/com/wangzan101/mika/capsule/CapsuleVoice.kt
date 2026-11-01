@@ -66,6 +66,8 @@ import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.theme.MikaTheme
 import com.wangzan101.mika.voice.HoldToTalk
 import com.wangzan101.mika.voice.SpeechEngineSpec
+import com.wangzan101.mika.voice.SpeechFailure
+import com.wangzan101.mika.voice.SystemSpeechSession
 import com.wangzan101.mika.voice.VoiceSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -169,6 +171,7 @@ internal class CapsuleTalk(
     private var collector: Job? = null
     private var ticker: Job? = null
     private var watcher: Job? = null
+    private var deadline: Job? = null
     private var startedAt = 0L
 
     /** 能不能用、有没有录音权限:都行才开始听。胶囊不是 Activity,弹不了系统的权限框。 */
@@ -236,12 +239,28 @@ internal class CapsuleTalk(
         released = true
         hold.armCancel(false)
         hold.release()
+        // 自带识别松开后仍停在「在听」就是在等最终结果。到点还没有,收掉面板,免得停在「转文字…」
+        if (active && hold.state.value is HoldToTalk.State.Listening) {
+            deadline = scope.launch {
+                delay(RELEASE_WAIT_MS)
+                giveUp()
+            }
+        }
     }
 
     /** 这一段不要了(拖到取消、胶囊被拆、触摸被系统收走)。可以重复调。 */
     fun abort() {
         stop()
         hold.dispose()
+    }
+
+    /** 松开后自带识别到点仍没有最终结果:关掉面板,交给外面说一句。服务商转写不走这里(它松开后是「在转」,自己有超时)。 */
+    private fun giveUp() {
+        if (!active || !released || hold.state.value !is HoldToTalk.State.Listening) return
+        val at = drop ?: aim
+        stop()
+        hold.dispose()
+        onResult(at, HoldToTalk.State.Problem(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)))
     }
 
     private fun stop() {
@@ -254,6 +273,8 @@ internal class CapsuleTalk(
         watcher = null
         collector?.cancel()
         collector = null
+        deadline?.cancel()
+        deadline = null
     }
 
     companion object {
@@ -263,6 +284,9 @@ internal class CapsuleTalk(
         const val MIN_TOTAL_MS = 500L
         const val MAX_MS = 60_000L
         private const val TICK_MS = 100L
+
+        /** 比自带识别松开后的等待再多一点,结果先到就由会话收尾,到这里说明会话没结束。 */
+        private const val RELEASE_WAIT_MS = SystemSpeechSession.FINAL_WAIT_MS + 500L
     }
 }
 

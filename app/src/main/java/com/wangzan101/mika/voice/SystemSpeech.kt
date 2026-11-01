@@ -75,6 +75,13 @@ object SystemSpeech {
         if (answered) Outcome.Finish else Outcome.Fail(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse))
 
     /**
+     * 松开后再等 [SystemSpeechSession.FINAL_WAIT_MS] 仍没有最终结果时怎么收。
+     * 和 [afterSilence] 一样:回过话按已听到的收尾,从没回过话就是不响应。
+     * 不能因为没回过话就什么也不做,否则悬浮胶囊会停在「转文字…」。
+     */
+    fun afterReleaseWait(answered: Boolean): Outcome = afterSilence(answered)
+
+    /**
      * 手机上登记的识别服务(声明了 RecognitionService 的组件)。[RecognizerService.open] 是它对别的 App 开放(exported);
      * [RecognizerService.permission] 是绑定它要的权限。给诊断信息和 [attempts] 用。
      */
@@ -164,8 +171,8 @@ class SystemSpeechSession(
     private var answered = false
     /** 这次会话已经报过 [onAnswered];每次会话只报一次,免得每个音量回调都写设置。 */
     private var reported = false
-    // 还没回过话时由 [silence] 收尾:松开后的等待不抢先给「没听清」
-    private val timeout = Runnable { if (answered) finish(SpeechEvent.Final(segments.full())) }
+    // 松开后再等 [FINAL_WAIT_MS]。回过话按已听到的收尾;一个回调都没有也要结束,不能停在「转文字…」
+    private val timeout = Runnable { concludeRelease() }
     private val silence = Runnable {
         if (done()) return@Runnable
         if (!answered && holding && attempt + 1 < attempts.size) {
@@ -184,7 +191,20 @@ class SystemSpeechSession(
     }
     private val restart = Runnable {
         restartPending = false
-        if (!done() && holding) listen()
+        if (done()) return@Runnable
+        if (holding) listen() else concludeRelease()
+    }
+
+    /** 松开后的等待到点,或重开时发现手指已经离开:一定结束这次会话。 */
+    private fun concludeRelease() {
+        if (done()) return
+        when (val o = SystemSpeech.afterReleaseWait(answered)) {
+            is SystemSpeech.Outcome.Fail -> {
+                onNoResponse()
+                finish(SpeechEvent.Failed(o.why))
+            }
+            else -> finish(SpeechEvent.Final(segments.full()))
+        }
     }
 
     init {

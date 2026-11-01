@@ -29,6 +29,15 @@ class SystemSpeechTest {
     }
 
     @Test
+    fun releaseWaitStillEndsWhenTheRecognizerNeverAnswered() {
+        assertEquals(
+            SystemSpeech.Outcome.Fail(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)),
+            SystemSpeech.afterReleaseWait(answered = false),
+        )
+        assertEquals(SystemSpeech.Outcome.Finish, SystemSpeech.afterReleaseWait(answered = true))
+    }
+
+    @Test
     fun languageTagsFollowAppLanguage() {
         assertEquals("zh-CN", SystemSpeech.speechTag(com.wangzan101.mika.i18n.AppLanguage.SimplifiedChinese, java.util.Locale.US))
         assertEquals("zh-TW", SystemSpeech.speechTag(com.wangzan101.mika.i18n.AppLanguage.TraditionalChinese, java.util.Locale.US))

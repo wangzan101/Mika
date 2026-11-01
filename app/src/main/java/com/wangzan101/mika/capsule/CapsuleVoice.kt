@@ -3,6 +3,8 @@ package com.wangzan101.mika.capsule
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -171,12 +173,20 @@ internal class CapsuleTalk(
     private var collector: Job? = null
     private var ticker: Job? = null
     private var watcher: Job? = null
-    private var deadline: Job? = null
+    /** 浮窗已经收起,还在等识别结果。 */
+    private var awaiting = false
+    private val main = Handler(Looper.getMainLooper())
+    private val giveUpRunnable = Runnable { giveUp() }
     private var startedAt = 0L
 
     /** 能不能用、有没有录音权限:都行才开始听。胶囊不是 Activity,弹不了系统的权限框。 */
     fun begin(title: String, byTouch: Boolean): Begin {
         if (active && !released) return Begin.Started
+        // 上一段浮窗已收、识别还没收尾:这次重新按,上一段不要了
+        if (awaiting || active) {
+            stop()
+            hold.dispose()
+        }
         val source = voice()
         val spec = source.spec()
         if (spec is SpeechEngineSpec.Unavailable) return Begin.Unavailable(spec.why)
@@ -184,6 +194,7 @@ internal class CapsuleTalk(
         // 上一段松开后还在转(服务商卡住、或自带识别在收尾):用户重新按,上一段不要了;会话由 press 取消
         if (active) stop()
         hold.reset()
+        awaiting = false
         val session = source.start()
         this.title = title
         this.byTouch = byTouch
@@ -203,9 +214,7 @@ internal class CapsuleTalk(
                 if (s is HoldToTalk.State.Listening && s.ended && !this@CapsuleTalk.byTouch) finish(CapsuleVoice.Drop.Send)
                 if (s is HoldToTalk.State.Done || s is HoldToTalk.State.Problem) {
                     val d = drop ?: aim
-                    stop()
-                    hold.reset()
-                    onResult(d, s)
+                    deliver(d, s)
                 }
             }
         }
@@ -236,16 +245,16 @@ internal class CapsuleTalk(
         }
         aim = at
         drop = at
-        released = true
         hold.armCancel(false)
-        // 先排上收尾,再让识别服务停。stopListening 若卡住或同步回调,面板也不会一直停在「转文字…」
-        if (hold.state.value is HoldToTalk.State.Listening) {
-            deadline = scope.launch {
-                delay(RELEASE_WAIT_MS)
-                giveUp()
-            }
+        // 先收起整屏浮窗,再在下一轮停识别。识别服务停不下来时,浮窗也不会留在屏幕上。
+        awaiting = true
+        active = false
+        released = true
+        main.post {
+            if (!awaiting) return@post
+            hold.release()
+            main.postDelayed(giveUpRunnable, RELEASE_WAIT_MS)
         }
-        hold.release()
     }
 
     /** 这一段不要了(拖到取消、胶囊被拆、触摸被系统收走)。可以重复调。 */
@@ -254,19 +263,28 @@ internal class CapsuleTalk(
         hold.dispose()
     }
 
-    /** 松开后自带识别到点仍没有最终结果:关掉面板,交给外面说一句。服务商转写不走这里(它松开后是「在转」,自己有超时)。 */
+    /** 浮窗收起后仍没有最终结果:结束会话,交给外面说一句。 */
     private fun giveUp() {
-        if (!active || !released || hold.state.value !is HoldToTalk.State.Listening) return
-        val at = drop ?: aim
-        deadline = null
-        stop()
+        if (!awaiting) return
+        deliver(drop ?: aim, HoldToTalk.State.Problem(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)))
         hold.dispose()
-        onResult(at, HoldToTalk.State.Problem(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)))
+    }
+
+    /** 结果只交一次。浮窗这时通常已经收起。 */
+    private fun deliver(at: CapsuleVoice.Drop, state: HoldToTalk.State) {
+        if (!awaiting && !active) return
+        awaiting = false
+        main.removeCallbacks(giveUpRunnable)
+        stop()
+        hold.reset()
+        onResult(at, state)
     }
 
     private fun stop() {
         active = false
         released = false
+        awaiting = false
+        main.removeCallbacks(giveUpRunnable)
         drop = null
         ticker?.cancel()
         ticker = null
@@ -274,8 +292,6 @@ internal class CapsuleTalk(
         watcher = null
         collector?.cancel()
         collector = null
-        deadline?.cancel()
-        deadline = null
     }
 
     companion object {

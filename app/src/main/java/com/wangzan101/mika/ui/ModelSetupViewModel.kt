@@ -502,9 +502,13 @@ class ModelSetupViewModel(
         ) : ProbeOutcome
     }
 
-    /** 先试、没通过的一个模型:[reason] 是短的原因;[serverSide] 为真是服务端出错(5xx),见 [probe]。 */
+    /**
+     * 先试、没通过的一个模型:[reason] 是短的原因;[serverSide] 为真是服务端出错(5xx),见 [probe]。
+     * [skipped] 为真是压根没试(接口写明了它不走这个接口类型),文案里不能说「试了」。
+     */
     private data class Rejected(
         val model: String, val reason: String, val notAvailable: Boolean, val serverSide: Boolean = false,
+        val skipped: Boolean = false,
     )
 
     /** 有列表时试调用的结果:[Blocked] 是第一个就因为模型以外的原因失败,不存;[Done] 见 [probe]。 */
@@ -531,15 +535,19 @@ class ModelSetupViewModel(
         val base = (ProviderPresets.forBaseUrl(baseUrl) ?: ProviderPresets.custom).capabilities
         val options = ModelOptions.merge(models, base)
         // 接口写明了模型能走哪几种协议时,只试这个接口类型能走的:用不匹配的协议调用必然失败(如聚合服务把只支持
-        // /messages 的模型排在前面,而当前接口是 OpenAI 兼容),三个都撞墙就是白白干等 PROBE_TIMEOUT_MS × 3 分钟
+        // /messages 的模型排在前面,而当前接口是 OpenAI 兼容),三个都撞墙就是白白干等 PROBE_TIMEOUT_MS × 3 分钟。
+        // 列表给某个模型单独指定了接口的(见 [ListedModel.endpoint]),调用按它自己说的协议走、与这里选的接口类型
+        // 无关,不能筛掉;协议未知的(没写这个字段)也照旧去试。
         val mismatched = mutableListOf<String>()
         val usable = ModelOptions.candidates(options, f.familyTokens).filter { m ->
-            val protocols = models.firstOrNull { it.id == m }?.protocols
-            if (protocols != null && f.kind.protocol !in protocols) { mismatched += m; false } else true
+            val listed = models.firstOrNull { it.id == m }
+            if (listed?.endpoint != null) return@filter true
+            val protocols = listed?.protocols ?: return@filter true
+            if (f.kind.protocol in protocols) true else { mismatched += m; false }
         }
         if (usable.isEmpty() && mismatched.isNotEmpty()) {
             val reason = tr(R.string.model_reason_wrong_protocol)
-            return ListProbe.Done(null, mismatched.take(PROBE_CANDIDATES).map { Rejected(it, reason, notAvailable = false) })
+            return ListProbe.Done(null, mismatched.take(PROBE_CANDIDATES).map { Rejected(it, reason, notAvailable = false, skipped = true) })
         }
         val order = usable.ifEmpty { listOfNotNull(options.firstOrNull()?.id) }
         val rejected = mutableListOf<Rejected>()
@@ -581,7 +589,8 @@ class ModelSetupViewModel(
         val first = r.rejected.first()
         if (r.main != null) return tr(R.string.model_probe_fallback, names, first.reason, r.main)
         val head = tr(R.string.model_probe_none_usable, first.model, first.reason)
-        if (r.rejected.size == 1) return head
+        // 一个都没试(接口写明了都不走这个接口类型):原因已经在 head 里说清,不能再写「试了」
+        if (r.rejected.size == 1 || r.rejected.all { it.skipped }) return head
         val tried = if (r.rejected.all { it.notAvailable }) tr(R.string.model_probe_tried_unavailable, names) else tr(R.string.model_probe_tried, names)
         return "$head\n$tried"
     }

@@ -63,7 +63,10 @@ enum class ModelProtocol(val wire: String) {
 
         /**
          * 按端点路径认协议:有的聚合服务用 `supported_endpoints` 给每个模型能走哪些端点(`/chat/completions`、
-         * `/messages`、`/responses`、`/v1beta/models`),只写路径不写协议名。认不出为 null。
+         * `/messages`、`/responses`、`/v1beta/models/{模型}:generateContent`),只写路径不写协议名。认不出为 null。
+         *
+         * 只认 `…:generateContent` 这一种 Gemini 生成端点:裸的 `/models`(或 `/v1/models`、`/provider/v1/models`)
+         * 是列模型的端点,列得出来不等于调得动,按它认定「能生成」会让不该试的模型被试一次,所以宁可认不出。
          */
         fun ofPath(path: String?): ModelProtocol? {
             val p = path?.trim()?.trimEnd('/')?.lowercase() ?: return null
@@ -71,7 +74,7 @@ enum class ModelProtocol(val wire: String) {
                 p.endsWith("/chat/completions") -> ChatCompletions
                 p.endsWith("/messages") -> Messages
                 p.endsWith("/responses") -> Responses
-                p.endsWith("/models") -> GenerateContent
+                p.endsWith(":generatecontent") -> GenerateContent
                 else -> null
             }
         }

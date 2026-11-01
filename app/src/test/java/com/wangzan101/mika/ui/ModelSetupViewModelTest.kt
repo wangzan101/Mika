@@ -6,6 +6,7 @@ import com.wangzan101.mika.core.model.ChatModel
 import com.wangzan101.mika.core.model.ListFailure
 import com.wangzan101.mika.core.model.ListedModel
 import com.wangzan101.mika.core.model.Message
+import com.wangzan101.mika.core.model.ModelEndpoint
 import com.wangzan101.mika.core.model.ModelError
 import com.wangzan101.mika.core.model.ModelListResult
 import com.wangzan101.mika.core.model.ModelProtocol
@@ -246,6 +247,27 @@ class ModelSetupViewModelTest {
         assertEquals("deepseek/deepseek-v4-flash", store.configFor(ModelRole.Main)?.model)
     }
 
+    /**
+     * 列表给某个模型单独指定了接口(见 [ListedModel.endpoint]):调用按它自己说的协议走,与这里选的接口类型无关,
+     * 不能因为 `supported_endpoints` 里没有当前接口类型就筛掉。
+     */
+    @Test fun modelWithItsOwnEndpointIsProbedWhateverTheKindIs() = runTest {
+        val url = "https://api.commandcode.ai/provider/v1"
+        listing[url] = ModelListResult.Ok(listOf(
+            ListedModel(
+                "claude-sonnet-5-5",
+                endpoint = ModelEndpoint(ModelProtocol.Messages, "https://api.commandcode.ai/provider/v1"),
+                protocols = listOf(ModelProtocol.Messages),
+            ),
+        ))
+        reply = { ModelReply(listOf(Part.ToolCall("c1", "get_time", "{}")), StopReason.ToolUse, null) }
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("sk"); vm.testAndSave(); runCurrent()
+        assertEquals(listOf("claude-sonnet-5-5"), built.map { it.first })
+        assertEquals("claude-sonnet-5-5", store.configFor(ModelRole.Main)?.model)
+    }
+
     /** 列表里的模型全都写明不走当前接口类型:一个都不试,照旧存下服务商,并说清为什么。 */
     @Test fun allModelsOnAnotherProtocolSaveWithAReason() = runTest {
         val url = "https://api.commandcode.ai/provider/v1"
@@ -261,11 +283,12 @@ class ModelSetupViewModelTest {
         val p = store.providers.value.single()
         val s = vm.state.value
         assertFalse(s.showForm)
-        // 一个都没通过:服务商照旧存下、说清原因,并请用户自己从列表里选(可能要换个接口类型)
+        // 一个都没通过:服务商照旧存下、说清原因,并请用户自己从列表里选(可能要换个接口类型)。
+        // 这两个模型一次都没试,所以不能出现「试了 X、Y」那一行。
         assertEquals(p.id, s.pickToProbe)
         assertEquals(
             "服务商已连上，但「claude-sonnet-5-5」没测试通过：它不走你选的接口类型，请求到不了它。" +
-                "从列表里选一个你开通了的模型。\n试了 claude-sonnet-5-5、claude-sonnet-5，都没测试通过。",
+                "从列表里选一个你开通了的模型。",
             s.probeNote,
         )
     }

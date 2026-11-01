@@ -157,7 +157,8 @@ class ModelCatalogTest {
             {"id":"claude-sonnet-5-5","supported_endpoints":["/provider/v1/messages"]},
             {"id":"deepseek-v4-flash","supported_endpoints":["/provider/v1/chat/completions","/provider/v1/responses"]},
             {"id":"glm-5.3-flash","supported_endpoints":["/provider/v1/chat/completions"]},
-            {"id":"gemini-4","supported_endpoints":["/v1beta/models"]},
+            {"id":"gemini-4","supported_endpoints":["/v1beta/models/gemini-4:generateContent"]},
+            {"id":"list-only","supported_endpoints":["/provider/v1/models"]},
             {"id":"plain"}
         ]}"""))
         val list = models(catalog.openAiCompat(base, null))
@@ -167,6 +168,8 @@ class ModelCatalogTest {
                 listOf(ModelProtocol.ChatCompletions, ModelProtocol.Responses),
                 listOf(ModelProtocol.ChatCompletions),
                 listOf(ModelProtocol.GenerateContent),
+                // 裸的 /models 是列模型的端点,列得出来不等于调得动:认不出,照旧去试
+                null,
                 null,
             ),
             list.map { it.protocols },

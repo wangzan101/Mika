@@ -72,4 +72,7 @@
     <string name="model_probe_tried">试了 %1$s，都没测试通过。</string>
     <string name="model_probe_fallback">先试的 %1$s 没测试通过：%2$s。主模型用了测试通过的「%3$s」。</string>
     <string name="model_pick_main">选主模型</string>
+    <string name="model_reason_non_main">它走的是决策接口，工具调用这一关测试注定过不了</string>
+    <string name="model_probe_non_main">列表里这几个走的是决策接口而不是对话接口：%1$s。服务商已保存，请在「用途」里把它们选作看图或轻量用途，不要当主模型。</string>
+    <string name="model_non_main_as_main">「%1$s」走的是决策接口、不会调用工具，不能当主模型。请在「用途」里把它选作别的用途。</string>
 </resources>

@@ -72,4 +72,7 @@
     <string name="model_probe_tried">Tried %1$s; none of them passed the test.</string>
     <string name="model_probe_fallback">%1$s, tried first, didn’t pass the test: %2$s. The main model is “%3$s”, which passed.</string>
     <string name="model_pick_main">Choose main model</string>
+    <string name="model_reason_non_main">it answers on another endpoint (a decision endpoint), so Mika’s tool-calling test can’t pass</string>
+    <string name="model_probe_non_main">These in the list answer on a decision endpoint instead of chat: %1$s. This provider is saved; pick one of them under Roles for another role—don’t use it as the main model.</string>
+    <string name="model_non_main_as_main">“%1$s” answers on a decision endpoint and can’t call tools, so it can’t be the main model. Pick it for another role instead.</string>
 </resources>

@@ -381,6 +381,64 @@ class ModelSetupViewModelTest {
         assertNull(store.roles.value.main)
     }
 
+    /** 列表里只有决策模型(startlux-decision-27b-autothink):它们走决策接口、试调用注定 503,照旧存下这家、不定主模型,提示去「用途」里选。 */
+    @Test fun providerWithOnlyDecisionModelsIsSavedWithoutAMainModel() = runTest {
+        val url = "https://api.bamboonode.dev/v1"
+        listing[url] = ModelListResult.Ok(listOf(ListedModel("startlux-decision-27b-autothink")))
+        reply = { throw ModelError.Server(503) }
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("sk"); vm.testAndSave(); runCurrent()
+        val p = store.providers.value.single()
+        assertEquals("只试这一个", listOf("startlux-decision-27b-autothink"), built.map { it.first })
+        assertEquals("key 存下了", "sk", store.providerKey(p.id))
+        assertNull("不定主模型", store.roles.value.main)
+        val s = vm.state.value
+        assertFalse(s.showForm)
+        assertEquals(ListState.Idle, s.form.test)
+        assertTrue("没被当成整家不可用", s.probeNote != null)
+        assertTrue("probeNote 提了决策接口", s.probeNote!!.contains("决策接口"))
+        assertEquals(p.id, s.pickToProbe)
+        // 当主模型用:拦下,现有的主模型不动
+        vm.pick(ModelRole.Main, p.id, "startlux-decision-27b-autothink"); runCurrent()
+        assertNull(store.roles.value.main)
+        assertTrue("设主模型被挡住了", vm.state.value.nonMainRoleNote!!.contains("startlux-decision-27b-autothink"))
+        assertTrue(vm.state.value.nonMainRoleNote!!.contains("不能当主模型"))
+        // 手填同一个名字也一样拦,且不发请求
+        vm.pickManual(ModelRole.Main, p.id, "startlux-decision-27b-autothink"); runCurrent()
+        assertNull(store.roles.value.main)
+        assertTrue(vm.state.value.manualPick[p.id] is ListState.Failed)
+        // 别的用途照选:不计较它不会调用工具
+        vm.pick(ModelRole.Light, p.id, "startlux-decision-27b-autothink"); runCurrent()
+        assertEquals("startlux-decision-27b-autothink", store.configFor(ModelRole.Light)?.model)
+        assertNull("主模型仍是空", store.roles.value.main)
+    }
+
+    /** 列表里决策模型在前、可用模型在后:决策模型不株连,后面能用的照常成为主模型。 */
+    @Test fun decisionModelIsRejectedAsMainButUsableForAnotherRole() = runTest {
+        val url = "https://api.bamboonode.dev/v1"
+        val decision = "startlux-decision-27b-autothink"
+        listing[url] = ModelListResult.Ok(listOf(ListedModel(decision), ListedModel("deepseek-chat")))
+        reply = {
+            if (built.last().first == decision) throw ModelError.Server(503)
+            ModelReply(listOf(Part.ToolCall("c1", "get_time", "{}")), StopReason.ToolUse, null)
+        }
+        val store = store()
+        val vm = vm(store)
+        vm.selectPreset(ProviderPresets.custom.label); vm.setBaseUrl(url); vm.setApiKey("sk"); vm.testAndSave(); runCurrent()
+        val p = store.providers.value.single()
+        assertEquals("deepseek-chat 成了主模型", "deepseek-chat", store.configFor(ModelRole.Main)?.model)
+        assertTrue("deepseek-chat" in p.verifiedModels)
+        vm.pick(ModelRole.Main, p.id, decision); runCurrent()
+        assertEquals("主模型没被换掉", "deepseek-chat", store.configFor(ModelRole.Main)?.model)
+        assertTrue(vm.state.value.nonMainRoleNote!!.contains(decision))
+        vm.pick(ModelRole.Main, p.id, "deepseek-chat"); runCurrent()
+        assertNull("选好了主模型,提醒收起", vm.state.value.nonMainRoleNote)
+        // 看图:决策模型照样能占一个用途
+        vm.pick(ModelRole.Vision, p.id, decision); runCurrent()
+        assertEquals(decision, store.configFor(ModelRole.Vision)?.model)
+    }
+
     /** 先试的是 5xx,接着试的却是 Key 不对:前面那个 5xx 没证明 Key 能用,照旧不存。 */
     @Test fun serverErrorThenAuthErrorSavesNothing() = runTest {
         val url = "https://api.qnaigc.com/v1"

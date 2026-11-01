@@ -1197,6 +1197,16 @@ internal fun Composer(
                     }
                 }
                 val canSend = AttachTray.canSend(text, attachments, importing)
+                // 键盘出来以后长按输入框留给系统选字;话筒按住才听,点一下只提示按住
+                if (fieldFocused && vh != null) {
+                    val hint = stringResource(R.string.voice_hold_to_talk)
+                    Box(
+                        Modifier.size(MikaSize.IconButton).testTag("composer-mic").holdToTalk(vh) { vh.toast = hint },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(MikaIcons.Mic, hint, Modifier.size(MikaSize.Icon), tint = c.ink)
+                    }
+                }
                 // 任务在跑时停止一直在;写了字再多一个发送,发出去的话交给当前任务
                 if (busy) {
                     Box(

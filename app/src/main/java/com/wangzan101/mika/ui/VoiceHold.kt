@@ -127,6 +127,8 @@ private val CancelLift = 80.dp
 /** 底部弹层:哪种说明。 */
 internal sealed interface VoiceSheet {
     data object Permission : VoiceSheet
+    /** 安卓已经允许录音,识别服务仍说没有权限或麦克风起不来:多半是厂商另外关了,或被别的应用占用。 */
+    data object MicBlocked : VoiceSheet
     data class Unavailable(val why: SpeechEngineSpec.Why) : VoiceSheet
 }
 
@@ -286,7 +288,9 @@ internal fun rememberVoiceHold(voice: VoiceSource?, onText: (String) -> Unit): V
                 when (val why = s.why) {
                     null -> vh.toast = VoiceCopy.NO_MATCH
                     is SpeechFailure.Unavailable -> vh.sheet = VoiceSheet.Unavailable(why.why)
-                    SpeechFailure.NoPermission -> vh.ensureMic()
+                    // 安卓权限还没给:照旧弹系统框或「去设置」。已经给了仍报没有权限,和麦克风起不来一样,说明厂商开关或被占用
+                    SpeechFailure.NoPermission -> if (vh.ensureMic()) vh.sheet = VoiceSheet.MicBlocked
+                    SpeechFailure.MicUnavailable -> vh.sheet = VoiceSheet.MicBlocked
                     else -> vh.toast = VoiceCopy.failure(why)
                 }
                 vh.hold.reset()
@@ -599,9 +603,10 @@ internal fun VoiceSheetHost(vh: VoiceHold, onPickSpeech: () -> Unit) {
             action = stringResource(R.string.voice_go_pick)
             go = onPickSpeech
         }
-        VoiceSheet.Permission -> {
-            title = stringResource(R.string.voice_permission_title)
-            body = stringResource(R.string.voice_permission_body)
+        VoiceSheet.Permission, VoiceSheet.MicBlocked -> {
+            val blocked = sheet == VoiceSheet.MicBlocked
+            title = stringResource(if (blocked) R.string.voice_mic_blocked_title else R.string.voice_permission_title)
+            body = stringResource(if (blocked) R.string.voice_mic_blocked_body else R.string.voice_permission_body)
             action = stringResource(R.string.voice_permission_open)
             go = {
                 context.startActivity(

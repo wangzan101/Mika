@@ -111,6 +111,24 @@ class VoiceHoldTest {
         assertEquals(0, compose.onAllNodesWithTag("voice-listen").fetchSemanticsNodes().size)
     }
 
+    @Test fun focusedMicButtonFillsTheField() {
+        composer("帮我")
+        compose.onNodeWithTag("composer-field").performClick()
+        compose.onNodeWithTag("composer-field").assertIsFocused()
+        waitTag("composer-mic")
+        compose.onNodeWithTag("composer-mic").performTouchInput { down(center) }
+        waitTag("voice-listen")
+        val session = voice.sessions.single()
+        session.out.trySend(SpeechEvent.Partial("订明天", "的票"))
+        Thread.sleep(700)
+        compose.onNodeWithTag("composer-mic").performTouchInput { up() }
+        compose.waitUntil(5_000) { session.released == 1 }
+        session.out.trySend(SpeechEvent.Final("订明天的票"))
+        session.out.close()
+        waitNoTag("voice-listen")
+        compose.onNodeWithTag("composer-field").assertTextEquals("帮我订明天的票")
+    }
+
     @Test fun slidingUpCancels() {
         composer()
         compose.onNodeWithTag("composer-field").performTouchInput { down(center) }

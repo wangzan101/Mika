@@ -249,11 +249,14 @@ class OverlayWindow internal constructor(
      */
     fun setFullScreen(full: Boolean) {
         if (!isOpen) return
-        // 收起时用 0 而不是包住内容:内容还没重画完时,包住内容会把「在听」面板留在屏幕上,又不接收触摸
+        // 这台系统把无障碍浮窗缩成 0 之后,上一帧画面还留在屏幕上,点上去却透到后面。收起时把窗口透明度设成 0,表面不再显示。
+        frame.visibility = if (full) View.VISIBLE else View.GONE
         val size = if (full) WindowManager.LayoutParams.MATCH_PARENT else 0
-        if (params.width == size && params.height == size) return
+        val alpha = if (full) 1f else 0f
+        if (params.width == size && params.height == size && params.alpha == alpha) return
         params.width = size
         params.height = size
+        params.alpha = alpha
         update()
     }
 

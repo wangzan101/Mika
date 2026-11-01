@@ -238,14 +238,14 @@ internal class CapsuleTalk(
         drop = at
         released = true
         hold.armCancel(false)
-        hold.release()
-        // 自带识别松开后仍停在「在听」就是在等最终结果。到点还没有,收掉面板,免得停在「转文字…」
-        if (active && hold.state.value is HoldToTalk.State.Listening) {
+        // 先排上收尾,再让识别服务停。stopListening 若卡住或同步回调,面板也不会一直停在「转文字…」
+        if (hold.state.value is HoldToTalk.State.Listening) {
             deadline = scope.launch {
                 delay(RELEASE_WAIT_MS)
                 giveUp()
             }
         }
+        hold.release()
     }
 
     /** 这一段不要了(拖到取消、胶囊被拆、触摸被系统收走)。可以重复调。 */
@@ -258,6 +258,7 @@ internal class CapsuleTalk(
     private fun giveUp() {
         if (!active || !released || hold.state.value !is HoldToTalk.State.Listening) return
         val at = drop ?: aim
+        deadline = null
         stop()
         hold.dispose()
         onResult(at, HoldToTalk.State.Problem(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)))

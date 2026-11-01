@@ -171,6 +171,8 @@ class SystemSpeechSession(
     private var answered = false
     /** 这次会话已经报过 [onAnswered];每次会话只报一次,免得每个音量回调都写设置。 */
     private var reported = false
+    /** 这次会话已经因为不响应记过一次。松开后的等待和静默计时可能先后到,不能记成两次。 */
+    private var notedSilent = false
     // 松开后再等 [FINAL_WAIT_MS]。回过话按已听到的收尾;一个回调都没有也要结束,不能停在「转文字…」
     private val timeout = Runnable { concludeRelease() }
     private val silence = Runnable {
@@ -181,9 +183,15 @@ class SystemSpeechSession(
             open(preferOnDevice = false)
             return@Runnable
         }
+        concludeSilence()
+    }
+
+    /** 静默到点、且不再换下一个服务:按有没有回过话收尾。不响应同一次会话只记一次。 */
+    private fun concludeSilence() {
+        if (done()) return
         when (val o = SystemSpeech.afterSilence(answered)) {
             is SystemSpeech.Outcome.Fail -> {
-                onNoResponse()
+                noteSilent()
                 finish(SpeechEvent.Failed(o.why))
             }
             else -> finish(SpeechEvent.Final(segments.full()))
@@ -200,11 +208,17 @@ class SystemSpeechSession(
         if (done()) return
         when (val o = SystemSpeech.afterReleaseWait(answered)) {
             is SystemSpeech.Outcome.Fail -> {
-                onNoResponse()
+                noteSilent()
                 finish(SpeechEvent.Failed(o.why))
             }
             else -> finish(SpeechEvent.Final(segments.full()))
         }
+    }
+
+    private fun noteSilent() {
+        if (notedSilent) return
+        notedSilent = true
+        onNoResponse()
     }
 
     init {
@@ -219,8 +233,12 @@ class SystemSpeechSession(
             finish(SpeechEvent.Final(segments.full()))
             return@onMain
         }
-        recognizer?.stopListening()
-        main.postDelayed(timeout, FINAL_WAIT_MS)
+        try {
+            recognizer?.stopListening()
+        } finally {
+            // stopListening 里同步回调可能已经结束会话,也可能拆掉了等待;没结束就一定再排上
+            if (!done()) main.postDelayed(timeout, FINAL_WAIT_MS)
+        }
     }
 
     override fun cancel() {
@@ -306,8 +324,11 @@ class SystemSpeechSession(
         main.removeCallbacks(silence)
         main.removeCallbacks(restart)
         restartPending = false
-        recognizer?.let { runCatching { it.destroy() } }
+        val rec = recognizer
         recognizer = null
+        // 先摘掉再 destroy:有的系统在 destroy 里同步再回调 onError,这时不能再换引擎,否则第一次失败会嵌套卡死
+        usingOnDevice = false
+        rec?.let { runCatching { it.destroy() } }
     }
 
     private fun onMain(block: () -> Unit) {
@@ -361,8 +382,9 @@ class SystemSpeechSession(
         }
 
         override fun onError(error: Int) {
+            if (recognizer == null || done()) return
             heard()
-            if (done()) return
+            if (recognizer == null || done()) return
             if (usingOnDevice && SystemSpeech.languageMissing(error) && segments.full().isEmpty()) {
                 open(preferOnDevice = false)
                 if (!holding && !done()) {

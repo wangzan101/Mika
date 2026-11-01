@@ -249,7 +249,8 @@ class OverlayWindow internal constructor(
      */
     fun setFullScreen(full: Boolean) {
         if (!isOpen) return
-        val size = if (full) WindowManager.LayoutParams.MATCH_PARENT else WindowManager.LayoutParams.WRAP_CONTENT
+        // 收起时用 0 而不是包住内容:内容还没重画完时,包住内容会把「在听」面板留在屏幕上,又不接收触摸
+        val size = if (full) WindowManager.LayoutParams.MATCH_PARENT else 0
         if (params.width == size && params.height == size) return
         params.width = size
         params.height = size

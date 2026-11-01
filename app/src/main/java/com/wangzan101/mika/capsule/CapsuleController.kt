@@ -230,8 +230,13 @@ class CapsuleController(
         // 说话面板出来时铺满整屏(压暗背后),收起时回到没有大小
         scope.launch {
             snapshotFlow { talk.active }.collect {
-                panelWindow?.setFullScreen(it)
-                panelWindow?.setTouchable(it)
+                if (it) {
+                    panelWindow?.setTouchable(true)
+                    panelWindow?.setFullScreen(true)
+                } else {
+                    panelWindow?.setFullScreen(false)
+                    panelWindow?.setTouchable(false)
+                }
             }
         }
         // 停止后的交代写好(或写不成)时那一轮已改进对话:重读记下的轮次
@@ -999,6 +1004,7 @@ class CapsuleController(
             }
             is CapsuleTalk.Begin.Unavailable -> {
                 loading?.cancel()
+                talk.abort()
                 showNote(tr(R.string.capsule_voice_not_ready), CapsuleKind.Failed, opensMika = true, NOTE_LONG_MS)
             }
         }

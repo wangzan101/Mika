@@ -4,6 +4,7 @@ import com.wangzan101.mika.i18n.ChineseTexts
 import com.wangzan101.mika.task.TaskGate
 
 import com.wangzan101.mika.chat.ConversationStore
+import com.wangzan101.mika.chat.CurrentChat
 import com.wangzan101.mika.confirm.ConfirmationNotifier
 import com.wangzan101.mika.core.agent.FailKind
 import com.wangzan101.mika.core.agent.QuoteMessage
@@ -1746,5 +1747,38 @@ class ChatViewModelTest {
         assertEquals(listOf(joined) to listOf(received, pending), steersAroundDraft(listOf(joined, received, pending)))
         assertEquals(listOf(joined) to emptyList<SteerNote>(), steersAroundDraft(listOf(joined)))
         assertEquals(emptyList<SteerNote>() to listOf(received), steersAroundDraft(listOf(received)))
+    }
+
+    // ---------- 胶囊接着哪个对话 ----------
+    // 胶囊不看对话文件最后被谁写过,而是看界面此刻在哪个对话:这三处改动各告诉它一次。
+
+    @Test fun newChatTellsTheCapsuleItIsAFreshOne() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val vm = vm(store)
+        assertEquals(null, store.currentChat())
+        vm.newConversation()
+        assertEquals(CurrentChat.Fresh, store.currentChat())
+    }
+
+    @Test fun openingAConversationTellsTheCapsuleWhichOne() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        store.append("c-old", Turn("查天气", "晴", "succeeded"))
+        val vm = vm(store)
+        vm.openConversation("c-old")
+        assertEquals(CurrentChat.Open("c-old"), store.currentChat())
+    }
+
+    /** 新对话里说的第一句话定下编号:胶囊之后接着这个对话,不是上一个。 */
+    @Test fun theFirstMessageInANewChatTellsTheCapsuleItsId() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val vm = vm(store)
+        vm.newConversation()
+        assertTrue(vm.send("查天气", ok))
+        val id = vm.ui.value.conversationId
+        assertTrue(id != null)
+        assertEquals(CurrentChat.Open(id!!), store.currentChat())
+        emit(TaskState.Succeeded("晴"))
+        // 结束后还是它:胶囊不会跳回上一个对话
+        assertEquals(CurrentChat.Open(id), store.currentChat())
     }
 }

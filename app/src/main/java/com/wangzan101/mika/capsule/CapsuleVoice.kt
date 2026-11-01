@@ -10,6 +10,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -350,7 +351,9 @@ internal fun CapsuleVoicePanel(talk: CapsuleTalk, anchorTop: Int, anchorBottom: 
             }
             Panel(talk, state, below)
         },
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim)).testTag("capsule-voice"),
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = dim))
+            .clickable { talk.abort() }
+            .testTag("capsule-voice"),
     ) { measurables, cons ->
         val loose = cons.copy(minWidth = 0, minHeight = 0)
         val targets = measurables[0].measure(loose)
@@ -386,11 +389,17 @@ private fun Targets(talk: CapsuleTalk, show: Boolean, onPlaced: (Rect, Rect) -> 
         Modifier.alpha(if (show) 1f else 0f),
         horizontalArrangement = Arrangement.spacedBy(56.dp),
     ) {
-        Target(MikaIcons.Close, stringResource(R.string.capsule_voice_cancel), hot = show && talk.aim == CapsuleVoice.Drop.Cancel, bad = true) {
+        Target(
+            MikaIcons.Close, stringResource(R.string.capsule_voice_cancel),
+            hot = show && talk.aim == CapsuleVoice.Drop.Cancel, bad = true, onClick = { talk.abort() },
+        ) {
             at[0] = it
             if (!at[1].isEmpty) onPlaced(at[0], at[1])
         }
-        Target(MikaIcons.Edit, stringResource(R.string.capsule_voice_edit), hot = show && talk.aim == CapsuleVoice.Drop.Edit, bad = false) {
+        Target(
+            MikaIcons.Edit, stringResource(R.string.capsule_voice_edit),
+            hot = show && talk.aim == CapsuleVoice.Drop.Edit, bad = false, onClick = { talk.finish(CapsuleVoice.Drop.Edit) },
+        ) {
             at[1] = it
             if (!at[0].isEmpty) onPlaced(at[0], at[1])
         }
@@ -398,7 +407,7 @@ private fun Targets(talk: CapsuleTalk, show: Boolean, onPlaced: (Rect, Rect) -> 
 }
 
 @Composable
-private fun Target(icon: ImageVector, label: String, hot: Boolean, bad: Boolean, onPlaced: (Rect) -> Unit) {
+private fun Target(icon: ImageVector, label: String, hot: Boolean, bad: Boolean, onClick: () -> Unit, onPlaced: (Rect) -> Unit) {
     val c = MikaTheme.colors
     val scale by animateFloatAsState(if (hot) 1.18f else 1f, if (MikaTheme.reduceMotion) snap() else tween(150), label = "target")
     val fill = when {
@@ -413,6 +422,7 @@ private fun Target(icon: ImageVector, label: String, hot: Boolean, bad: Boolean,
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .glass(c, CircleShape, need = false)
                 .background(fill, CircleShape)
+                .clickable(onClick = onClick)
                 .testTag(if (bad) "capsule-voice-cancel" else "capsule-voice-edit"),
             contentAlignment = Alignment.Center,
         ) {

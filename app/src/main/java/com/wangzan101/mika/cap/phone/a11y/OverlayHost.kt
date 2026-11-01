@@ -256,6 +256,16 @@ class OverlayWindow internal constructor(
         update()
     }
 
+    /** 说话面板铺满时要能点「取消」；平时只画、不接触摸。 */
+    fun setTouchable(touchable: Boolean) {
+        if (!isOpen) return
+        val flags = if (touchable) params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+            else params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        if (flags == params.flags) return
+        params.flags = flags
+        update()
+    }
+
     /** 能接收键盘时(见 [setFocusable])用户按了返回键;输入法开着时返回键先收起输入法,不到这里。 */
     fun onBack(onBack: (() -> Unit)?) {
         if (isOpen) frame.onBack = onBack

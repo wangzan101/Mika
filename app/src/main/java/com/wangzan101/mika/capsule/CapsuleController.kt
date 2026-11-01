@@ -228,7 +228,12 @@ class CapsuleController(
             ) { s, _, kept -> s.copy(kept = kept) }.collect(::render)
         }
         // 说话面板出来时铺满整屏(压暗背后),收起时回到没有大小
-        scope.launch { snapshotFlow { talk.active }.collect { panelWindow?.setFullScreen(it) } }
+        scope.launch {
+            snapshotFlow { talk.active }.collect {
+                panelWindow?.setFullScreen(it)
+                panelWindow?.setTouchable(it)
+            }
+        }
         // 停止后的交代写好(或写不成)时那一轮已改进对话:重读记下的轮次
         scope.launch { tasks.summarizing.collect { threadOf?.let(::loadPast) } }
         // 对话删掉了:见 [forget]
@@ -953,7 +958,8 @@ class CapsuleController(
         }
 
         override fun cancel() {
-            if (talk.byTouch) talk.abort()
+            // 整屏面板接走这次触摸时系统会取消原来的手势。面板还在就留着，让用户点「取消」。
+            if (talk.byTouch && !talk.active) talk.abort()
         }
     }
 

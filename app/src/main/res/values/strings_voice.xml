@@ -47,6 +47,7 @@
     <string name="capsule_voice_foot_edit">Let go · the card opens with the words in the box</string>
     <string name="capsule_voice_foot_cancel">Let go · discard this</string>
     <string name="capsule_voice_foot_a11y">When you’re done, choose “Send” in the capsule’s actions</string>
+    <string name="capsule_voice_foot_lost">Tap send, edit, or cancel</string>
     <string name="capsule_voice_steered">Told the task: %1$s</string>
     <string name="capsule_voice_answered">Answered: %1$s</string>
     <string name="capsule_voice_sent">Sent: %1$s</string>

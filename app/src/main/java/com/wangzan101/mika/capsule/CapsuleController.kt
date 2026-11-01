@@ -229,14 +229,10 @@ class CapsuleController(
         }
         // 说话面板出来时铺满整屏(压暗背后),收起时回到没有大小
         scope.launch {
-            snapshotFlow { talk.active }.collect {
-                if (it) {
-                    panelWindow?.setTouchable(true)
-                    panelWindow?.setFullScreen(true)
-                } else {
-                    panelWindow?.setFullScreen(false)
-                    panelWindow?.setTouchable(false)
-                }
+            snapshotFlow { talk.active to talk.gestureLost }.collect { (active, lost) ->
+                // 手指还按着时不接触摸,落点继续用坐标。手势丢了才可点。
+                if (active) panelWindow?.setFullScreen(true) else panelWindow?.setFullScreen(false)
+                panelWindow?.setTouchable(active && lost)
             }
         }
         // 停止后的交代写好(或写不成)时那一轮已改进对话:重读记下的轮次
@@ -963,8 +959,9 @@ class CapsuleController(
         }
 
         override fun cancel() {
-            // 整屏面板接走这次触摸时系统会取消原来的手势。面板还在就留着，让用户点「取消」。
-            if (talk.byTouch && !talk.active) talk.abort()
+            if (!talk.byTouch) return
+            // 面板还开着、手指却没了:不再有 end()。留着面板,改成可点,别停在「在听」。
+            if (talk.active && !talk.released) talk.onGestureLost() else talk.abort()
         }
     }
 

@@ -46,6 +46,7 @@
     <string name="capsule_voice_foot_edit">松开 · 打开卡片，字在输入框里</string>
     <string name="capsule_voice_foot_cancel">松开 · 这段不要了</string>
     <string name="capsule_voice_foot_a11y">说完后在胶囊的操作里选「发出」</string>
+    <string name="capsule_voice_foot_lost">点发出、改一改或取消</string>
     <string name="capsule_voice_steered">已插话：%1$s</string>
     <string name="capsule_voice_answered">已回答：%1$s</string>
     <string name="capsule_voice_sent">已发出：%1$s</string>

@@ -68,6 +68,7 @@ import com.wangzan101.mika.ui.VoiceWave
 import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.theme.MikaTheme
 import com.wangzan101.mika.voice.HoldToTalk
+import com.wangzan101.mika.voice.ProviderSpeech
 import com.wangzan101.mika.voice.SpeechEngineSpec
 import com.wangzan101.mika.voice.SpeechFailure
 import com.wangzan101.mika.voice.SystemSpeechSession
@@ -165,6 +166,9 @@ internal class CapsuleTalk(
     var title by mutableStateOf("")
     var engine by mutableStateOf("")
         private set
+    /** 原来的手势被系统收走了:面板这时才可点。手指还按着时为 false,落点仍按坐标。 */
+    var gestureLost by mutableStateOf(false)
+        private set
 
     /** 两个落点在屏幕上的位置,面板排好版后报上来。 */
     var cancelAt = Rect.Zero
@@ -176,6 +180,8 @@ internal class CapsuleTalk(
     private var watcher: Job? = null
     /** 浮窗已经收起,还在等识别结果。 */
     private var awaiting = false
+    /** 这次兜底等的是服务商转写(30 秒),不是自带识别(2 秒)。 */
+    private var giveUpForProvider = false
     private val main = Handler(Looper.getMainLooper())
     private val giveUpRunnable = Runnable { giveUp() }
     private var startedAt = 0L
@@ -196,6 +202,7 @@ internal class CapsuleTalk(
         if (active) stop()
         hold.reset()
         awaiting = false
+        gestureLost = false
         val session = source.start()
         this.title = title
         this.byTouch = byTouch
@@ -254,8 +261,17 @@ internal class CapsuleTalk(
         main.post {
             if (!awaiting) return@post
             hold.release()
-            main.postDelayed(giveUpRunnable, RELEASE_WAIT_MS)
+            // 自带识别自己会在 FINAL_WAIT_MS 内结束,这里只兜它没结束的情况。服务商要让到它自己的 30 秒。
+            giveUpForProvider = hold.state.value is HoldToTalk.State.Converting
+            val wait = if (giveUpForProvider) ProviderSpeech.TRANSCRIBE_TIMEOUT_MS + 500 else SystemSpeechSession.FINAL_WAIT_MS + 500
+            main.postDelayed(giveUpRunnable, wait)
         }
+    }
+
+    /** 手指还按着时系统把这次触摸收走了:不再等松开,改成可点。 */
+    fun onGestureLost() {
+        if (!active || released || gestureLost) return
+        gestureLost = true
     }
 
     /** 这一段不要了(拖到取消、胶囊被拆、触摸被系统收走)。可以重复调。 */
@@ -267,7 +283,9 @@ internal class CapsuleTalk(
     /** 浮窗收起后仍没有最终结果:结束会话,交给外面说一句。 */
     private fun giveUp() {
         if (!awaiting) return
-        deliver(drop ?: aim, HoldToTalk.State.Problem(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)))
+        val why = if (giveUpForProvider) SpeechFailure.Network
+            else SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemNoResponse)
+        deliver(drop ?: aim, HoldToTalk.State.Problem(why))
         hold.dispose()
     }
 
@@ -285,6 +303,7 @@ internal class CapsuleTalk(
         active = false
         released = false
         awaiting = false
+        gestureLost = false
         main.removeCallbacks(giveUpRunnable)
         drop = null
         ticker?.cancel()
@@ -391,14 +410,23 @@ private fun Targets(talk: CapsuleTalk, show: Boolean, onPlaced: (Rect, Rect) -> 
     ) {
         Target(
             MikaIcons.Close, stringResource(R.string.capsule_voice_cancel),
-            hot = show && talk.aim == CapsuleVoice.Drop.Cancel, bad = true, onClick = { talk.abort() },
+            hot = show && talk.aim == CapsuleVoice.Drop.Cancel, bad = true,
+            tag = "capsule-voice-cancel", onClick = { talk.abort() },
         ) {
             at[0] = it
             if (!at[1].isEmpty) onPlaced(at[0], at[1])
         }
+        if (talk.gestureLost) {
+            Target(
+                MikaIcons.Up, stringResource(R.string.capsule_voice_send),
+                hot = false, bad = false, tag = "capsule-voice-send",
+                onClick = { talk.finish(CapsuleVoice.Drop.Send) },
+            ) { }
+        }
         Target(
             MikaIcons.Edit, stringResource(R.string.capsule_voice_edit),
-            hot = show && talk.aim == CapsuleVoice.Drop.Edit, bad = false, onClick = { talk.finish(CapsuleVoice.Drop.Edit) },
+            hot = show && talk.aim == CapsuleVoice.Drop.Edit, bad = false,
+            tag = "capsule-voice-edit", onClick = { talk.finish(CapsuleVoice.Drop.Edit) },
         ) {
             at[1] = it
             if (!at[0].isEmpty) onPlaced(at[0], at[1])
@@ -407,7 +435,9 @@ private fun Targets(talk: CapsuleTalk, show: Boolean, onPlaced: (Rect, Rect) -> 
 }
 
 @Composable
-private fun Target(icon: ImageVector, label: String, hot: Boolean, bad: Boolean, onClick: () -> Unit, onPlaced: (Rect) -> Unit) {
+private fun Target(
+    icon: ImageVector, label: String, hot: Boolean, bad: Boolean, tag: String, onClick: () -> Unit, onPlaced: (Rect) -> Unit,
+) {
     val c = MikaTheme.colors
     val scale by animateFloatAsState(if (hot) 1.18f else 1f, if (MikaTheme.reduceMotion) snap() else tween(150), label = "target")
     val fill = when {
@@ -423,7 +453,7 @@ private fun Target(icon: ImageVector, label: String, hot: Boolean, bad: Boolean,
                 .glass(c, CircleShape, need = false)
                 .background(fill, CircleShape)
                 .clickable(onClick = onClick)
-                .testTag(if (bad) "capsule-voice-cancel" else "capsule-voice-edit"),
+                .testTag(tag),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, null, Modifier.size(24.dp), tint = if (hot) c.onAccent else c.ink)
@@ -503,6 +533,7 @@ private fun Panel(talk: CapsuleTalk, state: HoldToTalk.State, below: Boolean) {
         // 在转时中间已经写着「转文字…」,底下不再重复
         if (converting) return@Column
         val foot = when {
+            talk.gestureLost -> stringResource(R.string.capsule_voice_foot_lost)
             !talk.byTouch -> stringResource(R.string.capsule_voice_foot_a11y)
             cancel -> stringResource(R.string.capsule_voice_foot_cancel)
             edit -> stringResource(R.string.capsule_voice_foot_edit)

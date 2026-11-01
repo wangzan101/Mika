@@ -54,6 +54,8 @@
     <string name="turn_on_go">Turn on</string>
     <string name="banner_a11y_not_running">Accessibility service isn’t running</string>
     <string name="banner_a11y_not_running_detail">Turn it off and on again</string>
+    <string name="banner_a11y_locked">Phone is locked, so the accessibility service isn’t running</string>
+    <string name="banner_a11y_locked_detail">It comes back by itself once you unlock, no settings to change</string>
     <string name="banner_no_model">No usable model yet</string>
     <string name="banner_no_model_detail">Add a model that supports tool calling</string>
     <string name="add">Add</string>

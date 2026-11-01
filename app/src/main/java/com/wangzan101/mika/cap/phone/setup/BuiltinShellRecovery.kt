@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.NonCancellable
+import android.app.KeyguardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.database.ContentObserver
@@ -69,7 +70,12 @@ class BuiltinShellRecovery(
         restart = { gap -> if (canWriteSecure()) restartDirectly(gap) else permissions.restartAccessibility(gap) },
         consent = { settings.consent.value },
         direct = ::canWriteSecure,
+        locked = ::deviceLocked,
     )
+
+    /** 锁屏(含重启后还没首次解锁)时无障碍服务绑不上是正常现象,不要拿它当故障去改系统设置。 */
+    private fun deviceLocked(): Boolean =
+        runCatching { app.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked }.getOrNull() == true
 
     private fun canWriteSecure() =
         app.checkSelfPermission(PermissionCommands.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
@@ -89,7 +95,9 @@ class BuiltinShellRecovery(
                 write(AccessibilityList.without(current, me))
                 withContext(NonCancellable) {
                     delay(gapMs)
-                    write(AccessibilityList.with(read(), me))
+                    // 写回失败时按原样恢复,别把 Mika 留在「被删掉」的状态
+                    runCatching { write(AccessibilityList.with(read(), me)) }
+                        .onFailure { runCatching { Settings.Secure.putString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, current) } }
                 }
             } else {
                 write(AccessibilityList.with(current, me))

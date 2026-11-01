@@ -28,6 +28,7 @@ class AccessibilityRepairTest {
         val connectAfterMs: Long = 500,
         val result: PermissionResult = PermissionResult.Done,
         var direct: Boolean = false,
+        var locked: Boolean = false,
     ) {
         val service = MutableStateFlow(initial)
         val helper = MutableStateFlow(helperStatus)
@@ -44,6 +45,7 @@ class AccessibilityRepairTest {
             },
             consent = { consent },
             direct = { direct },
+            locked = { locked },
             now = { scope.currentTime },
         )
 
@@ -52,6 +54,16 @@ class AccessibilityRepairTest {
             s.backgroundScope.launch { repair.watch(service, helper) }
             s.runCurrent()
         }
+    }
+
+    @Test
+    fun noRepairWhileDeviceIsLocked() = runTest {
+        // 锁屏(含重启后还没首次解锁)时服务绑不上是正常现象:这时绝不改系统里的无障碍列表
+        val rig = Rig().also { it.locked = true; it.start(this) }
+        advanceTimeBy(AccessibilityRepair.WORST_CASE_MS * 2)
+        assertEquals(emptyList<Long>(), rig.restarts)
+        assertNull(rig.repair.last.value)
+        assertEquals(RepairPhase.Idle, rig.repair.phase.value)
     }
 
     @Test

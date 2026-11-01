@@ -52,6 +52,8 @@
     <string name="turn_on_go">去開啟</string>
     <string name="banner_a11y_not_running">無障礙服務沒有執行</string>
     <string name="banner_a11y_not_running_detail">需要關掉再開啟一次</string>
+    <string name="banner_a11y_locked">手機鎖著，無障礙服務沒在執行</string>
+    <string name="banner_a11y_locked_detail">解鎖手機後會自己恢復，不用改設定</string>
     <string name="banner_no_model">還沒有能用的模型</string>
     <string name="banner_no_model_detail">新增一個支援工具呼叫的模型</string>
     <string name="add">新增</string>

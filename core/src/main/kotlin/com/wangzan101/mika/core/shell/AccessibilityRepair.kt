@@ -39,6 +39,8 @@ data class RepairOutcome(val restarted: Boolean, val atMillis: Long, val attempt
  * 只看两路状态:服务([A11yObservation])和内置助手;任一变化都重新判断,不轮询。
  *
  * - 只要没在运行就修;只有用户在 Mika 里关掉了「替我打开无障碍」才不管。
+ * - 手机锁着(含重启后还没首次解锁)时服务本来就绑不上:这时不修,等解锁后再说。某些系统(小米 HyperOS)
+ *   对「去掉再加回」不重新绑定,锁屏时去修只会把系统列表改坏,反而让服务再也起不来。
  * - 刚卡住时先等 [GRACE_MS]:进程刚起来时系统通常马上会连上,不必动手。
  * - 每次卡住最多试 [MAX_ATTEMPTS] 次,间隔逐次拉长;还是没连上就停下,留给界面上手动处理的提示。
  *   服务连上了才算这一次过去,之后再断开重新计数。
@@ -48,6 +50,8 @@ class AccessibilityRepair(
     private val consent: () -> RecoveryConsent,
     /** App 自己就能写系统设置(拿到了修改系统设置的授权)时为 true:这时不用等内置助手。 */
     private val direct: () -> Boolean = { false },
+    /** 手机锁着时为 true:锁着时服务绑不上是正常现象,不要动系统里的无障碍列表。 */
+    private val locked: () -> Boolean = { false },
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val _last = MutableStateFlow<RepairOutcome?>(null)
@@ -80,7 +84,7 @@ class AccessibilityRepair(
     }
 
     private fun eligible(s: A11yObservation, h: BuiltinShellStatus) =
-        s.stuck && (direct() || h == BuiltinShellStatus.Running) && consent().wants(RecoveryCapability.Accessibility)
+        s.stuck && !locked() && (direct() || h == BuiltinShellStatus.Running) && consent().wants(RecoveryCapability.Accessibility)
 
     private suspend fun repair(service: StateFlow<A11yObservation>, helper: StateFlow<BuiltinShellStatus>): Result {
         for (attempt in 1..MAX_ATTEMPTS) {

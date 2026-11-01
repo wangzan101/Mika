@@ -212,7 +212,9 @@ class RecoveryPermissions(
             withContext(NonCancellable) {
                 delay(gapMs)
                 val now = shell.exec(PermissionCommands.READ_ACCESSIBILITY)
-                runAll(shell, PermissionCommands.writeAccessibility(AccessibilityList.with(now, me)))
+                val back = runAll(shell, PermissionCommands.writeAccessibility(AccessibilityList.with(now, me)))
+                // 加回失败时按原样写回:宁可回到「有却没绑定」,也不要让 Mika 从列表里消失
+                if (back != PermissionResult.Done) runAll(shell, PermissionCommands.writeAccessibility(current)) else back
             }
         } catch (e: CancellationException) {
             throw e

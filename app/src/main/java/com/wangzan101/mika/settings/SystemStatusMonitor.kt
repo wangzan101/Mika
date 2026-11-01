@@ -1,6 +1,7 @@
 package com.wangzan101.mika.settings
 
 import android.app.AppOpsManager
+import android.app.KeyguardManager
 import android.app.NotificationManager
 import com.wangzan101.mika.task.TaskService
 import android.content.ComponentName
@@ -72,6 +73,7 @@ class SystemStatusMonitor(context: Context, private val shell: BuiltinShellContr
         sdkInt = Build.VERSION.SDK_INT,
         builtinShell = shell.status.value,
         accessibility = accessibilityState(),
+        deviceLocked = deviceLocked(),
         notificationsAllowed = app.getSystemService(NotificationManager::class.java).areNotificationsEnabled(),
         attentionLowered = channelLowered(TaskService.CHANNEL_ATTENTION),
         resultLowered = channelLowered(TaskService.CHANNEL_RESULT),
@@ -114,4 +116,8 @@ class SystemStatusMonitor(context: Context, private val shell: BuiltinShellContr
         val me = ComponentName(app, MikaAccessibilityService::class.java)
         return if (me in enabled) AccessibilityState.EnabledNotRunning else AccessibilityState.Off
     }
+
+    /** 锁屏(含重启后还没首次解锁)时无障碍服务绑不上,这是系统行为,不是故障。 */
+    private fun deviceLocked(): Boolean =
+        runCatching { app.getSystemService(KeyguardManager::class.java)?.isKeyguardLocked }.getOrNull() == true
 }

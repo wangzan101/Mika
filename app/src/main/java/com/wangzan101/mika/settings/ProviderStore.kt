@@ -84,6 +84,15 @@ data class ProviderConfig(
     enum class Kind {
         OpenAiCompat, Anthropic, Gemini, OpenAiResponses, ChatGpt, Xai;
 
+        /** 这个接口类型发请求走哪种协议。用它筛掉接口写明了不支持的模型,见 [com.wangzan101.mika.ui.ModelSetupViewModel] 的试调用。 */
+        val protocol: ModelProtocol
+            get() = when (this) {
+                OpenAiCompat, ChatGpt -> ModelProtocol.ChatCompletions
+                Anthropic -> ModelProtocol.Messages
+                Gemini -> ModelProtocol.GenerateContent
+                OpenAiResponses, Xai -> ModelProtocol.Responses
+            }
+
         companion object {
             /** 模型单独指定的协议用哪种接口类型的适配器。 */
             fun of(protocol: ModelProtocol): Kind = when (protocol) {
@@ -881,6 +890,7 @@ class ProviderStore(
                                             }
                                         }
                                         if (m.unsupportedApis.isNotEmpty()) putJsonArray("unsupportedApis") { m.unsupportedApis.forEach { add(it) } }
+                                        m.protocols?.takeIf { it.isNotEmpty() }?.let { ps -> putJsonArray("protocols") { ps.forEach { add(it.wire) } } }
                                     }
                                 }
                             }

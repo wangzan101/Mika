@@ -530,7 +530,18 @@ class ModelSetupViewModel(
         }
         val base = (ProviderPresets.forBaseUrl(baseUrl) ?: ProviderPresets.custom).capabilities
         val options = ModelOptions.merge(models, base)
-        val order = ModelOptions.candidates(options, f.familyTokens).ifEmpty { listOfNotNull(options.firstOrNull()?.id) }
+        // 接口写明了模型能走哪几种协议时,只试这个接口类型能走的:用不匹配的协议调用必然失败(如聚合服务把只支持
+        // /messages 的模型排在前面,而当前接口是 OpenAI 兼容),三个都撞墙就是白白干等 PROBE_TIMEOUT_MS × 3 分钟
+        val mismatched = mutableListOf<String>()
+        val usable = ModelOptions.candidates(options, f.familyTokens).filter { m ->
+            val protocols = models.firstOrNull { it.id == m }?.protocols
+            if (protocols != null && f.kind.protocol !in protocols) { mismatched += m; false } else true
+        }
+        if (usable.isEmpty() && mismatched.isNotEmpty()) {
+            val reason = tr(R.string.model_reason_wrong_protocol)
+            return ListProbe.Done(null, mismatched.take(PROBE_CANDIDATES).map { Rejected(it, reason, notAvailable = false) })
+        }
+        val order = usable.ifEmpty { listOfNotNull(options.firstOrNull()?.id) }
         val rejected = mutableListOf<Rejected>()
         var firstServerError: String? = null
         for ((i, model) in order.take(PROBE_CANDIDATES).withIndex()) {

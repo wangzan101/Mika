@@ -153,6 +153,28 @@ fun nextCalendarAt(time: String, zone: String, days: List<Int>, afterMs: Long): 
     error("calendar schedule has no matching day")
 }
 
+/** 编辑/创建时预览:按计划自身的时区与重复规则,给出 [afterMs] 之后的 [count] 次触发时间,供界面展示。 */
+fun upcoming(def: TriggerDefinition, afterMs: Long, count: Int): List<Long> {
+    val out = ArrayList<Long>(count)
+    when {
+        def.calendarTime != null -> {
+            var cursor = afterMs
+            repeat(count) {
+                val at = nextCalendarAt(def.calendarTime, def.calendarZone!!, def.calendarDays, cursor)
+                out += at
+                cursor = at
+            }
+        }
+        def.intervalMs != null && def.intervalMs > 0 -> {
+            var t = def.nextAtMs
+            if (t <= afterMs) t += (afterMs - t) / def.intervalMs * def.intervalMs + def.intervalMs
+            repeat(count) { out += t; t += def.intervalMs }
+        }
+        else -> out += def.nextAtMs
+    }
+    return out
+}
+
 /** 排期由宿主实现；核心负责先记账再派发，异常重启时不会重复执行已认领的时段。 */
 class TriggerEngine(private val store: TriggerStore, private val scheduleAlarm: (Long?) -> Unit,
     private val isIdle: () -> Boolean = { true }, private val idleRetryMs: Long = 60_000L,

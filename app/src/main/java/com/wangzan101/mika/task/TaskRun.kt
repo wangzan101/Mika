@@ -632,7 +632,11 @@ class TaskRun(
             // 用户本次说的话:记忆的引文、按用户要求写下技能的引文都据此核对(只在内存里,任务开始清空)
             val utterances = UserUtterances()
             // 改名前沉淀的个人技能:里面的旧工具名载入时换成现在的
-            val catalog = GuideCatalog.withPersonal(skills, memoryRuntime.skills(), legacyNames()::rewrite)
+            // 插件技能取任务开始时的快照:任务中途启停插件,下一次任务才生效
+            val catalog = GuideCatalog.withPersonal(
+                skills, memoryRuntime.skills(), legacyNames()::rewrite,
+                plugins = (service.application as MikaApp).plugins.skillsSnapshot(),
+            )
             // 内置浏览器:每个任务自己的后台网页显示、标签池和脚本引擎,第一次打开网址时才建(只用手机的任务不建);
             // 系统里没有 WebView 时不提供网页工具
             val webInstalled = runCatching { WebViewCompat.getCurrentWebViewPackage(service) != null }.getOrDefault(false)
@@ -706,6 +710,14 @@ class TaskRun(
                 store = (service.application as MikaApp).childRuns,
                 ownerAlive = { job?.isActive == true },
             ).also { children = it } else null
+            // 主任务带启用插件的工具;子任务不带(v1),评测任务也不带(避免本机插件影响评测结果)
+            val pluginServers = if (env.evalHooks.autoAnswer == null && env.evalHooks.autoDecideConfirmation == null) {
+                (service.application as MikaApp).plugins.enabledConnections(
+                    com.wangzan101.mika.plugin.AndroidPluginScriptRunner(service, sandbox),
+                ) { sandbox.networkAllowed() }
+            } else {
+                emptyList()
+            }
             val tools = toolDispatcher(accessedPhone, model.capabilities.vision, catalog, recordFrames = true, vision = vision?.let { VisionService(it, BitmapImageOps) },
                 // 设置里允许 Mika 改自己时,才把 settings_list、settings_set 发给模型
                 selfConfig = if (FeatureFlags.get(service).selfConfig()) {
@@ -732,6 +744,7 @@ class TaskRun(
                 onSandboxPreparing = { sandboxNote(StatusCopy.RUNTIME_PREPARING) },
                 onSandboxScript = { sandboxNote(StatusCopy.sandboxScript(sandboxOnline())) },
                 imageOps = BitmapImageOps, runSpec = runSpec,
+                mcpServers = pluginServers,
                 userScreens = userScreens,
                 scheduleTrigger = if (provenance.origin == RunOrigin.Ui) { trigger -> TriggerRuntime.schedule(service, trigger) } else null,
                 scheduleAdmin = if (provenance.origin == RunOrigin.Ui) LocalScheduleAdmin(service) else null,

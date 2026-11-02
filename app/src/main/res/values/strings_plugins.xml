@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="plugins_title">Plugins</string>
+    <string name="plugins_install">Install plugin</string>
+    <string name="plugins_installing">Installing…</string>
+    <string name="plugins_empty">No plugins yet</string>
+    <string name="plugins_empty_sub">Install a plugin zip to add skills Mika can read. A plugin cannot change app settings or read your other data.</string>
+    <string name="plugins_enabled">Enabled</string>
+    <string name="plugins_disabled">Disabled</string>
+    <string name="plugins_skills">Skills</string>
+    <string name="plugins_no_skills">No skills</string>
+    <string name="plugins_tools">Tools</string>
+    <string name="plugins_no_tools">No tools</string>
+    <string name="plugins_open_page">Open page</string>
+    <string name="plugins_page_failed">This page could not be opened.</string>
+    <string name="plugins_tool_meta">%1$s · %2$ds</string>
+    <string name="plugins_risk_write">Changes data</string>
+    <string name="plugins_risk_external">External</string>
+    <string name="plugins_permissions">Permissions</string>
+    <string name="plugins_permission_sandbox_run">Run its own scripts</string>
+    <string name="plugins_permission_workspace_own">Read and write its own workspace</string>
+    <string name="plugins_permission_network">Use the network</string>
+    <string name="plugins_permission_settings_plugin">Save its own settings</string>
+    <string name="plugins_permission_page">Provide a settings page</string>
+    <string name="plugins_none">None</string>
+    <string name="plugins_version">Version %1$s</string>
+    <string name="plugins_uninstall">Uninstall</string>
+    <string name="plugins_uninstall_body">Remove this plugin and its skills? Conversations and memories are not affected.</string>
+    <string name="plugins_install_failed">Installation failed: %1$s</string>
+    <string name="plugins_confirm_install">Install %1$s %2$s?</string>
+    <string name="plugins_confirm_update">Update %1$s to %2$s?</string>
+    <string name="plugins_confirm_update_button">Update</string>
+    <string name="plugins_confirm_permissions">Permissions: %1$s</string>
+    <string name="plugins_confirm_tools">Tools: %1$d</string>
+    <string name="plugins_confirm_pages">Pages: %1$d</string>
+    <string name="plugins_confirm_new_permissions">New permissions: %1$s</string>
+    <string name="plugins_clear_logs">Clear logs</string>
+    <string name="plugins_logs_cleared">Logs cleared</string>
+    <string name="plugins_error_downgrade">This version is older than the installed one.</string>
+    <string name="plugins_unsupported_in_version">This plugin uses a feature this version does not support.</string>
+    <string name="plugins_error_too_new">This plugin needs a newer version of Mika.</string>
+    <string name="plugins_error_unsafe">The package contains an unsafe path and was rejected.</string>
+    <string name="plugins_error_too_large">The package is too large.</string>
+    <string name="plugins_error_missing_manifest">The package has no manifest.json at its root.</string>
+    <string name="plugins_error_invalid">The package is not a valid plugin.</string>
+    <plurals name="plugins_skill_count">
+        <item quantity="one">%1$d skill</item>
+        <item quantity="other">%1$d skills</item>
+    </plurals>
+    <plurals name="plugins_count">
+        <item quantity="one">%1$d plugin</item>
+        <item quantity="other">%1$d plugins</item>
+    </plurals>
+</resources>

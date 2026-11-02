@@ -119,6 +119,7 @@ class ShellService(
                 DisplayOrientationWatch(taskManager, ::syncDisplayOrientations)
             }.onSuccess { orientationWatch = it }.onFailure { Log.w(TAG, "display orientation watcher unavailable", it) }
         }
+        setFullscreenWindowingMode(id)
         setImePolicy(id)
         if (DisplayAwake.needed(flags, FLAG_OWN_DISPLAY_GROUP, displayGroup(id))) awake.start(id)
         return id
@@ -1349,6 +1350,25 @@ class ShellService(
     override fun destroy() {
         releaseAll()
         exitProcess(0)
+    }
+
+    /**
+     * 只设置刚建好的 Mika 屏,不改主屏。有的系统会把新建的外接/虚拟屏默认设成 freeform,
+     * App 因此缩成小窗,无障碍坐标还会受窗口缩放影响。建屏后、启动任何页面前明确使用全屏模式,
+     * 后续的 App 启动、页面跳转和从主屏挪回来的任务都沿用这块屏的策略。
+     */
+    @SuppressLint("PrivateApi")
+    private fun setFullscreenWindowingMode(displayId: Int) {
+        runCatching {
+            val wm = Class.forName("android.view.WindowManagerGlobal").getMethod("getWindowManagerService").invoke(null)!!
+            // WindowConfiguration.WINDOWING_MODE_FULLSCREEN = 1 (隐藏常量)
+            wm.javaClass.getMethod("setWindowingMode", Int::class.java, Int::class.java).invoke(wm, displayId, 1)
+        }.onFailure {
+            Log.w(TAG, "setWindowingMode failed, falling back to wm", it)
+            if (exec("wm", "set-display-windowing-mode", "-d", "$displayId", "1") != 0) {
+                Log.w(TAG, "could not set fullscreen windowing mode on display $displayId")
+            }
+        }
     }
 
     /** IWindowManager.setDisplayImePolicy:输入法不弹到用户的主屏。选哪种策略见 IME_POLICY。 */

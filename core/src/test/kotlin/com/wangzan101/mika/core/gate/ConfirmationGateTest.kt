@@ -35,6 +35,33 @@ class ConfirmationGateTest {
         assertTrue(approved(req(IrrevAction.send, "com.a")).permits(hit(IrrevAction.send), null, 2) is Permit.Mismatch)
     }
 
+    // 职位详情上的薪资区间不是应付金额:同意联系之后,不拿区间前一个数去对带「元」的后一个数,也不因此作废同意。
+    @Test fun contactApprovalDoesNotMismatchASalaryRange() {
+        val page = ScreenSnapshot("s", "com.jobs.example", listOf(
+            el("示例岗位", top = 200), el("150-200元/天", top = 280), el("立即沟通", top = 900),
+        ), 1080, 2400)
+        fun ask(amount: String?) = ConfirmationRequest(IrrevAction.submit, "示例岗位", "发起沟通", amount, "com.jobs.example")
+        val hit = Irreversible(IrrevAction.submit, "立即沟通")
+        assertEquals(Permit.Allowed, approved(ask("150-200元/天")).permits(hit, page, 2))
+        // 只填了区间里的前一个数,或屏上带币种的那一个:都不再把同意作废
+        assertEquals(Permit.Allowed, approved(ask("150")).permits(hit, page, 2))
+        assertEquals(Permit.Allowed, approved(ask("200元")).permits(hit, page, 2))
+        assertTrue(approved(ask("150-200元/天").copy(target = "另一个岗位")).permits(hit, page, 2) is Permit.Mismatch)
+    }
+
+    // 申报写成区间时和屏上同一个区间比;有合计时仍只认合计,不能拿薪资区间蒙混过去
+    @Test fun declaredRangeMatchesTheRangeOnScreenButNotADifferentTotal() {
+        val rangeOnly = ScreenSnapshot("s", "com.a", listOf(el("耳机", top = 100), el("150-200元", top = 400), el("提交订单", top = 900)), 1080, 2400)
+        val ranged = ConfirmationRequest(IrrevAction.order, "耳机", "买一副耳机", "150-200元", "com.a")
+        assertEquals(Permit.Allowed, approved(ranged).permits(Irreversible(IrrevAction.order, "提交订单"), rangeOnly, 2))
+        assertTrue(approved(ranged.copy(amount = "150")).permits(Irreversible(IrrevAction.order, "提交订单"), rangeOnly, 2) is Permit.Mismatch)
+        val totaled = ScreenSnapshot("s", "com.a", listOf(
+            el("耳机", top = 100), el("150-200元", top = 200), el("合计 ¥25", top = 800), el("提交订单", top = 900),
+        ), 1080, 2400)
+        assertTrue(approved(ranged).permits(hit(IrrevAction.order), totaled, 2) is Permit.Mismatch)
+        assertEquals(Permit.Allowed, approved(order("¥25")).permits(hit(IrrevAction.order), totaled, 2))
+    }
+
     // 联系、投申请的按钮按提交核对:对象(职位、公司)在屏上任何地方都行,没有要核的输入框文字
     @Test fun contactButtonApprovalChecksTargetOnScreen() {
         val page = ScreenSnapshot("s", "www.jobs.example", listOf(el("产品经理 · 某公司", top = 400), el("¥25", top = 430), el("立即沟通", top = 460)), 1080, 2400)

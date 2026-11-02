@@ -46,6 +46,13 @@ private fun chatPage(title: String = "张三") = listOf(
     el("@e7", "button", "删除", listOf(800, 500, 990, 560)),
 )
 
+/** 职位详情:岗位名、薪资区间、联系按钮。区间是待遇,不是要付的钱。 */
+private fun jobPage(vararg extra: UiElement) = listOf(
+    el("@e1", "text", "示例岗位", listOf(0, 80, 999, 160)),
+    el("@e2", "text", "150-200元/天", listOf(0, 180, 999, 240)),
+    el("@e3", "button", "立即沟通", listOf(600, 900, 990, 990)),
+) + extra
+
 /** 结算页:店名、合计金额和「提交订单」「立即支付」。 */
 private val checkoutPage = listOf(
     el("@e1", "text", "耳机店", listOf(0, 0, 999, 80)),
@@ -126,6 +133,42 @@ class PaymentOnlyAskTest {
         loop(m, s).run("t")
         assertEquals(listOf("@e7", "@e4", "@e6"), s.taps)
         assertEquals(listOf("x"), s.typed)
+    }
+
+    @Test fun contactOnASalaryRangeRunsWithoutAsking() = runTest {
+        val s = Chat(app = "com.jobs.example", page = jobPage()); val sink = Events()
+        val m = FakeModel(OBSERVE, tap("@e3"), FINISH)
+        loop(m, s, sink = sink).run("t")
+        assertEquals(listOf("@e3"), s.taps)
+        assertEquals(null, m.result(2)["error"])
+        val audit = sink.all.filterIsInstance<RunEvent.Approval>().single()
+        assertEquals(listOf("submit", "false", "allowed"), listOf(audit.action, audit.payment.toString(), audit.decision))
+        assertTrue(sink.all.none { it is RunEvent.Confirmation })
+    }
+
+    @Test fun allowingContactDoesNotMismatchTheSalaryRange() = runTest {
+        val s = Chat(app = "com.jobs.example", page = jobPage())
+        // 模型仍把薪资区间填进金额(只取前一个数,或整段):同意之后要点得下去,不能再报对不上
+        val ask = tools(call("request_confirmation", """{"action":"submit","target":"示例岗位","content":"发起沟通","amount":"150","app":"com.jobs.example"}"""))
+        val m = FakeModel(OBSERVE, ask, tap("@e3"), FINISH)
+        val l = loop(m, s)
+        val run = async { l.run("t") }
+        advanceUntilIdle()
+        assertTrue(l.state.value is TaskState.WaitingConfirmation)
+        l.answerConfirmation(ConfirmChoice.Once)
+        run.await()
+        assertEquals(listOf("@e3"), s.taps)
+        assertEquals("true", m.result(2).s("approved"))
+        assertEquals(null, m.result(3)["error"])
+        assertTrue("confirmation_mismatch" !in m.result(3).toString())
+    }
+
+    @Test fun contactBesideARealTotalStillAsks() = runTest {
+        val s = Chat(app = "com.jobs.example", page = jobPage(el("@e4", "text", "合计 ¥25", listOf(0, 800, 700, 860))))
+        val m = FakeModel(OBSERVE, tap("@e3"), GIVE_UP)
+        loop(m, s).run("t")
+        assertTrue(s.taps.isEmpty())
+        assertEquals("confirmation_required", m.result(2).s("error"))
     }
 
     @Test fun placingAnOrderAsksFirst() = runTest {

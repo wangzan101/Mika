@@ -328,6 +328,9 @@ object IrreversibleDetector {
         return null
     }
 
+    /** 按钮名是联系别人、投申请(见 [CONTACT_WORDS]、[APPLY_WORDS]),点下去不是付款。 */
+    fun isContactLabel(name: String) = contacts(Hant.fold(name))
+
     /** 名字是联系别人、投申请的按钮(见 [CONTACT_WORDS])。 */
     private fun contacts(raw: String): Boolean {
         val n = raw.filterNot(Char::isWhitespace).lowercase().trimEnd { !it.isLetterOrDigit() }

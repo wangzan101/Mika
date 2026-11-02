@@ -54,4 +54,24 @@ class ClassifiedRiskTest {
     @Test fun coordinateTapsUseTheSmallestElementThere() {
         assertEquals("修改密码", ClassifiedRisk.target(verb("phone_tap"), buildJsonObject { put("x", 500); put("y", 250) }, screen)?.name)
     }
+
+    // 职位详情上的薪资区间、按天/月计的「元」是待遇,不是要付的钱:联系、投申请不因此变成付款。
+    @Test fun salaryOnAJobPageDoesNotMakeContactAPayment() {
+        fun job(vararg lines: String) = screen.copy(elements = screen.elements + lines.mapIndexed { i, n ->
+            el("@s$i", "TextView", n, listOf(0, 700 + i * 50, 999, 740 + i * 50))
+        })
+        val range = job("150-200元/天")
+        assertEquals(Risk(ActionRisk.External, payment = false), assess("phone_tap", Irreversible(IrrevAction.submit, "立即沟通"), on = range))
+        assertEquals(false, assess("phone_tap", Irreversible(IrrevAction.submit, "立即申请"), on = job("8000-12000元/月")).payment)
+        assertEquals(false, assess("phone_tap", Irreversible(IrrevAction.submit, "投递简历"), on = job("200元/天")).payment)
+        assertEquals(false, assess("phone_tap", Irreversible(IrrevAction.submit, "Easy Apply"), on = job("¥150-200/天")).payment)
+        assertEquals(false, assess("phone_tap", Irreversible(IrrevAction.submit, "立即沟通"), on = job("¥150-200")).payment)
+        // 旁边另有应付金额时仍要问;普通提交、下单、付款不因这是薪资说法就放过
+        assertEquals(true, assess("phone_tap", Irreversible(IrrevAction.submit, "立即沟通"), on = job("150-200元/天", "合计 ¥25")).payment)
+        assertEquals(true, assess("phone_tap", Irreversible(IrrevAction.submit, "提交"), on = range).payment)
+        assertEquals(true, assess("phone_tap", Irreversible(IrrevAction.submit, "提交"), on = job("30元/月")).payment)
+        assertEquals(Risk(ActionRisk.Irreversible, payment = true), assess("phone_tap", Irreversible(IrrevAction.order, "提交订单"), on = range))
+        assertEquals(Risk(ActionRisk.Irreversible, payment = true), assess("phone_tap", Irreversible(IrrevAction.order, "立即购买"), on = range))
+        assertEquals(Risk(ActionRisk.Irreversible, payment = true), assess("phone_tap", Irreversible(IrrevAction.pay, "立即支付"), on = range))
+    }
 }

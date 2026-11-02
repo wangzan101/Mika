@@ -2,6 +2,8 @@ package com.wangzan101.mika.core.action
 
 import com.wangzan101.mika.core.risk.IrrevAction
 import com.wangzan101.mika.core.gate.Irreversible
+import com.wangzan101.mika.core.gate.IrreversibleDetector
+import com.wangzan101.mika.core.uistate.Hant
 import com.wangzan101.mika.core.uistate.ScreenSnapshot
 import com.wangzan101.mika.core.uistate.UiElement
 import kotlinx.serialization.json.JsonObject
@@ -28,6 +30,18 @@ object ClassifiedRisk : RiskJudge {
     /** 屏上带币种(¥、元、$)的金额:这时提交、删除一类的动作按花钱算(结算页上的「确认」「去支付」);发消息不花钱,不算。 */
     private val AMOUNT = Regex("[¥￥$＄]\\s*\\d|\\d+(\\.\\d+)?\\s*元")
 
+    /**
+     * 职位待遇,不是要付的钱:薪资区间(150-200元、¥150-200),或带计薪单位(元/天、元/月、元/小时)。
+     * 只在联系、投申请的按钮上从应付金额里剔除;「提交」旁边的「30元/月」仍算花钱。
+     */
+    private val WAGE_UNIT = "天|日|月|年|周|週|小时|小時|时|時|单|單"
+    private val SALARY = Regex(
+        "[¥￥$＄]\\s*\\d+(?:\\.\\d+)?(?:\\s*[-~～－—至到]\\s*[¥￥$＄]?\\s*\\d+(?:\\.\\d+)?)?(?:\\s*元)?\\s*(?:/|／|每)\\s*(?:$WAGE_UNIT)" +
+            "|[¥￥$＄]\\s*\\d+(?:\\.\\d+)?\\s*[-~～－—至到]\\s*[¥￥$＄]?\\s*\\d+(?:\\.\\d+)?" +
+            "|\\d+(?:\\.\\d+)?\\s*[-~～－—至到]\\s*\\d+(?:\\.\\d+)?\\s*元(?:\\s*(?:/|／|每)\\s*(?:$WAGE_UNIT))?" +
+            "|\\d+(?:\\.\\d+)?\\s*元\\s*(?:/|／|每)\\s*(?:$WAGE_UNIT)",
+    )
+
     override fun assess(verb: Verb?, hit: Irreversible?, screen: () -> ScreenSnapshot?): Risk {
         val level = when (hit?.action) {
             null -> if (verb in CHANGE_VERBS) ActionRisk.Change else ActionRisk.Read
@@ -37,8 +51,20 @@ object ClassifiedRisk : RiskJudge {
         }
         if (hit == null) return Risk(level)
         val payment = hit.action == IrrevAction.pay || hit.action == IrrevAction.order ||
-            hit.action != IrrevAction.send && screen()?.elements?.any { !it.editable && AMOUNT.containsMatchIn(it.name) } == true
+            hit.action != IrrevAction.send && payable(hit, screen)
         return Risk(level, payment)
+    }
+
+    /** 联系、投申请只因薪资说法不算花钱;屏上另有应付金额(合计、单价)时仍算。其余动作见到带币种的数就算。 */
+    private fun payable(hit: Irreversible, screen: () -> ScreenSnapshot?): Boolean {
+        val elements = screen()?.elements ?: return false
+        val contact = IrreversibleDetector.isContactLabel(hit.matched)
+        return elements.any { !it.editable && amountDue(it.name, contact) }
+    }
+
+    private fun amountDue(name: String, contact: Boolean): Boolean {
+        if (!contact) return AMOUNT.containsMatchIn(name)
+        return AMOUNT.containsMatchIn(SALARY.replace(Hant.fold(name), " "))
     }
 
     /** 动作落在哪个元素上:带编号的按编号找,打字落在有焦点的输入框,坐标点击取包含该点的最小元素。 */

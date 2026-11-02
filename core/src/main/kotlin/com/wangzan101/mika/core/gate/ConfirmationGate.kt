@@ -33,7 +33,7 @@ sealed interface Permit {
 /**
  * 用户对一次要花钱的操作的同意(询问时只有付款要问):只放行紧接着的那一个匹配操作。
  * 同意绑定申报内容:同一前台 App、同类动作、对象出现在屏上(发送时在标题栏),发送时要发的字与申报相等,
- * 申报的金额在屏上;
+ * 申报的金额在屏上(联系、投申请不核金额:职位上的薪资不是要付的数,对不上会把同意作废后再问);
  * 下一次命中的不可逆操作无论对不对得上都用掉它。中间做了打字以外的写操作(包括返回、打开 App)、
  * 或过了 [MAX_STEPS] 步,同意作废。只能同意这一次;只在一次任务内有效,任务开始和结束时 [reset]。
  * 任务循环和界面回答可能在不同线程,读写都加锁。
@@ -85,7 +85,7 @@ class ConfirmationGate {
             screen?.packageName == null || screen.packageName != r.app -> "approved in ${r.app} but the screen shows ${screen?.packageName ?: "unknown"}"
             !targetShown(r, screen) && !(textless(screen) && seenShows(r, seen)) -> "the target \"${r.target}\" is not shown " + (if (r.action == IrrevAction.send) "in the title area" else "on the screen")
             r.action == IrrevAction.send && !contentMatches(r.content, screen, typing) && !(textless(screen) && seenShows(r, seen)) -> "the text to send is not exactly what was approved"
-            !amountShown(r.amount, screen, hit.matched) -> "the approved amount ${r.amount ?: "(none)"} is not on the screen"
+            amountBinds(hit) && !amountShown(r.amount, screen, hit.matched) -> "the approved amount ${r.amount ?: "(none)"} is not on the screen"
             else -> return Permit.Allowed
         }
         return Permit.Mismatch(reason)
@@ -142,15 +142,22 @@ class ConfirmationGate {
         return s.elements.any { it.editable && !it.hint && same(it.name) }
     }
 
+    /** 联系、投申请不核金额。下单、付款和其余提交仍要和屏上的应付金额对上。 */
+    private fun amountBinds(hit: Irreversible) =
+        !(hit.action == IrrevAction.submit && IrreversibleDetector.isContactLabel(hit.matched))
+
     /**
      * 申报的金额只和屏上带币种(¥/￥、元、$)的数比:「已售25件」「满25减3」不算;输入框和提示语里的不算;
      * 紧挨着优惠、减、抵扣、运费、券、红包、已省(或带负号)的金额不算。
      * 有合计/实付/应付/总计时:可滚动区外的每个合计都要等于申报的金额;都在滚动区里时看离按钮最近的那个;
      * 合计字样在、金额读不出(同一行后面几段拼起来也读不出)时不放行。
      * 没有合计时要等于可滚动区之外最大的那个金额。申报里没有数字不放行。
+     * 申报本身是区间(150-200元)时,只和屏上同一个带币种的区间比,不拿前一个数去对后一个带「元」的数。
      */
     private fun amountShown(amount: String?, s: ScreenSnapshot, button: String): Boolean {
-        val declared = amount?.let { currencyFree(it) }?.let { NUMBER.find(it)?.value }?.toBigDecimalOrNull() ?: return false
+        val raw = amount?.let(::currencyFree) ?: return false
+        if (RANGE.containsMatchIn(raw)) return declaredRangeShown(raw, s)
+        val declared = NUMBER.find(raw)?.value?.toBigDecimalOrNull() ?: return false
         fun same(x: BigDecimal) = x.compareTo(declared) == 0
         val shown = s.elements.filter { !it.editable && !it.hint }
         val scrollables = s.elements.filter { it.scrollable }
@@ -167,6 +174,29 @@ class ConfirmationGate {
         }
         val largest = shown.filter(::outside).flatMap { amounts(it.name) }.maxOrNull() ?: return false
         return same(largest)
+    }
+
+    /**
+     * 申报写成区间时,屏上要有同一个区间,而且带币种;有合计,或另有区间以外的金额,就不算对上。
+     * 不把区间收成前一个数再去比(「150-200元」里带「元」的是 200,收成 150 一定对不上,同意会被作废)。
+     */
+    private fun declaredRangeShown(raw: String, s: ScreenSnapshot): Boolean {
+        val m = RANGE.find(raw) ?: return false
+        val lo = m.groupValues[1].toBigDecimalOrNull() ?: return false
+        val hi = m.groupValues[2].toBigDecimalOrNull() ?: return false
+        val shown = s.elements.filter { !it.editable && !it.hint }
+        if (shown.any { e -> TOTAL_LABELS.any { it in Hant.fold(e.name) } }) return false
+        if (shown.none { sameRange(it.name, lo, hi) }) return false
+        return shown.flatMap { amounts(it.name) }.all { it.compareTo(lo) == 0 || it.compareTo(hi) == 0 }
+    }
+
+    private fun sameRange(name: String, lo: BigDecimal, hi: BigDecimal): Boolean {
+        val t = currencyFree(Hant.fold(name))
+        if (!CURRENCY.containsMatchIn(t)) return false
+        val m = RANGE.find(t) ?: return false
+        val a = m.groupValues[1].toBigDecimalOrNull() ?: return false
+        val b = m.groupValues[2].toBigDecimalOrNull() ?: return false
+        return a.compareTo(lo) == 0 && b.compareTo(hi) == 0
     }
 
     /** 合计标签后面的金额:先看它自己,再把同一行右边的几段按横向顺序拼上去看。 */
@@ -205,6 +235,7 @@ class ConfirmationGate {
         /** 发送对象要在这条线(0–999)以上:屏幕顶部约 15% 的标题栏。 */
         const val TITLE_BAND = 150
         private val NUMBER = Regex("\\d+(\\.\\d+)?")
+        private val RANGE = Regex("(\\d+(?:\\.\\d+)?)\\s*[-~～－—至到]\\s*(\\d+(?:\\.\\d+)?)")
         private val CURRENCY = Regex("[¥￥$＄]\\s*(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*元")
         private val THOUSANDS = Regex("(?<=\\d),(?=\\d{3}(?!\\d))")
         private val TOTAL_LABELS = IrreversibleDetector.TOTAL_LABELS

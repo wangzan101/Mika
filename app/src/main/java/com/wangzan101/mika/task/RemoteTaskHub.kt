@@ -10,6 +10,7 @@ import com.wangzan101.mika.core.mcp.McpTaskLink
 import com.wangzan101.mika.core.remote.RemoteTaskService
 import com.wangzan101.mika.core.remote.RemoteTask
 import com.wangzan101.mika.core.remote.RemoteTaskError
+import com.wangzan101.mika.core.remote.RunRecordExport
 import com.wangzan101.mika.core.remote.RemoteSteer
 import com.wangzan101.mika.core.remote.RemoteTasks
 import com.wangzan101.mika.core.remote.StartOutcome
@@ -30,7 +31,7 @@ class RemoteTaskHub(
     private val context: Context,
     private val runs: () -> List<TaskRun> = { (context.applicationContext as com.wangzan101.mika.MikaApp).taskState.runs.value },
     private val clock: () -> Long = System::currentTimeMillis,
-) : McpTaskHost, RemoteTasks {
+) : McpTaskHost, RemoteTasks, RemoteRunIndex {
     private val receipts by lazy { RemoteTaskReceipts(context) }
     private val buses = HashMap<RunId, RunEventBus>()
     // A failed receipt write must not abort the phone's own turn cleanup. Retry on lookup.
@@ -101,6 +102,25 @@ class RemoteTaskHub(
     }
 
     private fun live(id: String): TaskRun? = runs().firstOrNull { it.mcpExternalId == id }
+
+    override fun task(id: String): RemoteTask? = get(id)
+
+    override fun rememberedRunId(taskId: String): String? =
+        receipts.runId(taskId) ?: live(taskId)?.runId?.value
+
+    override fun taskForRun(runId: String): RemoteTask? {
+        val stored = receipts.taskIdForRun(runId)
+        val id = stored ?: runs().firstOrNull { it.runId.value == runId }?.mcpExternalId ?: return null
+        return try { get(id) }
+        catch (e: RemoteTaskError) { if (e.code == RemoteTaskError.Code.GONE) null else throw e }
+    }
+
+    /** 运行记录一打开就记到收件上,进程重启后按任务编号仍能导出。编号不像运行记录的不收;任务已经不在收件里则忽略。 */
+    fun rememberRun(taskId: String, runId: String) {
+        if (!RunRecordExport.RUN_ID.matches(runId)) return
+        try { receipts.rememberRun(taskId, runId) }
+        catch (e: SQLiteException) { Log.w(TAG, "could not remember run id", e) }
+    }
 
     private fun current(task: RemoteTask): RemoteTask {
         unsaved[task.id]?.let { (end, steers) ->

@@ -20,15 +20,19 @@ import com.wangzan101.mika.core.remote.RemoteTaskError
 internal class RemoteTaskReceipts(
     context: Context, name: String = "remote-tasks.db",
     private val clock: () -> Long = System::currentTimeMillis, private val keep: Int = KEEP,
-) : SQLiteOpenHelper(context, name, null, 1) {
+) : SQLiteOpenHelper(context, name, null, 2) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE receipts (
             id TEXT PRIMARY KEY NOT NULL, conversation TEXT, goal TEXT, started INTEGER NOT NULL,
-            new_chat INTEGER NOT NULL, claimed INTEGER NOT NULL DEFAULT 0, result TEXT, steers TEXT)""")
+            new_chat INTEGER NOT NULL, claimed INTEGER NOT NULL DEFAULT 0, result TEXT, steers TEXT,
+            run_id TEXT)""")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) =
-        error("Unknown remote task receipt schema $oldVersion -> $newVersion")
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // 运行记录编号和收件放在一起:任务索引已经跨进程留着,导出按任务编号才找得到那次运行。
+        if (oldVersion == 1 && newVersion >= 2) db.execSQL("ALTER TABLE receipts ADD COLUMN run_id TEXT")
+        if (newVersion != 2 || oldVersion !in 1..2) error("Unknown remote task receipt schema $oldVersion -> $newVersion")
+    }
 
     // MikaApp owns one hub per process. A previous process cannot still be dispatching these tasks.
     init {
@@ -96,8 +100,22 @@ internal class RemoteTaskReceipts(
 
     fun forget(conversation: String) {
         // 留下占用过的编号，迟到的重试不能重新执行已删除的任务；收件时间留着，占位和收尾的记录一样按时间清。
-        writableDatabase.execSQL("UPDATE receipts SET conversation=NULL, goal=NULL, result=NULL, steers=NULL, claimed=0, new_chat=0 WHERE conversation=?",
+        writableDatabase.execSQL("UPDATE receipts SET conversation=NULL, goal=NULL, result=NULL, steers=NULL, claimed=0, new_chat=0, run_id=NULL WHERE conversation=?",
             arrayOf(conversation))
+    }
+
+    fun runId(taskId: String): String? = readableDatabase.rawQuery(
+        "SELECT run_id FROM receipts WHERE id=? AND goal IS NOT NULL", arrayOf(taskId),
+    ).use { if (it.moveToFirst() && !it.isNull(0)) it.getString(0) else null }
+
+    fun taskIdForRun(runId: String): String? = readableDatabase.rawQuery(
+        "SELECT id FROM receipts WHERE run_id=? AND goal IS NOT NULL", arrayOf(runId),
+    ).use { if (it.moveToFirst()) it.getString(0) else null }
+
+    /** 只给还在的任务记下运行编号;对话已删或没有这条收件则不动。 */
+    fun rememberRun(taskId: String, runId: String) {
+        writableDatabase.update("receipts", ContentValues().apply { put("run_id", runId) },
+            "id=? AND goal IS NOT NULL", arrayOf(taskId))
     }
 
     companion object {

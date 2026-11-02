@@ -51,3 +51,15 @@ AI Agent 请直接看 [Agent 快速路径](agent-quickstart.md)。
 - 只装了 Skill 时用 `python3 <技能目录>/mika/scripts/mika_cli.py ui`（Windows 用 `py -3`）。
 - 浏览器没自动打开时加 `--no-open`，把终端打出的链接复制到本机浏览器。
 - 任务台只监听本机 `127.0.0.1` 的随机端口，每次启动生成新的链接；链接里的密钥就是使用权，不要发给别人。终端按 Ctrl+C 关掉任务台，已经交给手机的任务照常运行。
+
+## 导出运行记录
+
+任务卡住、结果不对，或要交给电脑上的另一个工具排障时，用同一套连接把手机上这一轮的脱敏记录拉下来。它和手机里「查看过程」是同一份事件，再过一遍脱敏；默认不带截图文件。
+
+```bash
+mika task export TASK_OR_RUN_ID --json
+```
+
+返回的 JSON 里 `exportFormat` 为 1，并写明 `task_id`、`conversation_id`、`run_id`（和 `task status` 里的 `conversation` 是同一个对话编号）。`partial` 为 true 表示这一轮还在进行，内容是到目前为止的事件。编号不存在时命令会失败并给出明确错误。只要事件、一行一个：`mika task export ID --events`。
+
+任务台里的「查看过程」仍是本页观察到的进度，不是这份完整事件流。在任务台上下载同一份 JSON、附带 OTLP Trace 或截图，留作后续。

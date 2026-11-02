@@ -230,7 +230,7 @@
 - `MiniHttpServer`(`core/remote/HttpServer.kt`):共用的极简 HTTP/1.1 监听。每个连接一个线程,连接数、请求头、正文都有上限,认 Content-Length 和 chunked,连接可以复用。保留路径和查询参数供入口校验;不做 TLS,靠只收私有地址和访问令牌把关。
 - `RemoteAccess`(`core/remote/RemoteAccess.kt`):两个入口共用的门口,顺序固定:带 `Origin` 头的 403;同一地址一分钟内认证失败 5 次封一分钟(429,带 `Retry-After`);`Authorization: Bearer` 令牌按常量时间比较,不对 401。路由与错误格式由适配器决定,未知路径也先过认证。`privateAddress` 判定回环、局域网、私有组网和链路本地地址;连接两端有一端不是私有地址就当场断开。局域网令牌认所有允许的连接,USB 令牌只认回环,两个都比、不短路。认证失败计数跨 API 和 MCP 共用。
 - `RemoteTaskService`(`core/remote/RemoteTaskService.kt`):协议无关的启动、查询、列表、等待、回答与取消用例,集中校验输入和任务状态,返回类型化结果与业务错误;不包含 HTTP、MCP 工具名或 JSON-RPC 信封。`RemoteTasks` / `RemoteTask` / `RemoteStatus` 在 `core/remote/RemoteTasks.kt`;状态只从已有的 `TaskState` 映射,两种入口共用字段和同一个任务索引。等待按状态变化返回(进度说明变了不算),最多 50 秒;索引中的任务消失就报不存在。保留 mcp- 前缀以兼容已有远程对话 ID,与手机本地对话隔离。
-- `RemoteTaskApi`(`core/remote/RemoteTaskApi.kt`):普通 HTTP/JSON 入口 `/api/v1`,提供版本、任务生命周期和只读设备状态,无需 MCP 握手或工具发现。业务错误映射为 HTTP 状态和 code/message;未知字段会被拒绝。详细契约见 [CLI 文档](../cli.md#http-契约)。
+- `RemoteTaskApi`(`core/remote/RemoteTaskApi.kt`):普通 HTTP/JSON 入口 `/api/v1`,提供版本、任务生命周期、只读设备状态,以及按任务编号或运行记录编号导出脱敏运行记录(`GET /tasks/{id}/export`,有记录出口时能力里才有 `run_export`)。无需 MCP 握手或工具发现。业务错误映射为 HTTP 状态和 code/message;未知字段会被拒绝。详细契约见 [CLI 文档](../cli.md#http-契约)。
 - `McpRpc`(`core/mcp/McpRpc.kt`):Streamable HTTP 上的 JSON-RPC,只回单个 JSON、不开 SSE 流(规范允许),GET / DELETE 回 405,不发会话编号,服务端不发请求。两代协议都认:新一代(2026-07-28)每个请求在 `_meta` 里带版本和客户端能力,HTTP 头里的 `MCP-Protocol-Version`、`Mcp-Method`、`Mcp-Name` 要和正文一致(不一致 -32020),不认的版本回 -32022 并列出认的版本,支持 `server/discover`;老一代(2025-03-26 到 2025-11-25)先 `initialize` 握手,选双方都认的版本。工具参数不对、任务找不到是工具执行出错(`isError`),交回给对面的模型看;工具名不认得是协议错误。
 - `McpTaskTools`(`core/mcp/McpTaskTools.kt`):保留原有工具名、schema、MCP 提示文案与返回格式,把参数转为共用服务调用。`mika_run_task` / `mika_task_status` / `mika_wait_task` / `mika_answer` / `mika_cancel_task` / `mika_list_tasks` 均不另存任务状态。付款、确认和手机接管不能被普通回答放行。
 - `RemoteEndpoints`(`core/remote/RemoteEndpoints.kt`):完成传输认证后的共用协议路由,持有 `RemoteTaskService`,把 `/api/v1` 交给普通 API、`/mcp` 交给 MCP,并记录近期活动。它不认证连接,由调用者先完成对应入口的认证。
@@ -248,7 +248,7 @@
 - `McpRuntime`(`app/mcp/McpRuntime.kt`)整个进程一份:有一种开着就起 `McpService`(`app/mcp/McpService.kt`,specialUse 前台服务,常驻一条低优先级通知,上面能直接关掉),服务在才监听;服务每次收到启动都 `sync` 一遍:监听方式变了(局域网开了、关了)就换一个监听,USB 开着就写连接信息;都关了就停服务、关端口。App 启动时写一次 「connect-computer.sh」。
 - `McpService` 对外开放、要求调用方持有 `INTERACT_ACROSS_USERS_FULL`:shell 有,普通 App 拿不到、adb 也授不了(和助手交接的 provider 用的同一道门),所以 `adb shell am start-foreground-service -n <包名>/.mcp.McpService -a com.wangzan101.mika.mcp.USB_ON` 只有电脑经 USB 调试才发得出。用前台服务而不用广播:安卓 12 起后台 App 一般不能自己开前台服务,而 shell 发起的前台服务启动按系统 uid 一类放行;进前台被拒时服务退出,不崩。清单测试(`ManifestProvidersTest`)守着这道权限。任务服务没任务时会自己退出,所以监听不放在 `TaskService` 里。服务被系统回收会重建(START_STICKY);开机时、打开 Mika 的界面时,开关开着却没在跑就补起来。
 - `RemoteTaskHub`(`app/task/RemoteTaskHub.kt`)实现 `RemoteTasks`:`TaskService.startMcp` 开始任务,和对话界面同一条路,CLI 与 MCP 均沿用现有外部任务来源 `RunOrigin.Mcp` 的权限策略(此处是历史名称,不表示 CLI 经过 MCP 协议)、在场情况 `Reachable`(追问照常等,到时限当作没回答;交给用户的一步也有同样的时限,过时没人处理任务就停下)。同一对话里还有任务时排在后面。
-  - 收件记录(`app/task/RemoteTaskReceipts.kt`):App 私有 SQLite 库 `remote-tasks.db` 的 `receipts` 表,一行一个远程任务:编号、对话、原话、收件时间、是否新开对话、是否已被任务服务领取、终态、插话去向。终态和插话去向按 `RemoteTaskRecord`(`app/task/RemoteTaskRecord.kt`)自己的格式存成 JSON,不直接序列化 `TaskState` / `FailKind`:失败类别在盘上有固定的名字(`gave_up`、`interrupted` 等);读不懂的(坏数据、更新版本写的类别)不抛错,类别认不出按 `environment`,整份读不出按一个失败终态返回。回答的证据账本不存。
+  - 收件记录(`app/task/RemoteTaskReceipts.kt`):App 私有 SQLite 库 `remote-tasks.db` 的 `receipts` 表,一行一个远程任务:编号、对话、原话、收件时间、是否新开对话、是否已被任务服务领取、终态、插话去向、运行记录编号。运行记录编号在记录打开时写入(schema 2,旧库补一列),和这条收件一起留到被清掉或对话被删。终态和插话去向按 `RemoteTaskRecord`(`app/task/RemoteTaskRecord.kt`)自己的格式存成 JSON,不直接序列化 `TaskState` / `FailKind`:失败类别在盘上有固定的名字(`gave_up`、`interrupted` 等);读不懂的(坏数据、更新版本写的类别)不抛错,类别认不出按 `environment`,整份读不出按一个失败终态返回。回答的证据账本不存。
   - request_id 去重:电脑可先选一个小写 UUID 作为请求字段 request_id,它就是任务编号。Hub 在同一临界区核对原请求(原话和对话参数都要一样,不一样回 409)、写入收件记录、再发启动 Intent;任务服务只领取还没领取的编号(`claimStart`),所以并发重试、进程重建后才投递的旧 Intent 都只开跑一次。运行进度读 TaskRun,终态先落盘再向电脑返回;写盘失败时先记在内存里,查询时重写,写不上就回 503 让电脑稍后再查。
   - 中断:打开库时(新进程)把还没终态的收件标成失败、类别 `FailKind.Interrupted`;任务服务被销毁时正在跑的远程任务也这样记。`Interrupted` 和 `Environment` 一样:打分算运行环境的事,技能试用记 unreviewed,学东西不当成做不成;给人看的原因用 `task_interrupted`(9 种语言都有)。
   - 删对话:清掉这个对话的远程内容,留下已用过的编号做占位(保留收件时间),迟到的重试回 410,不会重新执行。
@@ -332,6 +332,8 @@
 ## 13. 运行记录
 
 每次运行写一份记录(`app/record/RunStore.kt`):`files/runs/<时间>-<编号>/` 下的 `run.json`、`events.jsonl` 与画面截图,保留最近 30 次。事件类型见 `core/record/RunEvent.kt`(模型回复与用量、工具结果、观察、活动、确认、接管、来源、压缩、结局判定等);写入前由 `Redactor` 遮掉密码框输入和像密钥的字符串。界面上「查看过程」打开时间线(`app/ui/RunTimelineScreen.kt`):顶部是目标、标准、结局、用时,模型调用次数等细节收在「更多详情」里,下面用竖线步骤(`components/StepLine.kt`)逐步列出,点有画面的步骤看当时的画面。任务在跑时对话页的步骤下面就有「运行过程」:编号按卡片所在的对话取(`TaskCenterState.run(对话).runId`,和结束时的 `endedRunIds` 同一个来处,不用服务对外那份显示中的编号);页面顶上结局写「进行中」,每秒重读一次记录、步骤往下长,不自动滚到底;有结束记录或任务已不在(`RunTimelineViewModel` 的 `alive`,进程被杀、记录没写完的那种)就停。
+
+电脑侧用同一份落盘记录排障(`core/remote/RunRecordExport.kt`,`app/task/RemoteRunExport.kt`):`GET /api/v1/tasks/{id}/export`(CLI `mika task export`)按任务编号或运行记录编号导出,头里写 `task_id`、`conversation_id`、`run_id`,`exportFormat` 为 1。导出时字符串再过一遍 `Redactor`。只认电脑交来的任务(还在 `RemoteTaskHub` 的索引里,或概要的 `origin` 为 mcp);手机上发起的运行不导出。进行中、或任务已交但记录还没开,标 `partial`。不读截图文件,也不附带 OTLP Trace。运行记录一打开,`TaskRun` 把编号记到对应的收件上,进程重启后按任务编号仍能导出。
 
 **详细 Trace** 默认关闭。调试版和性能测试版可在「设置 → 开发者选项 → 运行记录」开启，从下一次任务起采集，关闭即停录。四种模型接口的每次主循环请求（含重发）和顶层工具调用各记一个 span。在「查看过程 → 详细 Trace」可对照同一模型相邻请求中首个变化的块，缓存用量未上报与命中为零分开显示。
 

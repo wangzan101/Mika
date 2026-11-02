@@ -64,6 +64,7 @@ mika --device SERIAL task answer TASK_ID --text-file answer.txt --json
 mika --device SERIAL task steer TASK_ID --text "补充一下，只整理今天的消息" --json
 mika --device SERIAL task cancel TASK_ID --json
 mika --device SERIAL task list --limit 10 --json
+mika --device SERIAL task export TASK_OR_RUN_ID --json
 ```
 
 简单文本也可用 `--goal` / `--text`;文件参数为 `-` 时读取标准输入。`run --conversation CONVERSATION_ID` 创建同一远程对话中的下一项任务,`answer` 只回答当前追问。保留现有对话的 mcp- 前缀以兼容已经发出的 ID;这个历史前缀不代表 CLI 走 MCP 协议。
@@ -73,6 +74,8 @@ mika --device SERIAL task list --limit 10 --json
 `steer` 向 `running` 的远程任务追加要求,保留同一个任务 ID 和上下文;也支持 `--text-file`(文件或 `-` 标准输入)。最多 4000 字符。返回 `accepted: true` 与 `message_id` 只表示收件箱已接收;用 `status` 查询 `steers` 中这条消息的 `state`: `received` 为已收到,`joined` 为已加入当前任务上下文,`not_applied` 为结束或取消前未用上。`joined` 不表示要求已经执行成功。正在执行的动作会先做完,追加要求不会撤销已做的事。
 
 排队、暂停、追问、手机接管和终态任务拒绝追加(409);追问用 `answer`,接管/审批在手机上处理。任务结束竞态也不会把追加要求转成新任务。响应丢失时不要重复发送;查询同一任务,没有收到消息编号且无法确认时照实报告不确定。此入口需要 APK 的 `task_steer` 能力;旧 APK 会提示升级,不回退成新任务。
+
+`export` 按任务编号或运行记录编号拉取这一轮已经落盘的脱敏记录(和手机「查看过程」同一份 `run.json` + `events.jsonl`,再过一遍脱敏)。默认一个 JSON 对象,`exportFormat` 为 1,头里写明 `task_id`、`conversation_id`、`run_id`;`events` 是事件数组。`partial` 为 true 表示还在进行,内容是到目前为止的事件。`--events` 改成第一行是头、之后一行一个事件。默认不含截图文件,`media` 事件只留编号和步号。未知编号会失败并说明原因;手机上自己发起的运行拉不到。旧 APK 没有 `run_export` 能力时会提示升级。
 
 `--json` 将成功结果和错误都作为单个 JSON 对象写入 stdout;默认输出缩进 JSON,错误写入 stderr。连接选项和 `--json` 可以写在命令前后。可用 `--request-timeout` 调整 HTTP 超时;等待请求的读取预算至少是任务等待时间加 5 秒。
 
@@ -114,6 +117,7 @@ mika ui --device SERIAL --no-open
 | POST /tasks/ID/answer | text;返回 task_id 与 accepted。 |
 | POST /tasks/ID/steer | text;202 返回 task_id、message_id 与 accepted。只接受 running 任务。 |
 | POST /tasks/ID/cancel | 空对象;接受时 202,终态任务 200,返回 accepted。 |
+| GET /tasks/ID/export | 任务编号或运行记录编号。返回 `exportFormat: 1` 的脱敏记录(头 + `events` 数组);`?events=jsonl` 为 NDJSON。不带截图文件。未知编号 404。 |
 
 业务校验失败为 400,任务不存在为 404,当前状态不能回答为 409,任务服务拒绝启动为 503。认证、来源和限流策略与 `/mcp` 共用。两种入口使用同一远程任务索引;持有同一访问权限的客户端可以跨入口查询和操作远程任务,仍不能访问手机本地发起的任务。
 

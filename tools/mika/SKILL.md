@@ -45,6 +45,12 @@ mika --device SERIAL task status TASK_ID --json
 
 For a recoverable submission, generate and save a lowercase UUID before the call and pass `--request-id UUID`. On a compatible phone this is also the task ID. The CLI generates one automatically when the phone advertises `task_recovery`.
 
+If the task is stuck, failed, or behaved unexpectedly, export the redacted run record before guessing. It is the same event stream as the phone timeline, without screenshot files. `partial: true` means the run is still in progress. An unknown id is an error, not an empty record. Use `task_id`, `conversation_id` and `run_id` in the header to line it up with `task status`.
+
+```bash
+mika --device SERIAL task export TASK_OR_RUN_ID --json
+```
+
 Keep the returned task ID and conversation ID. A successful submission only means that Mika accepted the task.
 
 Wait rule: call `task wait --timeout 45` (allowed 1-50) in the foreground, one call at a time, and re-check the returned state each time. A wait never cancels or resubmits; a timeout is not a failure, so never resubmit on timeout. Stop and report to the user when the task needs an answer or phone takeover, or after a reasonable budget (for example 10-15 waits, longer if progress is clearly advancing). Do not build a background polling loop.

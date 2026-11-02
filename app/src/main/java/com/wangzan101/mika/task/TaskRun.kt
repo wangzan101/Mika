@@ -623,7 +623,13 @@ class TaskRun(
             val sink: RunSink = withContext(Dispatchers.IO) {
                 runCatching {
                     val runs = RunStore(service).also { runStore = it }
-                    runs.open(goal).also { record = it; _runId.value = it.runId }
+                    runs.open(goal).also { opened ->
+                        record = opened
+                        _runId.value = opened.runId
+                        mcpExternalId?.let { ext ->
+                            (service.application as? com.wangzan101.mika.MikaApp)?.remoteTasks?.rememberRun(ext, opened.runId)
+                        }
+                    }
                 }.onFailure { Log.w(TAG, "run record unavailable, running without it", it) }.getOrNull()
             } ?: RunSink.NONE
             val trace = record?.takeIf { traceTicket != null }?.let { run ->

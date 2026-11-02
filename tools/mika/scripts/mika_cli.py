@@ -35,6 +35,10 @@ class CliError(Exception):
         self.code, self.exit_code, self.details = code, exit_code, details
 
 
+class RawExport(str):
+    """Export body already formatted for stdout. Do not JSON-encode it again."""
+
+
 class Parser(argparse.ArgumentParser):
     def error(self, message):
         raise CliError("arguments", message)
@@ -69,18 +73,25 @@ class Client:
         # Local/private phone traffic should not be sent through an ambient HTTP proxy.
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
-    def request(self, method, path="", body=None, *, mutation=False, timeout=None, task_id=None):
+    def request(self, method, path="", body=None, *, mutation=False, timeout=None, task_id=None,
+                accept="application/json", expect="application/json", max_bytes=MAX_RESPONSE):
         data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(self.base + path, data=data, method=method, headers={
             "Authorization": "Bearer " + self.token,
-            "Accept": "application/json", "Content-Type": "application/json",
+            "Accept": accept, "Content-Type": "application/json",
             "X-Mika-Client": "mika-cli/" + VERSION,
         })
         try:
             with self.opener.open(req, timeout=timeout or self.timeout) as response:
-                raw = response.read(MAX_RESPONSE + 1)
-                if len(raw) > MAX_RESPONSE or response.headers.get_content_type() != "application/json":
+                raw = response.read(max_bytes + 1)
+                if len(raw) > max_bytes:
+                    if "/export" in path:
+                        raise CliError("export_too_large", "The run record is larger than the CLI can read.")
                     raise ValueError("invalid response")
+                if response.headers.get_content_type() != expect:
+                    raise ValueError("invalid response")
+                if expect != "application/json":
+                    return raw.decode("utf-8")
                 result = json.loads(raw)
                 if not isinstance(result, dict) or "error" in result:
                     raise ValueError("invalid response")
@@ -348,7 +359,8 @@ def execute(args, secrets):
         if args.action in {"answer", "steer"}:
             args.text = text_input(args.text, args.text_file, args.action)
         if hasattr(args, "task_id") and not re.fullmatch(r"[A-Za-z0-9_-]+", args.task_id):
-            raise CliError("arguments", "task_id must be an ID returned by Mika.")
+            name = "id" if args.action == "export" else "task_id"
+            raise CliError("arguments", name + " must be an ID returned by Mika.")
     if args.command == "devices":
         if args.url or args.token_file:
             raise CliError("arguments", "devices lists ADB devices; it does not use --url or --token-file.")
@@ -367,7 +379,11 @@ def execute(args, secrets):
         action = args.action
         if action == "steer" and "task_steer" not in info.get("capabilities", []):
             raise CliError("incompatible_api", "This Mika APK does not support task steering; update the phone app.")
+        if action == "export" and "run_export" not in info.get("capabilities", []):
+            raise CliError("incompatible_api", "This Mika APK does not support run export; update the phone app.")
         path = "/tasks" + ("/" + args.task_id if hasattr(args, "task_id") else "")
+        if action == "export":
+            return export_record(client, args.task_id, args.events)
         if action == "run":
             body = {"goal": args.goal}
             request_id = args.request_id
@@ -398,6 +414,45 @@ def execute(args, secrets):
                                   not isinstance(result.get("message_id"), str) or not result["message_id"]):
             client.unknown(args.task_id)
         return result
+
+
+def export_record(client, task_id, events):
+    # A run record can be much larger than a task snapshot. Still bounded so a stuck read cannot grow forever.
+    limit = 32 * 1024 * 1024
+    if events:
+        text = client.request("GET", "/tasks/" + task_id + "/export?events=jsonl",
+                              accept="application/x-ndjson, application/json", expect="application/x-ndjson", max_bytes=limit)
+        lines = [line for line in text.splitlines() if line.strip()]
+        if not lines:
+            raise CliError("protocol", "Mika returned an invalid run export.")
+        try:
+            header = json.loads(lines[0])
+            parsed = [json.loads(line) for line in lines[1:]]
+        except ValueError:
+            raise CliError("protocol", "Mika returned an invalid run export.") from None
+        check_export(header, events=False)
+        if "events" in header or any(not isinstance(event, dict) or not isinstance(event.get("type"), str) for event in parsed):
+            raise CliError("protocol", "Mika returned an invalid run export.")
+        return RawExport(text if text.endswith("\n") else text + "\n")
+    result = client.request("GET", "/tasks/" + task_id + "/export", max_bytes=limit)
+    check_export(result, events=True)
+    return result
+
+
+def check_export(result, events):
+    required = ("exportFormat", "partial", "includesScreenshots", "task_id", "conversation_id", "run_id", "run")
+    if not isinstance(result, dict) or any(key not in result for key in required):
+        raise CliError("protocol", "Mika returned an invalid run export.")
+    if (result["exportFormat"] != 1 or type(result["partial"]) is not bool or type(result["includesScreenshots"]) is not bool
+            or result["includesScreenshots"] is not False):
+        raise CliError("protocol", "Mika returned an invalid run export.")
+    for key in ("task_id", "conversation_id", "run_id"):
+        if result[key] is not None and not isinstance(result[key], str):
+            raise CliError("protocol", "Mika returned an invalid run export.")
+    if result["run"] is not None and not isinstance(result["run"], dict):
+        raise CliError("protocol", "Mika returned an invalid run export.")
+    if events and not isinstance(result.get("events"), list):
+        raise CliError("protocol", "Mika returned an invalid run export.")
 
 
 def bounded_int(low, high):
@@ -450,9 +505,11 @@ def parser():
     goal.add_argument("--goal-file", help="UTF-8 file, or - for stdin")
     run.add_argument("--conversation", help="Continue a conversation returned by a previous remote task")
     run.add_argument("--request-id", help="A lowercase UUID chosen before submission. Query it as the task ID after a lost receipt.")
-    for name in ["status", "wait", "answer", "steer", "cancel"]:
+    for name in ["status", "wait", "answer", "steer", "cancel", "export"]:
         cmd = actions.add_parser(name, parents=[common])
         cmd.add_argument("task_id")
+        if name == "export":
+            cmd.add_argument("--events", action="store_true", help="Print a JSON header line, then one redacted event per line")
         if name == "wait":
             cmd.add_argument("--timeout", type=bounded_int(1, 50), default=30, help="One bounded wait, 1–50 seconds; never cancels the task")
         if name in {"answer", "steer"}:
@@ -493,7 +550,7 @@ def main(argv=None):
             return serve(args)
         args.progress = args.command in {"devices", "connect", "doctor"}
         result = execute(args, secrets)
-        if isinstance(result.get("status"), str) and result["status"] in {"failed", "cancelled"}:
+        if not isinstance(result, RawExport) and isinstance(result.get("status"), str) and result["status"] in {"failed", "cancelled"}:
             code = 1
     except CliError as exc:
         result = {"error": {"code": exc.code, "message": str(exc), **exc.details}}
@@ -501,6 +558,12 @@ def main(argv=None):
     except KeyboardInterrupt:
         result = {"error": {"code": "interrupted", "message": "Stopped waiting locally; no task cancellation was requested."}}
         code = 130
+    if isinstance(result, RawExport):
+        text = result
+        for secret in secrets:
+            text = text.replace(secret, "[redacted]")
+        print(text, end="" if text.endswith("\n") else "\n")
+        return code
     output = json.dumps(redact(result, secrets), ensure_ascii=False, separators=(",", ":") if compact else None, indent=None if compact else 2)
     print(output, file=sys.stdout if compact or code == 0 else sys.stderr)
     return code

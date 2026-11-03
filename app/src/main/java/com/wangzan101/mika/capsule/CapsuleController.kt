@@ -928,7 +928,9 @@ class CapsuleController(
                 return
             }
             val x = CapsuleDocking.dragX(dragStartX + dx.toInt(), a, w.width)
-            dock = CapsuleDocking.release(x, y, w.width, w.height, a)
+            // 高度比例始终按未避让输入法的范围和胶囊基准高度记录,与 place() 还原时一致。
+            val base = area(ime = false) ?: a
+            dock = CapsuleDocking.release(x, y, w.width, dp(PILL_DP), base)
             flags.setCapsuleDock(dock)
             snapTo(x, y, CapsuleDocking.dockedX(dock.side, a, w.width))
         }

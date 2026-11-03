@@ -70,6 +70,28 @@ class CapsuleDockTest {
         assertEquals(area.top, area.above(10, 20, 10).bottom)
     }
 
+    @Test fun releaseAboveKeyboardKeepsPositionAndRestoresAfterKeyboardCloses() {
+        val keyboardArea = area.above(1200, gap = 20, room = 10)
+        val height = 100
+        // 拖到输入法上方后,按完整屏幕保存比例,再按当前范围摆放。
+        val y = 600
+        val dock = CapsuleDocking.release(700, y, 200, height, area)
+        val natural = CapsuleDocking.y(dock.fraction, area, height)
+        assertEquals(y, CapsuleDocking.fitY(natural, keyboardArea, height))
+        assertEquals(y, CapsuleDocking.fitY(natural, area, height))
+
+        // 拖向输入法内部时受限于键盘上沿,收起键盘后仍停在松手的位置。
+        val limited = CapsuleDocking.fitY(1800, keyboardArea, height)
+        val limitedDock = CapsuleDocking.release(700, limited, 200, height, area)
+        assertEquals(limited, CapsuleDocking.y(limitedDock.fraction, area, height))
+        assertEquals(limited, CapsuleDocking.fitY(CapsuleDocking.y(limitedDock.fraction, area, height), keyboardArea, height))
+
+        // 没有拖动时,输入法弹出只临时顶起胶囊,关闭后回到原位置。
+        val original = CapsuleDocking.y(1f, area, height)
+        assertEquals(keyboardArea.bottom - height, CapsuleDocking.fitY(original, keyboardArea, height))
+        assertEquals(original, CapsuleDocking.fitY(original, area, height))
+    }
+
     // ---------- 卡片 ----------
 
     /** 最高的卡片(看得见 1160 高)连同上下阴影边的窗口高。 */

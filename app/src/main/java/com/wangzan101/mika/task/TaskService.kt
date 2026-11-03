@@ -188,7 +188,8 @@ class TaskService : Service() {
                 provenance = RunProvenance(RunOrigin.Trigger, Attendance.Unattended),
                 triggerKey = intent.getStringExtra(EXTRA_TRIGGER_KEY),
                 triggerActionGoal = intent.getStringExtra(EXTRA_TRIGGER_ACTION),
-                triggerThreadId = intent.getStringExtra(EXTRA_TRIGGER_THREAD))
+                triggerThreadId = intent.getStringExtra(EXTRA_TRIGGER_THREAD),
+                triggerCondition = intent.getStringExtra(EXTRA_TRIGGER_CONDITION))
             ACTION_START_MCP -> intent.getStringExtra(EXTRA_MCP_ID)?.let { id ->
                 if ((application as com.wangzan101.mika.MikaApp).remoteTasks.claimStart(id)) {
                     begin(intent.getStringExtra(EXTRA_GOAL).orEmpty(), intent.getStringExtra(EXTRA_CONVERSATION),
@@ -223,7 +224,8 @@ class TaskService : Service() {
 
     private fun begin(newGoal: String, requestedConversation: String?,
         provenance: RunProvenance = RunProvenance(), triggerKey: String? = null,
-        triggerActionGoal: String? = null, triggerThreadId: String? = null, mcpExternalId: String? = null, messageId: String? = null) {
+        triggerActionGoal: String? = null, triggerThreadId: String? = null, mcpExternalId: String? = null, messageId: String? = null,
+        triggerCondition: String? = null) {
         parallel = FeatureFlags.get(this).speedFlags().parallelTasks
         // 同一对话里正在执行或排队的任务收到新原话时，交给它的 Inbox。
         requestedConversation?.let(center::byConversation)?.let { existing ->
@@ -257,9 +259,10 @@ class TaskService : Service() {
                 r.run.provenance = provenance
                 r.run.triggerWindowKey = triggerKey
                 r.run.triggerActionGoal = triggerActionGoal
+                r.run.triggerCondition = triggerCondition
                 r.run.triggerThreadId = triggerThreadId
                 if (triggerKey != null) center.store.get(com.wangzan101.mika.core.run.RunId(r.run.key))?.let {
-                    center.store.save(it.copy(triggerWindowKey = triggerKey))
+                    center.store.save(it.copy(triggerWindowKey = triggerKey, userText = triggerCondition))
                 }
                 r.run.mcpExternalId = mcpExternalId
                 taskState._busy.value = true
@@ -280,9 +283,10 @@ class TaskService : Service() {
                 run.provenance = provenance
                 run.triggerWindowKey = triggerKey
                 run.triggerActionGoal = triggerActionGoal
+                run.triggerCondition = triggerCondition
                 run.triggerThreadId = triggerThreadId
                 if (triggerKey != null) center.store.get(com.wangzan101.mika.core.run.RunId(run.key))?.let {
-                    center.store.save(it.copy(triggerWindowKey = triggerKey))
+                    center.store.save(it.copy(triggerWindowKey = triggerKey, userText = triggerCondition))
                 }
                 run.mcpExternalId = mcpExternalId
                 // 先登记再显示:界面收到它的状态时,任务列表里已经有它(对话、原话)
@@ -359,7 +363,7 @@ class TaskService : Service() {
                     run.triggerThreadId.orEmpty(), outcome)
                 if (outcome is ConditionOutcome.Error) {
                     val failure = TaskState.Failed(tr(R.string.task_check_unfinished, outcome.reason), FailKind.Environment)
-                    recordTurn(store, run.conversationId, run.goal, failure, run.runId.value)
+                    recordTurn(store, run.conversationId, run.triggerCondition ?: run.goal, failure, run.runId.value)
                     runCatching { notifyResult(run, failure, "condition:${run.key}") }
                         .onFailure { Log.w(TAG, "condition failure notification failed", it) }
                 }
@@ -479,7 +483,7 @@ class TaskService : Service() {
         run.handoffUnconsumed(cancelled = true)
         run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).remoteTasks.ended(it, TaskState.Cancelled, run.steers.value) }
         run.end(TaskState.Cancelled)
-        recordTurn(ConversationStore.shared(this), run.conversationId, run.goal, TaskState.Cancelled, null)
+        recordTurn(ConversationStore.shared(this), run.conversationId, run.triggerCondition ?: run.goal, TaskState.Cancelled, null)
         publishRuns()
         center.queued().forEachIndexed { i, q -> q.queue(i + 1) }
     }
@@ -583,7 +587,7 @@ class TaskService : Service() {
             (if (state is TaskState.WaitingTakeover && !takeoverFirst(run)) "\n$TAKEOVER_QUEUED" else "")
         val b = Notification.Builder(this, CHANNEL_PROGRESS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(tr(R.string.task_notif_title, ScreenCopy.plain(run.goal)))
+            .setContentTitle(tr(R.string.task_notif_title, ScreenCopy.plain(run.triggerCondition ?: run.goal)))
             .setContentText(text + warning)
             .setStyle(Notification.BigTextStyle().bigText(text + warning))
             .setOngoing(true)
@@ -840,6 +844,7 @@ class TaskService : Service() {
         private const val EXTRA_TRIGGER_KEY = "trigger_key"
         private const val EXTRA_TRIGGER_ACTION = "trigger_action"
         private const val EXTRA_TRIGGER_THREAD = "trigger_thread"
+        private const val EXTRA_TRIGGER_CONDITION = "trigger_condition"
         private const val EXTRA_MCP_ID = "mcp_id"
         private const val EXTRA_ATTENDANCE = "attendance"
         private const val EXTRA_ANSWER = "answer"
@@ -889,13 +894,16 @@ class TaskService : Service() {
             )
         }
 
-        fun startTrigger(context: Context, goal: String, threadId: String, windowKey: String, conditionGoal: String?) {
-            val checking = conditionGoal != null
-            val runGoal = if (checking) "$conditionGoal\nRead-only check. At the end, output only JSON: {\"met\":true or false,\"evidence\":\"short supporting evidence\"}. If you cannot check, report failure; do not guess." else goal
+        /**
+         * [checkGoal] 非空时先跑只读的条件检查,目标就是它(core 的 conditionCheckGoal 生成);[goal] 是检查满足后要做的事。
+         * [condition] 是用户写的条件原文,检查运行在对话和通知里显示它,不显示生成的检查目标。
+         */
+        fun startTrigger(context: Context, goal: String, threadId: String, windowKey: String, checkGoal: String?, condition: String?) {
+            val checking = checkGoal != null
             context.startForegroundService(Intent(context, TaskService::class.java).setAction(ACTION_START_TRIGGER)
-                .putExtra(EXTRA_GOAL, runGoal).putExtra(EXTRA_CONVERSATION, threadId)
+                .putExtra(EXTRA_GOAL, checkGoal ?: goal).putExtra(EXTRA_CONVERSATION, threadId)
                 .putExtra(EXTRA_TRIGGER_KEY, windowKey).putExtra(EXTRA_TRIGGER_THREAD, threadId)
-                .apply { if (checking) putExtra(EXTRA_TRIGGER_ACTION, goal) })
+                .apply { if (checking) putExtra(EXTRA_TRIGGER_ACTION, goal).putExtra(EXTRA_TRIGGER_CONDITION, condition) })
         }
 
         /** 电脑交来的任务([RemoteTaskHub]):记在 [conversation] 这个对话里,来源记成 MCP。 */

@@ -16,12 +16,13 @@ class FileRunStateStoreTest {
             val first = FileRunStateStore(file)
             first.save(StoredRun(RunId("run-1"), "thread-1", "任务原话", RunPhase.Aftercare,
                 reply = "回答原文", deliveryId = "delivery-1", roundInProgress = true,
-                triggerWindowKey = "plan:1000", runSucceeded = false))
+                triggerWindowKey = "plan:1000", runSucceeded = false, userText = "明天会下雨吗"))
             val reopened = FileRunStateStore(file)
             assertEquals("回答原文", reopened.get(RunId("run-1"))?.reply)
             assertEquals("delivery-1", reopened.get(RunId("run-1"))?.deliveryId)
             assertEquals("plan:1000", reopened.get(RunId("run-1"))?.triggerWindowKey)
             assertEquals(false, reopened.get(RunId("run-1"))?.runSucceeded)
+            assertEquals("明天会下雨吗", reopened.get(RunId("run-1"))?.userText)
             assertEquals(1, reopened.interruptUnfinished().size)
             assertEquals(RunPhase.Interrupted, FileRunStateStore(file).get(RunId("run-1"))?.phase)
             // 账本只记阶段与交付:不存发给模型的上下文(图片、原始参数、密钥都不落盘)
@@ -39,6 +40,7 @@ class FileRunStateStoreTest {
                 """"context":{"messages":[],"summary":null,"userOriginals":[],"atMs":1}}]""")
             val store = FileRunStateStore(file)
             assertEquals(true, store.get(RunId("run-1"))?.roundInProgress)
+            assertEquals(null, store.get(RunId("run-1"))?.userText)
             store.save(store.get(RunId("run-1"))!!.copy(phase = RunPhase.Ended))
             assertFalse(file.readText().contains("\"context\""))
         } finally {

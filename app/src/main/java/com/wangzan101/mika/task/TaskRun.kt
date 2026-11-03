@@ -155,6 +155,8 @@ class TaskRun(
     internal var provenance = RunProvenance()
     internal var triggerWindowKey: String? = null
     internal var triggerActionGoal: String? = null
+    /** 条件检查运行时用户写的条件原文;对话和通知显示它,不显示生成的检查目标 [goal]。 */
+    internal var triggerCondition: String? = null
     internal var triggerThreadId: String? = null
     internal var mcpExternalId: String? = null
     internal val conditionCheck get() = triggerActionGoal != null

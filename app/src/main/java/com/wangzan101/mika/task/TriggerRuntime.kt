@@ -24,6 +24,9 @@ import com.wangzan101.mika.core.trigger.ConditionOutcome
 import com.wangzan101.mika.core.trigger.TriggerSnapshot
 import com.wangzan101.mika.core.trigger.TriggerWindowState
 import com.wangzan101.mika.core.trigger.rescheduledTo
+import com.wangzan101.mika.core.trigger.afterCheck
+import com.wangzan101.mika.core.trigger.conditionCheckGoal
+import com.wangzan101.mika.core.trigger.revertFire
 import java.io.File
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -114,15 +117,15 @@ object TriggerRuntime {
         }
         outcome as ConditionOutcome.Checked
         val trigger = store.get(window.triggerId) ?: return
-        val wasMet = trigger.lastConditionMet == true
-        store.upsert(trigger.copy(lastConditionMet = outcome.met))
-        if (!outcome.met || wasMet) {
-            store.mark(window.key, TriggerWindowState.Skipped, if (wasMet) "condition_unchanged" else "condition_not_met")
+        val decision = trigger.afterCheck(outcome, System.currentTimeMillis(), slotMs = window.dueAtMs)
+        store.upsert(decision.next)
+        if (!decision.fire) {
+            store.mark(window.key, TriggerWindowState.Skipped, decision.reason)
             return
         }
         store.mark(window.key, TriggerWindowState.ActionDispatched)
-        try { TaskService.startTrigger(context, goal, threadId, key, null) }
-        catch (e: Exception) { reportStartFailure(context, store, trigger, window.key, e, resetCondition = true) }
+        try { TaskService.startTrigger(context, goal, threadId, key, null, null) }
+        catch (e: Exception) { reportStartFailure(context, store, trigger, window.key, e, before = trigger) }
     }
 
     @Synchronized fun list(context: Context): List<TriggerDefinition> = store(context).all()
@@ -158,7 +161,8 @@ object TriggerRuntime {
         val window = store.claimNow(id, System.currentTimeMillis()) ?: error(tr(R.string.trigger_busy))
         try {
             if (trigger.reminderText != null) deliverReminder(context, store, trigger, window.key)
-            else TaskService.startTrigger(context, trigger.goal, trigger.threadId, window.key, trigger.conditionGoal)
+            else TaskService.startTrigger(context, trigger.goal, trigger.threadId, window.key,
+                trigger.conditionCheckGoal(ZoneId.systemDefault()), trigger.conditionGoal)
             store.mark(window.key, TriggerWindowState.Dispatched)
         } catch (e: Exception) {
             reportStartFailure(context, store, trigger, window.key, e)
@@ -192,7 +196,8 @@ object TriggerRuntime {
     private fun engine(context: Context, store: FileTriggerStore) = TriggerEngine(store,
         { at -> arm(context, at) }, isIdle = { !((context.applicationContext as MikaApp).taskState.busy.value) }) { trigger, window ->
             if (trigger.reminderText != null) deliverReminder(context, store, trigger, window.key)
-            else try { TaskService.startTrigger(context, trigger.goal, trigger.threadId, window.key, trigger.conditionGoal) }
+            else try { TaskService.startTrigger(context, trigger.goal, trigger.threadId, window.key,
+                    trigger.conditionCheckGoal(ZoneId.systemDefault()), trigger.conditionGoal) }
                 catch (e: Exception) { reportStartFailure(context, store, trigger, window.key, e); throw e }
         }
 
@@ -209,11 +214,11 @@ object TriggerRuntime {
     }
 
     private fun reportStartFailure(context: Context, store: FileTriggerStore, trigger: TriggerDefinition,
-        key: String, error: Exception, resetCondition: Boolean = false) {
+        key: String, error: Exception, before: TriggerDefinition? = null) {
         val message = tr(R.string.trigger_not_started_body)
         Log.w("MikaTrigger", "scheduled task could not start", error)
         store.mark(key, TriggerWindowState.Failed, tr(R.string.trigger_start_failed))
-        if (resetCondition) store.get(trigger.id)?.let { store.upsert(it.copy(lastConditionMet = false)) }
+        if (before != null) store.get(trigger.id)?.let { store.upsert(it.revertFire(before)) }
         val conversations = ConversationStore.shared(context)
         val runId = "schedule-failed:$key"
         if (conversations.turns(trigger.threadId).none { it.runId == runId }) {

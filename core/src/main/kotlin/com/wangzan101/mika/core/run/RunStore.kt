@@ -11,6 +11,8 @@ data class StoredRun(
     val roundInProgress: Boolean = false,
     val triggerWindowKey: String? = null,
     val runSucceeded: Boolean? = null,
+    /** 给人看、记进对话的原话;条件检查运行的 [goal] 是生成的检查目标(带网页来的基准),这里存用户写的条件原文。null 时就是 [goal]。 */
+    val userText: String? = null,
 )
 
 interface RunStore {

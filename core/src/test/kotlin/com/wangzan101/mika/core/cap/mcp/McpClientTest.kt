@@ -15,8 +15,16 @@ import com.wangzan101.mika.core.run.RunSpec
 import com.wangzan101.mika.core.tool.ActionPass
 import com.wangzan101.mika.core.tool.FakeScreen
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -115,6 +123,47 @@ class McpClientTest {
         assertTrue(result.content["text"].toString().contains("<untrusted>"))
         assertEquals(Trust.Untrusted, result.observations.single().trust)
         assertEquals(10, result.observations.single().text.length)
+    }
+
+    @Test fun malformedInputSchemasAreNormalizedInsteadOfBreakingDispatch() {
+        // #279: JSON Schema 允许/生成器可能产出的这几种写法,此前会在工具装配时抛
+        // IllegalArgumentException,让所有任务在开局失败。
+        val endpoint = FakeEndpoint()
+        endpoint.offered = listOf(
+            McpToolDescriptor("q1", "properties is null", buildJsonObject {
+                put("type", "object"); put("properties", JsonNull)
+            }),
+            McpToolDescriptor("q2", "boolean property schema", buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject { put("q", true) })
+            }),
+            McpToolDescriptor("q3", "required as string", buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject { put("q", buildJsonObject { put("type", "string") }) })
+                put("required", "q")
+            }),
+            McpToolDescriptor("q4", "required with non-string item", buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject { put("q", buildJsonObject { put("type", "string") }) })
+                put("required", buildJsonArray {
+                    add(JsonPrimitive(true)); add(JsonPrimitive("q"))
+                })
+            }),
+        )
+        val defs = toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(endpoint)))
+            .definitions().filter { it.name.startsWith("mcp_demo__q") }
+        assertEquals(4, defs.size)
+        fun paramsOf(name: String) = Json.parseToJsonElement(
+            defs.first { it.name == "mcp_demo__$name" }.parametersJsonSchema,
+        ).jsonObject
+        // properties 不是对象 → 按无参数处理(spec 会自动追加 reason 字段,断言除它之外为空)
+        assertEquals(listOf("reason"), paramsOf("q1")["properties"]?.jsonObject?.keys?.toList())
+        // 布尔 schema 属性 → 空的宽松 schema
+        assertEquals(JsonObject(emptyMap()), paramsOf("q2")["properties"]?.jsonObject?.get("q")?.jsonObject)
+        // required 不是数组 → 忽略
+        assertEquals(emptyList<String>(), paramsOf("q3")["required"]?.jsonArray?.map { it.jsonPrimitive.content })
+        // required 里的非字符串项 → 丢弃,字符串项保留
+        assertEquals(listOf("q"), paramsOf("q4")["required"]?.jsonArray?.map { it.jsonPrimitive.content })
     }
 
     @Test fun unattendedExternalMcpCallIsNotAskedAndNotCalledByTheJudge() = runBlocking {

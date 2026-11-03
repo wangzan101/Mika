@@ -16,6 +16,7 @@ import com.wangzan101.mika.core.tool.ToolContext
 import com.wangzan101.mika.core.tool.ToolDef
 import com.wangzan101.mika.core.tool.ToolExecution
 import com.wangzan101.mika.core.tool.Verb
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -209,8 +210,12 @@ private class McpClientTool(
     override val def: ToolDef = ToolDef(
         "mcp_${endpoint.serverId.replace(Regex("[^A-Za-z0-9_]"), "_")}__${descriptor.name.replace(Regex("[^A-Za-z0-9_]"), "_")}",
         descriptor.description,
-        schema["properties"]?.jsonObject.orEmpty().mapValues { it.value.jsonObject },
-        schema["required"]?.jsonArray?.map { it.jsonPrimitive.content }.orEmpty(),
+        // #279: JSON Schema 允许 properties 为 null、属性用布尔 schema、required 写成
+        // 字符串或混入非字符串项——宽松归一,别让一个字段的写法打断所有任务的装配。
+        (schema["properties"] as? JsonObject).orEmpty()
+            .mapValues { (_, v) -> v as? JsonObject ?: JsonObject(emptyMap()) },
+        (schema["required"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content },
     )
     override val verb = Verb.Interact
     override val risk = when (approval.level) {

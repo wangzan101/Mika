@@ -207,16 +207,23 @@ private class McpClientTool(
 ) : AgentTool {
     private val schema = descriptor.inputSchema
     private val approval = mcpApprovalRisk(descriptor.annotations, trust)
-    override val def: ToolDef = ToolDef(
-        "mcp_${endpoint.serverId.replace(Regex("[^A-Za-z0-9_]"), "_")}__${descriptor.name.replace(Regex("[^A-Za-z0-9_]"), "_")}",
-        descriptor.description,
+    override val def: ToolDef = run {
         // #279: JSON Schema 允许 properties 为 null、属性用布尔 schema、required 写成
         // 字符串或混入非字符串项——宽松归一,别让一个字段的写法打断所有任务的装配。
-        (schema["properties"] as? JsonObject).orEmpty()
-            .mapValues { (_, v) -> v as? JsonObject ?: JsonObject(emptyMap()) },
-        (schema["required"] as? JsonArray).orEmpty()
-            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content },
-    )
+        // required 指向的参数名若在归一后的 properties 里缺席(如 properties:null 而
+        // required:["q"]),补一个空宽松 schema——否则 allowed 不含它、required 又要求
+        // 它,这个工具就永远调不成。
+        val props = (schema["properties"] as? JsonObject).orEmpty()
+            .mapValues { (_, v) -> v as? JsonObject ?: JsonObject(emptyMap()) }
+        val required = (schema["required"] as? JsonArray).orEmpty()
+            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        ToolDef(
+            "mcp_${endpoint.serverId.replace(Regex("[^A-Za-z0-9_]"), "_")}__${descriptor.name.replace(Regex("[^A-Za-z0-9_]"), "_")}",
+            descriptor.description,
+            props + required.filter { it !in props }.associateWith { JsonObject(emptyMap()) },
+            required,
+        )
+    }
     override val verb = Verb.Interact
     override val risk = when (approval.level) {
         ActionRisk.Read -> Risk.Read

@@ -149,10 +149,19 @@ class McpClientTest {
                     add(JsonPrimitive(true)); add(JsonPrimitive("q"))
                 })
             }),
+            // properties 为 null 且 required 列了参数(#279 残留形态):required 指向的
+            // 参数会被归一补回空宽松 schema,工具必须仍然可调用
+            McpToolDescriptor("q5", "null properties with required", buildJsonObject {
+                put("type", "object"); put("properties", JsonNull); put("required", "q")
+            }),
+            McpToolDescriptor("q6", "null properties with required array", buildJsonObject {
+                put("type", "object"); put("properties", JsonNull)
+                put("required", buildJsonArray { add(JsonPrimitive("q")) })
+            }),
         )
         val defs = toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(endpoint)))
             .definitions().filter { it.name.startsWith("mcp_demo__q") }
-        assertEquals(4, defs.size)
+        assertEquals(6, defs.size)
         fun paramsOf(name: String) = Json.parseToJsonElement(
             defs.first { it.name == "mcp_demo__$name" }.parametersJsonSchema,
         ).jsonObject
@@ -164,6 +173,12 @@ class McpClientTest {
         assertEquals(emptyList<String>(), paramsOf("q3")["required"]?.jsonArray?.map { it.jsonPrimitive.content })
         // required 里的非字符串项 → 丢弃,字符串项保留
         assertEquals(listOf("q"), paramsOf("q4")["required"]?.jsonArray?.map { it.jsonPrimitive.content })
+        // q5:required 字符串形态随 properties:null 一起归一 → 无参数可调
+        assertEquals(setOf("reason"), paramsOf("q5")["properties"]?.jsonObject?.keys)
+        assertEquals(emptyList<String>(), paramsOf("q5")["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        // q6:幽灵 required 被补回空宽松 schema,工具可调用
+        assertTrue("q" in (paramsOf("q6")["properties"]?.jsonObject?.keys ?: emptySet()))
+        assertEquals(listOf("q"), paramsOf("q6")["required"]!!.jsonArray.map { it.jsonPrimitive.content })
     }
 
     @Test fun unattendedExternalMcpCallIsNotAskedAndNotCalledByTheJudge() = runBlocking {

@@ -3,6 +3,7 @@ package com.wangzan101.mika.task
 import android.content.Context
 import com.wangzan101.mika.core.trigger.ScheduleAdmin
 import com.wangzan101.mika.core.trigger.TriggerDefinition
+import com.wangzan101.mika.core.trigger.resumeFinishedOneShotBlocked
 
 class LocalScheduleAdmin internal constructor(
     private val plans: () -> List<TriggerDefinition>,
@@ -10,6 +11,7 @@ class LocalScheduleAdmin internal constructor(
     private val delete: (String) -> Unit,
     private val changeTime: (String, Long) -> Unit,
     private val executeNow: (String) -> Unit,
+    private val hasWindows: (String) -> Boolean = { false },
 ) : ScheduleAdmin {
     constructor(context: Context) : this(
         { TriggerRuntime.list(context) },
@@ -17,6 +19,7 @@ class LocalScheduleAdmin internal constructor(
         { id -> TriggerRuntime.remove(context, id) },
         { id, atMs -> TriggerRuntime.reschedule(context, id, atMs) },
         { id -> TriggerRuntime.runNow(context, id) },
+        { id -> TriggerRuntime.hasWindows(context, id) },
     )
 
     override fun list(threadId: String): List<TriggerDefinition> = plans().filter { it.threadId == threadId }
@@ -25,6 +28,9 @@ class LocalScheduleAdmin internal constructor(
 
     override fun setEnabled(threadId: String, id: String, enabled: Boolean): Boolean {
         if (!owned(threadId, id)) return false
+        val plan = plans().firstOrNull { it.id == id }
+        // #259: 已终结的一次性计划 resume 只会进闹钟热循环；与 UI 的 canToggle 一致地拒绝。
+        if (enabled && plan != null && resumeFinishedOneShotBlocked(plan, hasWindows(id))) return false
         changeEnabled(id, enabled)
         return true
     }

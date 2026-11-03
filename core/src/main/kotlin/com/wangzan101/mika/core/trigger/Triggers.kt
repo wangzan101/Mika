@@ -199,3 +199,12 @@ class TriggerEngine(private val store: TriggerStore, private val scheduleAlarm: 
         rearm(nowMs)
     }
 }
+
+/**
+ * #259: 一次性计划的窗口键就是它冻结的 nextAtMs——键上留有任何窗口（Delivered/Failed/
+ * Skipped/Unknown），enable=true 的 resume 都会被 claimDue 拒认领、又被 rearm 排成
+ * 「现在」的闹钟，进入无限热循环。与 PlansScreen.canToggle「做完的一次性计划不能再
+ * 打开」一致：运行时与工具入口都拒绝这类 resume（重新创建或 run_now 仍可用）。
+ */
+fun resumeFinishedOneShotBlocked(trigger: TriggerDefinition, hasAnyWindow: Boolean): Boolean =
+    trigger.intervalMs == null && trigger.calendarTime == null && hasAnyWindow

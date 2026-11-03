@@ -49,6 +49,49 @@ class LocalScheduleAdminTest {
         assertEquals(listOf(first, second), plans)
     }
 
+    @Test fun resumeOfFinishedOneShotIsRefusedBeforeReachingTheRuntime() {
+        var invoked = false
+        val adminWithHistory = LocalScheduleAdmin(
+            plans = { listOf(first) },
+            changeEnabled = { id, enabled -> invoked = true },
+            delete = {},
+            changeTime = { _, _ -> },
+            executeNow = {},
+            hasWindows = { id -> id == first.id },
+        )
+        assertFalse(adminWithHistory.setEnabled("thread-a", first.id, true))
+        assertFalse(invoked)
+    }
+
+    @Test fun resumeOfNeverRunOneShotStillReachesTheRuntime() {
+        var invoked = false
+        val adminWithNoHistory = LocalScheduleAdmin(
+            plans = { listOf(first) },
+            changeEnabled = { _, _ -> invoked = true },
+            delete = {},
+            changeTime = { _, _ -> },
+            executeNow = {},
+            hasWindows = { false },
+        )
+        assertTrue(adminWithNoHistory.setEnabled("thread-a", first.id, true))
+        assertTrue(invoked)
+    }
+
+    @Test fun resumeOfRecurringPlanStillReachesTheRuntime() {
+        var invoked = false
+        val recurring = first.copy(intervalMs = 60_000)
+        val adminForRecurring = LocalScheduleAdmin(
+            plans = { listOf(recurring) },
+            changeEnabled = { _, _ -> invoked = true },
+            delete = {},
+            changeTime = { _, _ -> },
+            executeNow = {},
+            hasWindows = { true },
+        )
+        assertTrue(adminForRecurring.setEnabled("thread-a", recurring.id, true))
+        assertTrue(invoked)
+    }
+
     @Test fun ownershipIsCheckedAgainstTheCurrentPlans() {
         assertEquals(listOf(first), admin.list("thread-a"))
         plans[0] = first.copy(threadId = "thread-b")

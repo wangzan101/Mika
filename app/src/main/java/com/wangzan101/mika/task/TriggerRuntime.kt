@@ -23,6 +23,7 @@ import com.wangzan101.mika.core.trigger.TriggerEngine
 import com.wangzan101.mika.core.trigger.ConditionOutcome
 import com.wangzan101.mika.core.trigger.TriggerSnapshot
 import com.wangzan101.mika.core.trigger.TriggerWindowState
+import com.wangzan101.mika.core.trigger.resumeFinishedOneShotBlocked
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -137,9 +138,16 @@ object TriggerRuntime {
 
     @Synchronized fun setEnabled(context: Context, id: String, enabled: Boolean) {
         val store = store(context)
-        store.get(id)?.let { store.upsert(it.copy(enabled = enabled)) }
+        val trigger = store.get(id)
+        if (trigger != null && enabled &&
+            resumeFinishedOneShotBlocked(trigger, store.windows().any { it.triggerId == id })
+        ) return
+        trigger?.let { store.upsert(it.copy(enabled = enabled)) }
         engine(context, store).rearm(System.currentTimeMillis())
     }
+
+    internal fun hasWindows(context: Context, id: String): Boolean =
+        store(context).windows().any { it.triggerId == id }
 
     @Synchronized fun remove(context: Context, id: String) {
         val store = store(context)

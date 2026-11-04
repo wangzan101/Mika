@@ -1,7 +1,10 @@
 package com.wangzan101.mika.core.cap.mcp
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -9,6 +12,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -26,6 +30,7 @@ import java.io.Closeable
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.coroutines.coroutineContext
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -44,8 +49,7 @@ class McpClientException(message: String, cause: Throwable? = null) : Exception(
  */
 class HttpMcpEndpoint private constructor(
     override val serverId: String,
-    private val url: HttpUrl,
-    private val http: OkHttpClient,
+    private val url: HttpUrl,    private val http: OkHttpClient,
     private val headers: Map<String, String>,
     private val protocolVersion: String,
     private val sessionId: String?,
@@ -57,6 +61,10 @@ class HttpMcpEndpoint private constructor(
     val serverName: String?,
     val instructions: String?,
 ) : McpEndpoint, Closeable {
+    override val origin: String get() {
+        val host = if (':' in url.host) "[${url.host}]" else url.host
+        return "${url.scheme}://$host:${url.port}"
+    }
     private val json = Json { ignoreUnknownKeys = true }
     // MCP 端点不应该靠重定向跳转;禁止重定向,避免把请求(含认证头)带去别的主机
     private val client = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
@@ -84,13 +92,16 @@ class HttpMcpEndpoint private constructor(
         McpResult("MCP server request failed: ${e.message ?: e.javaClass.simpleName}", isError = true)
     }
 
-    override suspend fun call(name: String, arguments: JsonObject): McpResult {
+    override suspend fun call(name: String, arguments: JsonObject): McpResult = call(name, arguments, null)
+
+    override suspend fun call(name: String, arguments: JsonObject, onProgress: ((McpProgress) -> Unit)?): McpResult {
         if (tools.none { it.name == name }) return McpResult("unknown MCP tool: $name", isError = true)
+        val params = buildJsonObject {
+            put("name", name)
+            put("arguments", arguments)
+        }
         val result = try {
-            rpc("tools/call", buildJsonObject {
-                put("name", name)
-                put("arguments", arguments)
-            })
+            if (onProgress == null) rpc("tools/call", params) else rpcStreaming("tools/call", params, onProgress)
         } catch (e: McpClientException) {
             return McpResult(e.message.orEmpty(), isError = true)
         } catch (e: IOException) {
@@ -153,6 +164,98 @@ class HttpMcpEndpoint private constructor(
         }
     }
 
+    /** 带 progressToken 的调用：服务端可以回 SSE，边执行边发 notifications/progress。 */
+    private suspend fun rpcStreaming(
+        method: String,
+        params: JsonObject,
+        onProgress: (McpProgress) -> Unit,
+    ): JsonObject {
+        val id = ids.incrementAndGet()
+        val body = buildJsonObject {
+            put("jsonrpc", "2.0")
+            put("id", id)
+            put("method", method)
+            putJsonObject("params") {
+                params.forEach { (key, value) -> put(key, value) }
+                putJsonObject("_meta") { put("progressToken", "mika-$id") }
+            }
+        }
+        var result: JsonObject? = null
+        var error: JsonObject? = null
+        val response = postStream(body.toString()) { msg ->
+            if ((msg["method"] as? JsonPrimitive)?.contentOrNull == "notifications/progress") {
+                val p = msg["params"] as? JsonObject ?: return@postStream
+                onProgress(McpProgress(
+                    progress = (p["progress"] as? JsonPrimitive)?.doubleOrNull,
+                    total = (p["total"] as? JsonPrimitive)?.doubleOrNull,
+                    message = (p["message"] as? JsonPrimitive)?.contentOrNull,
+                ))
+            } else if (msg.matchesId(id)) {
+                error = msg["error"] as? JsonObject
+                result = msg["result"] as? JsonObject
+            }
+        }
+        if (response.code !in 200..299) throw McpClientException("MCP server returned HTTP ${response.code} for $method")
+        if (error != null) throw McpClientException("MCP server rejected $method: ${mcpErrorMessage(error)}")
+        if (result == null && response.body.isNotEmpty()) {
+            val message = parseMessages(response.body).firstOrNull { it.matchesId(id) }
+                ?: throw McpClientException("MCP server returned no response for $method")
+            error = message["error"] as? JsonObject
+            if (error != null) throw McpClientException("MCP server rejected $method: ${mcpErrorMessage(error)}")
+            result = message["result"] as? JsonObject
+        }
+        return result ?: throw McpClientException("MCP server returned no result for $method")
+    }
+
+    /**
+     * 按行读流式响应。SSE 时边读边把每条 data 交给 [onMessage]；服务端仍回普通 JSON 时原样返回正文。
+     * 取消时取消底层 Call，阻塞的读取随连接关闭结束。
+     */
+    private suspend fun postStream(body: String, onMessage: (JsonObject) -> Unit): RawResponse = withContext(Dispatchers.IO) {
+        val builder = Request.Builder().url(url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", protocolVersion)
+        sessionId?.let { builder.header("MCP-Session-Id", it) }
+        headers.forEach { (k, v) -> if (!k.equals("Content-Type", true) && !k.equals("Accept", true)) builder.header(k, v) }
+        // 流式 exec 可能长时间没有输出；OkHttp 默认的 10 秒读超时会把静默命令掐断。
+        // 这里不设读/总超时，由服务端的 exec 超时和任务取消来收尾。
+        val streamingClient = client.newBuilder()
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .build()
+        val call = streamingClient.newCall(builder.post(body.toRequestBody(JSON_MEDIA)).build())
+        val handle = coroutineContext[Job]?.invokeOnCompletion { call.cancel() }
+        try {
+            call.execute().use { response ->
+                val session = response.header("Mcp-Session-Id")
+                val contentType = response.header("Content-Type").orEmpty()
+                if (response.code !in 200..299 || !contentType.startsWith("text/event-stream")) {
+                    return@withContext RawResponse(response.code, session, response.body?.string().orEmpty())
+                }
+                val source = response.body?.source()
+                if (source != null) {
+                    while (!source.exhausted()) {
+                        val line = try {
+                            source.readUtf8LineStrict(MAX_SSE_LINE)
+                        } catch (e: java.io.EOFException) {
+                            if (source.exhausted()) break
+                            throw McpClientException("MCP server sent an oversized SSE line")
+                        }
+                        if (!line.startsWith("data:")) continue
+                        val data = line.removePrefix("data:").trim()
+                        if (data.isEmpty()) continue
+                        val message = runCatching { json.parseToJsonElement(data) as? JsonObject }.getOrNull() ?: continue
+                        onMessage(message)
+                    }
+                }
+                RawResponse(response.code, session, "")
+            }
+        } finally {
+            handle?.dispose()
+        }
+    }
+
     private fun sseMessages(body: String): List<JsonObject> {
         val out = mutableListOf<JsonObject>()
         val data = StringBuilder()
@@ -185,6 +288,7 @@ class HttpMcpEndpoint private constructor(
     companion object {
         const val PROTOCOL_VERSION = "2025-03-26"
         private const val MAX_TOOL_PAGES = 20
+        private const val MAX_SSE_LINE = 8L * 1024 * 1024
         private val json = Json { ignoreUnknownKeys = true }
 
         /**

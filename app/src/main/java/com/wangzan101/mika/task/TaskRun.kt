@@ -717,6 +717,7 @@ class TaskRun(
                     resources,
                     com.wangzan101.mika.mcp.ConversationMcpResultStore(SandboxDirs(service), conversationId),
                     conversationId,
+                    environmentId = (service.application as MikaApp).conversations.environment(conversationId),
                 )
                 // 连接失败、超过总时限没连上的只在任务卡片上提示一句,不打断任务;详情在设置页的健康状态里
                 mcpConnections?.failures?.takeIf { it.isNotEmpty() }?.let { failures ->
@@ -768,6 +769,40 @@ class TaskRun(
                 sandbox = sandbox, workspace = { conversationId },
                 onSandboxCommand = { sandboxNote(StatusCopy.sandboxCommand(it, sandboxOnline())) },
                 onSandboxProgress = { sandboxNote(StatusCopy.sandboxProgress(it, sandboxOnline())) },
+                onToolProgress = { sandboxNote(StatusCopy.toolProgress(it)) },
+                onRemoteFileLink = { url, name, allowedOrigin ->
+                    val port = web
+                    if (port == null) null else {
+                        try {
+                            var last = 0L
+                            val d = port.downloadUrl(url, name, 120_000, allowedOrigin) { bytes ->
+                                if (last == 0L || bytes - last >= (1L shl 20)) {
+                                    last = bytes
+                                    sandboxNote(StatusCopy.toolProgress("下载中: ${bytes / (1 shl 20)} MB"))
+                                }
+                            }
+                            if (d.status != "done") {
+                                "Download failed: ${d.error ?: d.status}"
+                            } else {
+                                val file = sandbox.hostPath(conversationId, d.file, forWrite = false)
+                                if (file == null) "Downloaded to ${d.file}"
+                                else try {
+                                    "Saved to " + sandbox.share(file, name ?: file.name)
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    "Downloaded, but saving to Downloads failed: ${e.message ?: e.javaClass.simpleName}"
+                                }
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: UnsupportedOperationException) {
+                            "Direct downloads are not available on this device."
+                        } catch (e: Exception) {
+                            "Download failed: ${e.message ?: e.javaClass.simpleName}"
+                        }
+                    }
+                },
                 onSandboxPreparing = { sandboxNote(StatusCopy.RUNTIME_PREPARING) },
                 onSandboxScript = { sandboxNote(StatusCopy.sandboxScript(sandboxOnline())) },
                 imageOps = BitmapImageOps, runSpec = runSpec,

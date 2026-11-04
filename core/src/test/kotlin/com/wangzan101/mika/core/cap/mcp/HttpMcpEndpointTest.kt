@@ -12,6 +12,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.OkHttpClient
 import okhttp3.ResponseBody
@@ -123,6 +125,67 @@ class HttpMcpEndpointTest {
         val callBody = callRequest.body.readUtf8()
         assertTrue(callBody.contains("tools/call"))
         assertTrue(callBody.contains("\"q\":\"x\""))
+    }
+
+    @Test fun streamsProgressDuringToolCall() = runBlocking {
+        var sawToken = false
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val message = kotlinx.serialization.json.Json
+                    .parseToJsonElement(request.body.readUtf8()).jsonObject
+                val id = message["id"] ?: return MockResponse().setResponseCode(202)
+                val method = message.getValue("method").jsonPrimitive.content
+                if (method == "tools/call") {
+                    sawToken = message.toString().contains("progressToken")
+                    return MockResponse().setHeader("Content-Type", "text/event-stream").setBody(
+                        "event: message\n" +
+                            "data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progressToken\":\"p\",\"progress\":1,\"message\":\"chunk1\"}}\n\n" +
+                            "event: message\n" +
+                            "data: {\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}}\n\n",
+                    )
+                }
+                val result = when (method) {
+                    "initialize" -> """{"protocolVersion":"2025-03-26","serverInfo":{"name":"stream"}}"""
+                    "tools/list" -> """{"tools":[${tool("run")}]}"""
+                    else -> "{}"
+                }
+                return json("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+            }
+        }
+        val endpoint = HttpMcpEndpoint.connect("stream", server.url("/mcp").toString(), OkHttpClient(), timeoutSec = 5).getOrThrow()
+        val seen = mutableListOf<String?>()
+        val result = endpoint.call("run", buildJsonObject { }, onProgress = { seen += it.message })
+        assertEquals("done", result.text)
+        assertEquals(listOf<String?>("chunk1"), seen)
+        assertTrue(sawToken)
+    }
+
+    @Test fun streamingCallOutlivesTheClientReadTimeout() = runBlocking {
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val message = kotlinx.serialization.json.Json
+                    .parseToJsonElement(request.body.readUtf8()).jsonObject
+                val id = message["id"] ?: return MockResponse().setResponseCode(202)
+                val method = message.getValue("method").jsonPrimitive.content
+                if (method == "tools/call") {
+                    return MockResponse().setHeader("Content-Type", "text/event-stream")
+                        .setBodyDelay(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .setBody("data: {\"jsonrpc\":\"2.0\",\"id\":$id,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"done\"}]}}\n\n")
+                }
+                val result = when (method) {
+                    "initialize" -> """{"protocolVersion":"2025-03-26","serverInfo":{"name":"slow"}}"""
+                    "tools/list" -> """{"tools":[${tool("run")}]}"""
+                    else -> "{}"
+                }
+                return json("""{"jsonrpc":"2.0","id":$id,"result":$result}""")
+            }
+        }
+        val slowClient = OkHttpClient.Builder()
+            .readTimeout(100, java.util.concurrent.TimeUnit.MILLISECONDS)
+            .build()
+        val endpoint = HttpMcpEndpoint.connect("slow", server.url("/mcp").toString(), slowClient, timeoutSec = 5).getOrThrow()
+        val result = endpoint.call("run", buildJsonObject { }, onProgress = { })
+        assertEquals("done", result.text)
     }
 
     @Test fun parsesSseResponses() = runBlocking {

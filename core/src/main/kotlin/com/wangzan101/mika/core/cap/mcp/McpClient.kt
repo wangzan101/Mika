@@ -16,6 +16,7 @@ import com.wangzan101.mika.core.tool.ToolContext
 import com.wangzan101.mika.core.tool.ToolDef
 import com.wangzan101.mika.core.tool.ToolExecution
 import com.wangzan101.mika.core.tool.Verb
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -27,8 +28,13 @@ import kotlinx.serialization.json.put
 /** 传输层只须实现这两个操作；每个 Run 开局调用一次 tools，之后目录不变。 */
 interface McpEndpoint {
     val serverId: String
+    /** HTTP server origin (scheme://host:port); a signed file_link may be allowed to download from this origin even on a private network. */
+    val origin: String? get() = null
     fun tools(): List<McpToolDescriptor>
     suspend fun call(name: String, arguments: JsonObject): McpResult
+    /** 支持进度的传输覆盖它;默认忽略进度，旧实现不用改。 */
+    suspend fun call(name: String, arguments: JsonObject, onProgress: ((McpProgress) -> Unit)?): McpResult =
+        call(name, arguments)
 
     /** 连接时从服务端读到的资源目录;不支持就是空。 */
     fun resources(): List<McpResourceDescriptor> = emptyList()
@@ -56,6 +62,9 @@ data class McpToolDescriptor(
 )
 
 data class McpResult(val text: String, val isError: Boolean = false, val costUnits: Long = 0)
+
+/** tools/call 期间服务端发来的 notifications/progress;消息已经过服务端自己的裁剪。 */
+data class McpProgress(val progress: Double?, val total: Double?, val message: String?)
 
 /** resources/list 的一项;v1 只用 uri/name/description 给模型看。 */
 data class McpResourceDescriptor(
@@ -299,8 +308,31 @@ private class McpClientTool(
         costUnits = descriptor.estimatedCostUnits,
         resultStore = resultStore,
         previewChars = previewChars,
-        call = { endpoint.call(descriptor.name, a.o) },
+        call = {
+            val result = endpoint.call(descriptor.name, a.o) { progress ->
+                val text = progress.message ?: when {
+                    progress.total != null -> "${progress.progress ?: 0.0}/${progress.total}"
+                    progress.progress != null -> "${progress.progress}"
+                    else -> "progress"
+                }
+                ctx.config.onToolProgress(text)
+            }
+            val direction = (a.o["direction"] as? JsonPrimitive)?.contentOrNull ?: "download"
+            if (descriptor.name == "file_link" && !result.isError && direction == "download") {
+                val url = fileLinkUrl(result.text)
+                val note = if (url != null) ctx.config.onRemoteFileLink?.invoke(url, null, endpoint.origin) else null
+                if (note.isNullOrBlank()) result else result.copy(text = result.text + "\n" + note)
+            } else result
+        },
     )
+}
+
+/** envd file_link 的结果里取出下载地址;别的工具或错误的 JSON 返回 null。 */
+private fun fileLinkUrl(text: String): String? {
+    val obj = runCatching { Json.parseToJsonElement(text) as? JsonObject }.getOrNull() ?: return null
+    if ((obj["ok"] as? JsonPrimitive)?.contentOrNull == "false") return null
+    return (obj["url"] as? JsonPrimitive)?.contentOrNull
+        ?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
 }
 
 /** resources/prompts 合成的只读工具;结果裁剪、预算、不可信标记和普通 MCP 工具共用一套。 */

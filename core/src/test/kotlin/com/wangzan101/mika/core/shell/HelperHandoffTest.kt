@@ -55,8 +55,10 @@ class HelperHandoffTest {
 
     @Test
     fun onlyShellWithMatchingIdsAndCurrentApkPasses() {
-        fun check(uid: Int = 2000, pid: Int = 77, rUid: Int = uid, rPid: Int = pid, apk: String? = "/a.apk", binder: Boolean = true) =
-            HelperHandoff.check(uid, pid, rUid, rPid, apk, "/a.apk", binder)
+        fun check(
+            uid: Int = 2000, pid: Int = 77, rUid: Int = uid, rPid: Int = pid, apk: String? = "/a.apk", binder: Boolean = true,
+            expectedUid: Int = HelperHandoff.SHELL_UID,
+        ) = HelperHandoff.check(uid, pid, rUid, rPid, apk, "/a.apk", binder, expectedUid)
         assertNull(check())
         assertEquals(Reject.NotShell, check(uid = 10123))
         assertEquals(Reject.NotShell, check(uid = 0))
@@ -65,6 +67,9 @@ class HelperHandoffTest {
         assertEquals(Reject.StaleApk, check(apk = "/old.apk"))
         assertEquals(Reject.StaleApk, check(apk = null))
         assertEquals(Reject.NoBinder, check(binder = false))
+        // 期望 uid 参数化:Shizuku root 启动时助手以 uid 0 交接,期望 0 就通过,期望 2000 就拒
+        assertNull(check(uid = 0, rUid = 0, expectedUid = 0))
+        assertEquals(Reject.NotShell, check(uid = 2000, expectedUid = 0))
     }
 
     @Test
@@ -155,12 +160,42 @@ class HelperHandoffTest {
     fun commandRunsHelperDetachedAndFeedsNonceThroughStdin() {
         val cmd = HelperHandoff.command("/data/app/~~x/com.wangzan101.mika-y/base.apk", "com.wangzan101.mika", 10234, "ab'cd")
         assertEquals(
-            "read n; (echo \"\$n\" | CLASSPATH='/data/app/~~x/com.wangzan101.mika-y/base.apk' setsid app_process /system/bin " +
+            "read n; ([ \"\$(id -u)\" = \"2000\" ] && echo \"\$n\" | CLASSPATH='/data/app/~~x/com.wangzan101.mika-y/base.apk' setsid app_process /system/bin " +
                 "--nice-name='com.wangzan101.mika:helper' com.wangzan101.mika.shell.HelperMain " +
                 "'com.wangzan101.mika' 10234 'ab'\\''cd' >/dev/null 2>&1 &); read _",
             cmd,
         )
+        // Shizuku root 模式下启动方 uid 是 0:命令里的 id -u 守卫跟着换
+        val root = HelperHandoff.command("/a.apk", "p", 1, "pin", launchUid = 0)
+        assertTrue(root.startsWith("read n; ([ \"\$(id -u)\" = \"0\" ] && "))
         assertEquals("com.wangzan101.mika.helper", HelperHandoff.authority("com.wangzan101.mika"))
+    }
+
+    @Test
+    fun commandGuardUsesLaunchUidWhileCheckUsesExpectedUid() {
+        // Shizuku 以 root(0)启动助手、助手降权到 shell(2000)交接:命令守卫核对启动方 uid 0,交接核对期望 uid 2000。
+        val cmd = HelperHandoff.command("/a.apk", "p", 1, "pin", launchUid = 0)
+        assertTrue(cmd.contains("[ \"\$(id -u)\" = \"0\" ]"))
+        // 交接时助手已经是 shell:期望 2000 通过,以 0 来交则拒(半残态不得放行)
+        assertNull(HelperHandoff.check(2000, 1, 2000, 1, "/a.apk", "/a.apk", true, expectedUid = 2000))
+        assertEquals(Reject.NotShell, HelperHandoff.check(0, 1, 0, 1, "/a.apk", "/a.apk", true, expectedUid = 2000))
+        // Shizuku 由 adb 启动(server 本身就是 2000):两个 uid 都是 2000,行为与无线调试路径一致
+        val adb = HelperHandoff.command("/a.apk", "p", 1, "pin", launchUid = 2000)
+        assertTrue(adb.contains("[ \"\$(id -u)\" = \"2000\" ]"))
+    }
+
+    @Test
+    fun defaultCommandAndCheckAreUnchanged() {
+        // 默认参数下(无线调试/USB 路径)启动方与交接期望都是 shell 2000:和改动前一字不差
+        val cmd = HelperHandoff.command("/data/app/~~x/com.wangzan101.mika-y/base.apk", "com.wangzan101.mika", 10234, "ab'cd")
+        assertEquals(
+            "read n; ([ \"\$(id -u)\" = \"2000\" ] && echo \"\$n\" | CLASSPATH='/data/app/~~x/com.wangzan101.mika-y/base.apk' setsid app_process /system/bin " +
+                "--nice-name='com.wangzan101.mika:helper' com.wangzan101.mika.shell.HelperMain " +
+                "'com.wangzan101.mika' 10234 'ab'\\''cd' >/dev/null 2>&1 &); read _",
+            cmd,
+        )
+        assertNull(HelperHandoff.check(2000, 77, 2000, 77, "/a.apk", "/a.apk", true))
+        assertEquals(Reject.NotShell, HelperHandoff.check(0, 77, 0, 77, "/a.apk", "/a.apk", true))
     }
 
     @Test
@@ -211,6 +246,9 @@ class HelperHandoffTest {
         assertEquals(1, script.split("f00d").size - 1)
         // 只有 shell 身份才起;APK 不在(更新过)就请用户先打开 Mika
         assertTrue(script.contains("if [ \"\$(id -u)\" != \"2000\" ]; then"))
+        // 期望 uid 参数化:USB 脚本默认 2000,但也能写成别的(Shizuku 路径不用 USB 脚本,这里只验证参数透传)
+        val rootScript = HelperHandoff.usbScript(apk, "com.wangzan101.mika", 10234, "ab'cd", "f00d", scriptPath, expectedUid = 0)
+        assertTrue(rootScript.contains("if [ \"\$(id -u)\" != \"0\" ]; then"))
         assertTrue(script.contains("if [ ! -f '$apk' ]; then"))
         // 等 setsid 生效再返回,并说清结果和怎么确认
         assertTrue(script.contains("\nsleep 2\n"))

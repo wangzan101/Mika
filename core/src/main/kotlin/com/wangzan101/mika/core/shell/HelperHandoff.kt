@@ -13,6 +13,10 @@ import java.security.SecureRandom
  * 以及 Mika 一侧收下之前要过的检查。
  */
 object HelperHandoff {
+    /**
+     * shell 的 uid,也是助手交接时应有的 uid。无线调试/USB 路径的助手由 adbd 以 shell 身份执行;
+     * Shizuku 路径的助手即便由 root 启动,一进进程也会把自己降到 shell(见 HelperPrivileges),所以恒为 2000。
+     */
     const val SHELL_UID = 2000
     const val METHOD_ATTACH = "attach"
     const val HELPER_CLASS = "com.wangzan101.mika.shell.HelperMain"
@@ -40,16 +44,21 @@ object HelperHandoff {
     fun processName(packageName: String) = "$packageName:helper"
 
     /**
-     * 经 adbd 的 exec: 服务执行的命令(adbd 用 `sh -c` 跑它)。流一关,adbd 就把 sh 那一组进程都杀掉,
-     * 所以助手用 setsid 另起会话;sh 再 `read` 等着,直到 App 收到交接后关流,
+     * 经 adbd 的 exec 或 Shizuku 的 newProcess 执行的命令(都是 `sh -c` 跑它)。流一关,起助手的那一方
+     * 就把 sh 那一组进程都杀掉,所以助手用 setsid 另起会话;sh 再 `read` 等着,直到 App 收到交接后关流,
      * 免得 setsid 还没生效 sh 就退出、助手被连带杀掉。
+     *
+     * 起之前先核对 `id -u` 等于 [launchUid]:执行命令那一方的 uid——无线调试/USB 恒为 shell(2000),
+     * Shizuku 是 Shizuku.getUid()(root 启动为 0,ADB 启动为 2000)。uid 不对就不起。
+     * [launchUid] 是启动方身份,和 [check] 的 [expectedUid](助手交接时应有的 uid)不是同一个值:
+     * Shizuku 以 root 启动时 launchUid=0,但助手一进进程就把自己降到 shell,交接时是 2000。
      *
      * 口令不进命令行(同为 shell 的进程能读 /proc/<pid>/cmdline):App 开流后写一行 [stdinLine],
      * sh 读进变量,再用内建 echo 经管道交给助手;助手的标准输入是这条管道,不是 adb 的流。
      * [certPin] 是 Mika 签名证书的指纹,不是秘密,放在参数里。
      */
-    fun command(apkPath: String, packageName: String, appUid: Int, certPin: String): String =
-        "read n; (echo \"\$n\" | CLASSPATH=${quote(apkPath)} setsid app_process /system/bin " +
+    fun command(apkPath: String, packageName: String, appUid: Int, certPin: String, launchUid: Int = SHELL_UID): String =
+        "read n; ([ \"\$(id -u)\" = \"$launchUid\" ] && echo \"\$n\" | CLASSPATH=${quote(apkPath)} setsid app_process /system/bin " +
             "--nice-name=${quote(processName(packageName))} $HELPER_CLASS ${quote(packageName)} $appUid ${quote(certPin)} " +
             ">/dev/null 2>&1 &); read _"
 
@@ -72,13 +81,13 @@ object HelperHandoff {
      * 看助手进程还在就说一句「正在启动」,不在(多半是口令过期或 Mika 不认)就请用户打开 Mika 再跑一次。
      * 只用安卓原版 sh 和 toybox 里有的命令。不是 shell 身份(没经 adb 跑)时不起:Mika 只收 shell 交来的助手。
      */
-    fun usbScript(apkPath: String, packageName: String, appUid: Int, certPin: String, nonce: String, scriptPath: String): String {
+    fun usbScript(apkPath: String, packageName: String, appUid: Int, certPin: String, nonce: String, scriptPath: String, expectedUid: Int = SHELL_UID): String {
         val name = quote(processName(packageName))
         val again = usbCommand(scriptPath)
         return """
             |#!/system/bin/sh
             |# Written by Mika. Starts Mika's phone helper from a computer: $again
-            |if [ "${'$'}(id -u)" != "$SHELL_UID" ]; then
+            |if [ "${'$'}(id -u)" != "$expectedUid" ]; then
             |  echo "Run this from a computer over USB: $again"
             |  exit 1
             |fi
@@ -111,9 +120,10 @@ object HelperHandoff {
      */
     fun usbFile(
         connected: Boolean, apkPath: String, packageName: String, appUid: Int, certPin: () -> String, nonce: () -> String, scriptPath: String,
+        expectedUid: Int = SHELL_UID,
     ): String =
         if (connected) usbStub(packageName, scriptPath)
-        else usbScript(apkPath, packageName, appUid, certPin(), nonce(), scriptPath)
+        else usbScript(apkPath, packageName, appUid, certPin(), nonce(), scriptPath, expectedUid)
 
     /** 助手已连着时换上的脚本:不带口令,只说一句。进程不在了(比如手机重启过、Mika 还没打开)就请用户先打开 Mika。 */
     fun usbStub(packageName: String, scriptPath: String): String {
@@ -140,7 +150,7 @@ object HelperHandoff {
     private fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
     enum class Reject {
-        /** 调用方不是 shell(uid 2000)。 */
+        /** 调用方不是交接时应有的那个 uid(无线调试为 shell 2000;Shizuku 助手降权后也是 2000)。 */
         NotShell,
         /** 助手自报的 uid/pid 和 Binder 看到的调用方对不上。 */
         IdMismatch,
@@ -152,12 +162,13 @@ object HelperHandoff {
         BinderElsewhere,
     }
 
-    /** 不碰 Binder 就能做的检查;通过返回 null。口令另由 [HandoffNonces] 核对。 */
+    /** 不碰 Binder 就能做的检查;通过返回 null。口令另由 [HandoffNonces] 核对。[expectedUid] 是助手交接时应有的 uid(降权后)。 */
     fun check(
         callingUid: Int, callingPid: Int, reportedUid: Int, reportedPid: Int,
         helperApk: String?, appApk: String, hasBinder: Boolean,
+        expectedUid: Int = SHELL_UID,
     ): Reject? = when {
-        callingUid != SHELL_UID -> Reject.NotShell
+        callingUid != expectedUid -> Reject.NotShell
         reportedUid != callingUid || reportedPid != callingPid -> Reject.IdMismatch
         helperApk != appApk -> Reject.StaleApk
         !hasBinder -> Reject.NoBinder

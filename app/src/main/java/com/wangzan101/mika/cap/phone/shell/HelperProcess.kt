@@ -14,8 +14,10 @@ import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.Process
+import android.system.Os
 import android.util.Log
 import com.wangzan101.mika.core.shell.HelperHandoff
+import com.wangzan101.mika.core.shell.HelperPrivileges
 import com.wangzan101.mika.core.shell.HelperRestorePolicy
 import com.wangzan101.mika.core.shell.PermissionCommands
 import com.wangzan101.mika.core.shell.RestoreCommands
@@ -33,12 +35,48 @@ import kotlin.system.exitProcess
  * 特权逻辑全在 [ShellService];这里只负责把它的 Binder 交给 Mika,并且在 Mika 进程结束后不退出:
  * 撤掉 Mika 留下的改动,等 Mika 再起来时重新交接。Mika 死后一会儿还没回来、而它交来的心愿([RestoreWish])要拉起来时,
  * 把它的无障碍服务写回系统列表,再经交接用的 provider 把它的进程拉起来(见 [HelperRestorePolicy])。
+ *
+ * Shizuku 后端由 root 启动时,这个进程是 uid 0;进来第一件事是把自己降到 shell(2000)(见 [HelperPrivileges]),
+ * 让 Shizuku(root) 路径与无线调试路径在系统眼里一致——root 身份下「在 Mika 自己的屏上打开别的 App」会到不了前台。
+ * 降权失败就退出,绝不静默以 root 继续(那会得到「看着能用、实际开不了 App」的半残状态)。
  */
 object HelperProcess {
     private const val TAG = "MikaHelper"
+    /** 降权失败时的退出码:和用法错误(2)、交接拒绝(0)、交接失败(1)区分开。 */
+    private const val EXIT_DROP_FAILED = 3
+
+    /** android.system.Os 的薄封装:core 层 [HelperPrivileges] 不依赖 Android,这里接上真实现。 */
+    private val osDrop = object : HelperPrivileges.Drop {
+        override fun currentUid() = Process.myUid()
+        override fun setGroups(gids: IntArray) = setGroupsHidden(gids)
+        override fun setGid(gid: Int) = Os.setgid(gid)
+        override fun setUid(uid: Int) = Os.setuid(uid)
+    }
+
+    /**
+     * 清空补充组。`android.system.Os` 里**没有** `setgroups`（真机 SDK 37 实测 NoSuchMethodException，
+     * 只有 `setuid`/`setgid` 是公开 API），所以只能反射尝试第三方 ROM 上的变体。
+     * 取不到就记一条日志继续——决定系统是否放行的是 uid，补充组清不掉不影响这次修复；
+     * 但也不能让它把整个降权判死（那会让助手起不来）。
+     */
+    private fun setGroupsHidden(gids: IntArray) {
+        runCatching {
+            Class.forName("android.system.Os")
+                .getMethod("setgroups", IntArray::class.java)
+                .invoke(null, gids)
+        }.onFailure { Log.w(TAG, "Os.setgroups unavailable; supplementary groups not cleared", it) }
+    }
 
     @JvmStatic
     fun main(args: Array<String>) {
+        // Shizuku 由 root 启动时我们是 uid 0:先降到 shell,和无线调试路径在系统眼里一致。
+        // 失败就退出,绝不静默以 root 继续(那样「打开别的 App」会到不了前台)。
+        try {
+            HelperPrivileges.dropToShellIfRoot(Process.myUid(), osDrop)
+        } catch (e: HelperPrivileges.DropFailedException) {
+            Log.e(TAG, "refusing to run as root: privilege drop failed", e)
+            exitProcess(EXIT_DROP_FAILED)
+        }
         if (args.size < 3) {
             Log.e(TAG, "usage: HelperMain <package> <uid> <cert-sha256> (nonce on stdin)")
             exitProcess(2)

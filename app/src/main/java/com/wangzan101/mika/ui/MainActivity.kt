@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import com.wangzan101.mika.ui.components.KeyboardDismissArea
 import android.Manifest
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -150,6 +152,7 @@ class MainActivity : ComponentActivity() {
             Fix.OpenUsbDebugging -> openFirst(DeveloperSettings.usbDebuggingPage())
             Fix.OpenWirelessDebugging -> openFirst(DeveloperSettings.wirelessDebuggingPage())
             Fix.OpenWifi -> openFirst(DeveloperSettings.wifiPage())
+            Fix.OpenShizuku -> openShizuku()
         }
     }
 
@@ -182,6 +185,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** 打开 Shizuku App;没装时退到官网/商店下载页。 */
+    private fun openShizuku() {
+        val launch = listOf("moe.shizuku.privileged.api", "moe.shizuku.manager")
+            .firstNotNullOfOrNull { packageManager.getLaunchIntentForPackage(it) }
+        if (launch != null) open(launch) else openInBrowser(this, "https://shizuku.rikka.app/")
+    }
+
     companion object {
         const val EXTRA_OPEN_CONVERSATION = "open_conversation"
         private const val TAG = "MikaMain"
@@ -199,6 +209,21 @@ internal fun openInBrowser(context: Context, url: String) {
 
 /** 依次试 [candidates],第一个 [start] 成功的就停;都不行返回 false。系统设置页各家不一定都有,靠这个退回通用页。 */
 internal fun <T> firstThatStarts(candidates: List<T>, start: (T) -> Boolean): Boolean = candidates.any(start)
+
+/** 重启 Mika:安排一次启动后结束当前进程。切换手机操作方式这类「进程启动时才读的设置」用它生效。 */
+internal fun restartApp(context: Context) {
+    val app = context.applicationContext
+    val launch = app.packageManager.getLaunchIntentForPackage(app.packageName)
+    if (launch != null) {
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val pending = PendingIntent.getActivity(app, 0, launch, PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE)
+        runCatching {
+            app.getSystemService(AlarmManager::class.java).set(AlarmManager.RTC, System.currentTimeMillis() + 400, pending)
+        }
+    }
+    // 交给系统在闹钟到点时重新拉起;先结束当前进程
+    kotlin.system.exitProcess(0)
+}
 
 /**
  * 页面切换:对话页是根,侧栏和设置等入口把页面压进 [NavStack],返回键和页面上的返回按钮都走 [NavStack.back]。

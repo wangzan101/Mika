@@ -45,6 +45,8 @@ enum class BuiltinShellFailure(val defaultFix: BuiltinShellFix, val duringPairin
      * 再运行一次启动命令。不往无线调试引:有的手机根本没有能用的无线调试。
      */
     UsbHelperStopped(BuiltinShellFix.RunUsbCommand, duringPairing = false),
+    /** Shizuku 后端选着,但 Shizuku 没装/没运行/服务中途被杀:Mika 起不了助手,要用户去处理 Shizuku。 */
+    ShizukuUnavailable(BuiltinShellFix.OpenShizuku, duringPairing = false),
     Unknown(BuiltinShellFix.Retry, duringPairing = false),
 }
 
@@ -59,6 +61,8 @@ enum class BuiltinShellFix {
     OpenWirelessDebugging,
     /** 再运行一次 USB 启动命令(界面给出命令和复制按钮)。 */
     RunUsbCommand,
+    /** 去 Shizuku App(或先安装)打开/启动服务。 */
+    OpenShizuku,
 }
 
 /**
@@ -74,6 +78,8 @@ enum class HelperRestart {
      * 有的手机没有能用的无线调试,只能走这条路,所以这时不提示去打开无线调试。
      */
     UsbCommand,
+    /** 选的是 Shizuku 后端:助手停了靠 Shizuku 服务恢复后重起(或用户重新授权)。 */
+    Shizuku,
 }
 
 /** 找「使用配对码配对设备」窗口公布的配对端口(本机 mDNS)的结果。 */
@@ -82,6 +88,15 @@ sealed interface PairingDiscovery {
     data object Searching : PairingDiscovery
     data class Found(val port: Int) : PairingDiscovery
 }
+
+/**
+ * 手机操作走哪条后端:无线调试(默认,经本机 adbd)或 Shizuku(经本机 Shizuku 服务)。
+ * 后端选择是用户可见的顶层决定,持久化在 app 的 PhoneBackendSettings 里(非秘密,SharedPreferences)。
+ */
+enum class PhoneBackend { Wireless, Shizuku }
+
+/** Shizuku 后端选着,但 Shizuku 没装/没运行/服务中途被杀:引擎把它映射成 [BuiltinShellFailure.ShizukuUnavailable],不自动重试。 */
+class ShizukuUnavailableException(message: String) : RuntimeException(message)
 
 /**
  * 内置助手对界面的接口。实现负责配对(mDNS 找端口、6 位码)、连接本机 adbd、拉起并看住助手;
@@ -110,6 +125,12 @@ interface BuiltinShellControl {
 
     /** 用已配对的钥匙重新连接并启动助手。 */
     suspend fun retry()
+
+    /**
+     * Shizuku 服务掉线(或没在跑):状态改为需要用户去处理 Shizuku([BuiltinShellFailure.ShizukuUnavailable]),
+     * 并停掉自动重试;服务回来后再 [retry]。只在 Shizuku 后端有意义,无线调试后端不会被调用。
+     */
+    fun shizukuUnavailable()
 
     /** 删除配对钥匙、停掉助手、撤销助手给 Mika 的授权;之后状态是 [BuiltinShellStatus.NotPaired]。 */
     suspend fun unpair()

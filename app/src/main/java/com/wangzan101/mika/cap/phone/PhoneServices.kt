@@ -9,6 +9,7 @@ import com.wangzan101.mika.cap.phone.shell.BuiltinShellConnection
 import com.wangzan101.mika.cap.phone.shell.HelperHub
 import com.wangzan101.mika.cap.phone.shell.SharedShell
 import com.wangzan101.mika.core.shell.BuiltinShellControl
+import com.wangzan101.mika.settings.PhoneBackendSettings
 import com.wangzan101.mika.settings.RecoverySettings
 
 /**
@@ -22,8 +23,11 @@ class PhoneServices(context: Context) {
     /** 助手交来 Binder 的落点:助手只认一个进程里的一个落点。 */
     val hub = HelperHub(app)
 
+    /** 手机操作走后端(无线调试/Shizuku)的选择。 */
+    val phoneBackendSettings: PhoneBackendSettings by lazy { PhoneBackendSettings(PhoneBackendSettings.prefs(app)) }
+
     /** 配对、经 adbd 起助手、看门狗。 */
-    val shellManager = BuiltinShellManager(app, hub) { recoverySettings.consent.value }
+    val shellManager = BuiltinShellManager(app, hub, phoneBackendSettings) { recoverySettings.consent.value }
 
     /** 内置助手本身(状态、配对、重试、解除配对)。 */
     val shellControl: BuiltinShellControl get() = shellManager.engine

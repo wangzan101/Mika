@@ -34,6 +34,13 @@ class HelperHub(context: Context) {
     /** 现在手里的助手接口;助手进程死了就变回 null。 */
     val shell: StateFlow<IMikaShell?> = _shell.asStateFlow()
 
+    /**
+     * 期望助手以哪个 uid 交接。无线调试/USB 是 [HelperHandoff.SHELL_UID](2000);Shizuku 助手即便由 root 启动,
+     * 一进进程也会降到 shell(见 HelperPrivileges),所以也恒为 2000。起助手前由对应的平台写,交接时拿它核对调用方。
+     * 没起过助手时保持默认(2000),和 USB 脚本路径一致。
+     */
+    @Volatile var expectedUid: Int = HelperHandoff.SHELL_UID
+
     private val _restores = MutableStateFlow<HelperRestoreReport?>(null)
     /** 助手交接时报来的「Mika 被杀后由它拉起来」的记录(诊断信息用);没拉过为 null。 */
     val restores: StateFlow<HelperRestoreReport?> = _restores.asStateFlow()
@@ -77,6 +84,7 @@ class HelperHub(context: Context) {
             helperApk = extras?.getString(HelperHandoff.KEY_APK),
             appApk = app.applicationInfo.sourceDir,
             hasBinder = binder != null,
+            expectedUid = expectedUid,
         )?.let { return reject(it) }
         val gate = nonces
         val nonce = extras?.getString(HelperHandoff.KEY_NONCE)

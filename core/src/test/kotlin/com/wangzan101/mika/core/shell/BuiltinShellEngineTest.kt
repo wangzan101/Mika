@@ -57,6 +57,46 @@ class BuiltinShellEngineTest {
 
     private val platform = FakePlatform()
 
+    /**
+     * 像 Shizuku 的假平台:paired 由测试可变布尔控制;无线调试恒 null、Wi-Fi 恒 true、没有配对端口;
+     * pair() 是异步授权(不设 paired);launchHelper 成功时把 helper 置为非 null(模拟交接),
+     * [unavailable] 为 true 时抛 ShizukuUnavailableException(模拟服务没跑/中途被杀)。
+     */
+    private inner class ShizukuFakePlatform : BuiltinShellPlatform {
+        var authorized = false
+        var unavailable = false
+        var deliverOnLaunch = true
+        val calls = mutableListOf<String>()
+        var usb = false
+
+        override fun paired() = authorized
+        override fun setPaired(paired: Boolean) = Unit
+        override fun wirelessDebugging(): Boolean? = null
+        override fun wifiConnected() = true
+        override suspend fun findPairingPort(timeoutMs: Long): Int? = null
+        override fun pair(port: Int, code: String) { calls += "pair $port $code" }
+        override suspend fun launchHelper() {
+            calls += "launch"
+            if (unavailable) throw ShizukuUnavailableException("Shizuku binder unavailable")
+            if (deliverOnLaunch) helper.value = "binder"
+        }
+        override fun stopHelper() { calls += "stop"; helper.value = null }
+        override fun forget() { calls += "forget" }
+        override fun usbStarted() = usb
+        override fun setUsbStarted(on: Boolean) { usb = on }
+    }
+
+    private fun TestScope.shizukuEngine(
+        platform: BuiltinShellPlatform,
+        backoff: Backoff = Backoff(baseMs = 1_000, maxMs = 8_000, maxAttempts = 3),
+        backend: PhoneBackend = PhoneBackend.Wireless,
+    ) =
+        BuiltinShellEngine(
+            platform, helper, CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler)),
+            StandardTestDispatcher(testScheduler), backoff,
+            graceMs = 3_000, handoffTimeoutMs = 10_000, backend = backend,
+        )
+
     private fun TestScope.engine(
         backoff: Backoff = Backoff(baseMs = 1_000, maxMs = 8_000, maxAttempts = 3),
         autoOn: WirelessDebuggingAutoOn? = null,
@@ -550,5 +590,175 @@ class BuiltinShellEngineTest {
         assertEquals(PairingDiscovery.Searching, e.pairingDiscovery.value)
         advanceTimeBy(2 * 60_000L)
         assertEquals(PairingDiscovery.Idle, e.pairingDiscovery.value)
+    }
+
+    // ---------- Shizuku 后端(假平台) ----------
+
+    @Test
+    fun shizukuAuthorizedLaunchEndsRunning() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        val e = shizukuEngine(platform)
+        e.start()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    /** 未授权:引擎当没设置(NotPaired),不起助手。 */
+    @Test
+    fun shizukuNotAuthorizedNeverLaunches() = runTest {
+        val platform = ShizukuFakePlatform()
+        val e = shizukuEngine(platform)
+        e.start()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.NotPaired, e.status.value)
+        e.need()
+        advanceUntilIdle()
+        assertEquals(0, platform.calls.count { it == "launch" })
+    }
+
+    /** 模拟异步授权:先未授权(NotPaired),授权回来后 retry() 就起来。 */
+    @Test
+    fun shizukuAuthorizationGrantedThenRetryLaunches() = runTest {
+        val platform = ShizukuFakePlatform()
+        val e = shizukuEngine(platform)
+        e.start()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.NotPaired, e.status.value)
+        platform.authorized = true
+        e.retry()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    /** binder 掉线(即便助手还活着):监听方调 shizukuUnavailable(),状态变成需要用户去处理 Shizuku,且不再自己试。 */
+    @Test
+    fun shizukuBinderDeadMarksUnavailable() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        helper.value = "binder"
+        val e = shizukuEngine(platform)
+        e.start()
+        runCurrent()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        e.shizukuUnavailable()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.ShizukuUnavailable), e.status.value)
+        assertEquals(0, platform.calls.count { it == "launch" })
+    }
+
+    /** binder 回来:监听方调 retry(),从「去处理 Shizuku」恢复成 Running。 */
+    @Test
+    fun shizukuBinderBackThenRetryRecovers() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        val e = shizukuEngine(platform)
+        e.shizukuUnavailable()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.ShizukuUnavailable), e.status.value)
+        e.retry()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    /** Shizuku 不关心无线调试开关:读 null 不拦,照常起助手。 */
+    @Test
+    fun shizukuWirelessDebuggingNullDoesNotBlock() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        val e = shizukuEngine(platform)
+        e.start()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    @Test
+    fun shizukuDiscoveryStaysIdle() = runTest {
+        val platform = ShizukuFakePlatform()
+        val e = shizukuEngine(platform)
+        e.startDiscovery()
+        assertEquals(PairingDiscovery.Searching, e.pairingDiscovery.value)
+        advanceUntilIdle()
+        assertEquals(PairingDiscovery.Idle, e.pairingDiscovery.value)
+    }
+
+    /**
+     * 契约不匹配(防回归):pair() 是异步授权、不设 paired,引擎里随后的 setPaired(true) 在 Shizuku 上是 no-op,
+     * 所以 startPairing 走完仍不是 Running——Shizuku 路径不能用 startPairing,授权要经回调再 retry()。
+     */
+    @Test
+    fun shizukuPairIsAsyncNoPairedMark() = runTest {
+        val platform = ShizukuFakePlatform()
+        val e = shizukuEngine(platform)
+        e.startPairing("123456", 37000)
+        advanceUntilIdle()
+        assertEquals(false, platform.authorized)
+        assertTrue(platform.calls.contains("pair 37000 123456"))
+        assertEquals(BuiltinShellStatus.NotPaired, e.status.value)
+        assertEquals(0, platform.calls.count { it == "launch" })
+    }
+
+    /** 助手中途死了、再去起时发现 Shizuku 服务也没了:报「不可用」,不自动重试。 */
+    @Test
+    fun shizukuDeathMidRunReportsShizukuUnavailable() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        helper.value = "binder"
+        val e = shizukuEngine(platform)
+        e.start()
+        runCurrent()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        platform.unavailable = true
+        helper.value = null
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.ShizukuUnavailable), e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    /** ShizukuUnavailable 不进 retryable:一次失败后不指数退避,等人(服务回来)再 retry()。 */
+    @Test
+    fun shizukuUnavailableNotRetried() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true; unavailable = true }
+        val e = shizukuEngine(platform)
+        e.retry()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.ShizukuUnavailable), e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    @Test
+    fun shizukuRestartRoute() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        assertEquals(HelperRestart.Shizuku, shizukuEngine(platform, backend = PhoneBackend.Shizuku).restart)
+        assertEquals(HelperRestart.Wireless, shizukuEngine(platform).restart)
+    }
+
+    /**
+     * Shizuku 的授权只能由用户去 Shizuku App 撤销,App 侧 setPaired(false) 是 no-op:
+     * unpair 会 stop+forget,但因为仍授权,看门狗马上又拉起一个。记录现状,不等价于无线调试的「解除配对」。
+     */
+    @Test
+    fun shizukuUnpairForgetsButReloadsWhileStillAuthorized() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true }
+        helper.value = "binder"
+        val e = shizukuEngine(platform)
+        e.start()
+        runCurrent()
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        e.unpair()
+        advanceUntilIdle()
+        assertTrue(platform.calls.containsAll(listOf("stop", "forget")))
+        assertEquals(false, platform.usb)
+        // 授权没被撤,看门狗又拉起来了
+        assertEquals(BuiltinShellStatus.Running, e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
+    }
+
+    /** 起是起了、助手却没来交接:超时报 HelperStartFailed(与无线调试路径同一状态)。 */
+    @Test
+    fun shizukuLaunchedButNeverHandedOffIsHelperStartFailed() = runTest {
+        val platform = ShizukuFakePlatform().apply { authorized = true; deliverOnLaunch = false }
+        val e = shizukuEngine(platform, backoff = Backoff(maxAttempts = 1))
+        e.retry()
+        assertEquals(BuiltinShellStatus.Failed(BuiltinShellFailure.HelperStartFailed), e.status.value)
+        assertEquals(1, platform.calls.count { it == "launch" })
     }
 }

@@ -201,6 +201,7 @@ object Diagnostics {
         line("helper restart", when (i.restart) {
             HelperRestart.Wireless -> "wireless debugging (paired)"
             HelperRestart.UsbCommand -> "USB start command"
+            HelperRestart.Shizuku -> "Shizuku (authorized)"
             HelperRestart.None -> "not set up"
         })
         line("setup", "phase=${view.phase}" + (view.current?.let { ", current=${step(it)}" } ?: ""))

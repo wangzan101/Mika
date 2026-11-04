@@ -34,6 +34,11 @@ class FakeBuiltinShellControl(
         status.value = retryResult
     }
 
+    override fun shizukuUnavailable() {
+        calls += "shizukuUnavailable"
+        status.value = BuiltinShellStatus.Failed(BuiltinShellFailure.ShizukuUnavailable)
+    }
+
     override suspend fun unpair() {
         calls += "unpair"
         status.value = BuiltinShellStatus.NotPaired

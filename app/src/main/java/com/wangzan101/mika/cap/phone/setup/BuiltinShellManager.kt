@@ -26,6 +26,7 @@ import com.wangzan101.mika.core.adb.PortCache
 import com.wangzan101.mika.core.shell.BuiltinShellEngine
 import com.wangzan101.mika.core.shell.BuiltinShellPlatform
 import com.wangzan101.mika.core.shell.HelperHandoff
+import com.wangzan101.mika.core.shell.PhoneBackend
 import com.wangzan101.mika.core.shell.PermissionCommands
 import com.wangzan101.mika.core.shell.RecoveryCapability
 import com.wangzan101.mika.core.shell.RecoveryConsent
@@ -34,6 +35,7 @@ import com.wangzan101.mika.core.shell.ShellCommandRunner
 import com.wangzan101.mika.cap.phone.shell.HelperHub
 import com.wangzan101.mika.cap.phone.shell.adb.AndroidAdb
 import com.wangzan101.mika.cap.phone.shell.adb.NsdAdbServiceFinder
+import com.wangzan101.mika.settings.PhoneBackendSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,7 +53,12 @@ import java.util.concurrent.atomic.AtomicReference
  * 内置助手的真实现:配对、经本机 adbd 起助手、看门狗。由 [com.wangzan101.mika.cap.phone.PhoneServices] 建一份,
  * App 启动时由 [start] 开始看着助手;[hub] 是助手交来 Binder 的落点;[consent] 是用户对那几项能力的选择(「自动打开无线调试」看它)。
  */
-class BuiltinShellManager(context: Context, private val hub: HelperHub, private val consent: () -> RecoveryConsent) {
+class BuiltinShellManager(
+    context: Context,
+    private val hub: HelperHub,
+    private val backendSettings: PhoneBackendSettings,
+    private val consent: () -> RecoveryConsent,
+) {
     private val app = context.applicationContext
     private var started = false
 
@@ -59,8 +66,13 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
     /** 正在扫本机找无线调试端口(引导页显示「正在本机查找…」)。 */
     val scanningPorts: StateFlow<Boolean> = _scanningPorts.asStateFlow()
 
-    private val platform: AndroidPlatform by lazy {
-        AndroidPlatform(app, hub, { lastConnectCandidates = it }, { _scanningPorts.value = it })
+    private val adbPlatform: AdbShellPlatform by lazy {
+        AdbShellPlatform(app, hub, { lastConnectCandidates = it }, { _scanningPorts.value = it })
+    }
+    private val shizukuPlatform: ShizukuShellPlatform by lazy { ShizukuShellPlatform(app, hub) }
+    /** 当前后端对应的平台。引擎、commandRunner 都看它。 */
+    private val platform: BuiltinShellPlatform by lazy {
+        if (backendSettings.backend.value == PhoneBackend.Shizuku) shizukuPlatform else adbPlatform
     }
 
     /** 最近一次找连接端口时各来源给了几个候选(诊断信息用);这次进程里还没连过为 null。 */
@@ -79,8 +91,11 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
 
     /** 配对客户端 + 看门狗。 */
     val engine: BuiltinShellEngine by lazy {
+        val backend = backendSettings.backend.value
         BuiltinShellEngine(
-            platform, hub.shell, CoroutineScope(SupervisorJob() + Dispatchers.Default), Dispatchers.IO, autoOn = wirelessAutoOn,
+            platform, hub.shell, CoroutineScope(SupervisorJob() + Dispatchers.Default), Dispatchers.IO,
+            autoOn = if (backend == PhoneBackend.Shizuku) null else wirelessAutoOn,
+            backend = backend,
         )
     }
 
@@ -91,9 +106,14 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
     val commandRunner = ShellCommandRunner { command ->
         withContext(Dispatchers.IO) {
             hub.shell.value?.let { it.runCommand(command)?.getString("output").orEmpty() }
-                ?: platform.connect().use { it.exec(command).readText() }
+                // 兜底只在无线调试后端成立:Shizuku 后端助手不在时没有第二条同步执行命令的路
+                ?: (platform as? AdbShellPlatform)?.connect()?.use { it.exec(command).readText() }
+                ?: error("phone helper is not running")
         }
     }
+
+    /** Shizuku 后端的授权/binder 回调协调器;只在选中 Shizuku 后端时注册(见 [start])。 */
+    val shizukuSetup: ShizukuSetup by lazy { ShizukuSetup(app, engine) }
 
     /** 「用电脑启动」的脚本:跟着助手在不在重写。 */
     val usbScript = UsbStartScript(app, hub)
@@ -106,7 +126,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
 
     /** 用户在引导页填了无线调试的端口:下一次连接带上它(只用这一次,连上了就记作缓存),然后重试。 */
     suspend fun connectWithPort(port: Int) {
-        platform.manualPort.set(port)
+        (platform as? AdbShellPlatform)?.manualPort?.set(port)
         engine.retry()
     }
 
@@ -114,6 +134,8 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
     fun start() {
         if (started || Build.VERSION.SDK_INT < MIN_SDK) return
         started = true
+        // Shizuku 后端从进程一启动就盯着授权与 binder;无线调试后端不注册(监听器成对注册/移除见 ShizukuSetup)
+        if (backendSettings.backend.value == PhoneBackend.Shizuku) shizukuSetup.start()
         usbScript.start()
         val e = engine
         // 无线调试一打开就试着连回去;关掉时状态马上变成「无线调试已关」
@@ -136,7 +158,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
         e.start()
     }
 
-    private class AndroidPlatform(
+    private class AdbShellPlatform(
         private val app: Context,
         private val hub: HelperHub,
         private val candidates: (ConnectCandidates) -> Unit,
@@ -184,8 +206,12 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
 
         override suspend fun launchHelper() {
             val tls = AndroidAdb.tls(AndroidAdb.identity(app))
+            // 无线调试/USB 起助手恒以 shell 身份:交接核对用的期望 uid 就是 2000
+            hub.expectedUid = HelperHandoff.SHELL_UID
             // 助手每次交接前都核对 Mika 的签名
-            val command = HelperHandoff.command(app.applicationInfo.sourceDir, app.packageName, Process.myUid(), ownCertPin(app))
+            val command = HelperHandoff.command(
+                app.applicationInfo.sourceDir, app.packageName, Process.myUid(), ownCertPin(app), launchUid = HelperHandoff.SHELL_UID,
+            )
             val connection = connect(tls)
             // 流开着 sh 就一直等;交接到了(或超时)再关,交接结果仍由引擎从 HelperHub 判断
             val before = hub.shell.value

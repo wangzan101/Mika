@@ -26,6 +26,8 @@ enum class Fix {
     // 内置助手
     OpenPhoneSetup, RepairPhoneHelper, RetryPhoneHelper, UnpairPhoneHelper,
     OpenAboutPhone, OpenDeveloperOptions, OpenUsbDebugging, OpenWirelessDebugging, OpenWifi,
+    /** 去 Shizuku App(或先安装)打开/启动服务。 */
+    OpenShizuku,
 }
 
 /** 顶部横幅的一行字和右侧链接。 */

@@ -240,6 +240,15 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
+        <!-- Shizuku 后端:让 App 连上本机 Shizuku 服务;authority/权限按官方文档 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
         <!-- 开机广播只由系统发出(受保护的广播),按要求导出 -->
         <receiver
             android:name=".setup.BootRestoreReceiver"

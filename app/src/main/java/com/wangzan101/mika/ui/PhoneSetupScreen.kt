@@ -63,6 +63,7 @@ import com.wangzan101.mika.core.shell.BuiltinShellStatus
 import com.wangzan101.mika.core.shell.HelperRestart
 import com.wangzan101.mika.core.shell.PairingCode
 import com.wangzan101.mika.core.shell.PairingNotifyIssue
+import com.wangzan101.mika.core.shell.PhoneBackend
 import com.wangzan101.mika.core.shell.PhoneSetupFlow
 import com.wangzan101.mika.core.shell.SetupPhase
 import com.wangzan101.mika.core.shell.SetupStep
@@ -70,6 +71,7 @@ import com.wangzan101.mika.core.shell.SetupView
 import com.wangzan101.mika.core.shell.StepMark
 import com.wangzan101.mika.settings.SystemStatus
 import com.wangzan101.mika.cap.phone.PhoneServices
+import com.wangzan101.mika.cap.phone.setup.ShizukuState
 import com.wangzan101.mika.ui.components.PageBackground
 import com.wangzan101.mika.ui.components.GroupCard
 import com.wangzan101.mika.ui.components.TopBar
@@ -81,6 +83,7 @@ import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.components.TileTone
 import com.wangzan101.mika.ui.components.RowChevron
 import com.wangzan101.mika.ui.components.MikaButton
+import com.wangzan101.mika.ui.components.RadioRow
 import com.wangzan101.mika.ui.components.ButtonKind
 import com.wangzan101.mika.ui.components.ButtonSize
 import com.wangzan101.mika.ui.components.cardSurface
@@ -107,6 +110,19 @@ private val StepSetSaver = Saver<Set<SetupStep>, String>(
 fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit, onboarding: Boolean = false, onClose: () -> Unit) {
     val context = LocalContext.current
     val phone = remember { PhoneServices.of(context) }
+    val backend by phone.phoneBackendSettings.backend.collectAsState()
+    var restartPrompt by rememberSaveable { mutableStateOf(false) }
+    val changeBackend: (PhoneBackend) -> Unit = { b ->
+        if (b != phone.phoneBackendSettings.backend.value) {
+            phone.phoneBackendSettings.setBackend(b)
+            restartPrompt = true
+        }
+    }
+    if (backend == PhoneBackend.Shizuku) {
+        ShizukuSetupScreen(phone, backend, status.builtinShell, changeBackend, onFix, onboarding, onClose)
+        if (restartPrompt) RestartPrompt { restartPrompt = false }
+        return
+    }
     val pairing = phone.pairing
     val discovery by phone.shellControl.pairingDiscovery.collectAsState()
     val scanning by phone.shellManager.scanningPorts.collectAsState()
@@ -204,6 +220,7 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
                 BuiltinShellFix.OpenWifi -> onFix(Fix.OpenWifi)
                 BuiltinShellFix.OpenWirelessDebugging -> onFix(Fix.OpenWirelessDebugging)
                 BuiltinShellFix.RunUsbCommand -> copyUsbCommand()
+                BuiltinShellFix.OpenShizuku -> onFix(Fix.OpenShizuku)
             }
         },
         onAllowNotifications = { onFix(Fix.AllowNotifications) },
@@ -228,11 +245,14 @@ fun PhoneSetupScreen(status: SystemStatus, repair: Boolean, onFix: (Fix) -> Unit
         usbCommand = usbCommand,
         onAskUsb = { usbAsked = true },
         onCopyUsbCommand = copyUsbCommand,
+        backend = backend,
+        onBackendChange = changeBackend,
     )
     // 卡在哪一步都能把诊断信息发给作者:用的是引导页此刻的输入,用户确认过的步骤也在里面
     if (diagnosticsOpen) {
         DiagnosticsSheet(load = { Diagnostics.render(DiagnosticsCollector.collect(context, status, inputs)) }, onDismiss = { diagnosticsOpen = false })
     }
+    if (restartPrompt) RestartPrompt { restartPrompt = false }
 }
 
 /**
@@ -269,6 +289,8 @@ fun PhoneSetupContent(
     usbCommand: String? = null,
     onAskUsb: () -> Unit = {},
     onCopyUsbCommand: () -> Unit = {},
+    backend: PhoneBackend = PhoneBackend.Wireless,
+    onBackendChange: (PhoneBackend) -> Unit = {},
 ) {
     val canRevisit = view.phase == SetupPhase.Guide || view.phase == SetupPhase.Failed
     fun revisitable(step: SetupStep) = canRevisit && step != view.current && step in PhoneSetupFlow.REVISITABLE &&
@@ -278,6 +300,7 @@ fun PhoneSetupContent(
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
             TopBar(PhoneSetupCopy.BAR_TITLE, MikaIcons.Back, onClose, stringResource(R.string.back))
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                BackendChoice(backend, onBackendChange)
                 if (view.phase == SetupPhase.Unavailable) {
                     // 这个环境没有能起助手的路:只说明,不列走不通的步骤
                     GroupCard {
@@ -692,5 +715,158 @@ fun PhoneSetupLine(onOpen: () -> Unit) {
             PhoneSetupCopy.DEGRADED_ACTION, Modifier.clickable(onClick = onOpen).padding(4.dp).testTag("phone-setup-open"),
             fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MikaTheme.colors.accent,
         )
+    }
+}
+
+// ---------- 手机操作方式 + Shizuku 引导 ----------
+
+/** 「手机操作方式」二选一:无线调试(默认)或 Shizuku。换法要重启 Mika 生效(见 [RestartPrompt])。 */
+@Composable
+private fun BackendChoice(backend: PhoneBackend, onBackendChange: (PhoneBackend) -> Unit) {
+    val c = MikaTheme.colors
+    Text(
+        PhoneSetupCopy.BACKEND_LABEL, Modifier.padding(top = 4.dp, bottom = 8.dp),
+        style = MikaType.Body, fontWeight = FontWeight.SemiBold, color = c.ink,
+    )
+    GroupCard {
+        RadioRow(
+            PhoneSetupCopy.BACKEND_WIRELESS, selected = backend == PhoneBackend.Wireless, first = true,
+            onClick = { onBackendChange(PhoneBackend.Wireless) }, subtitle = PhoneSetupCopy.BACKEND_WIRELESS_SUB,
+        )
+        RadioRow(
+            PhoneSetupCopy.BACKEND_SHIZUKU, selected = backend == PhoneBackend.Shizuku,
+            onClick = { onBackendChange(PhoneBackend.Shizuku) }, subtitle = PhoneSetupCopy.BACKEND_SHIZUKU_SUB,
+        )
+    }
+    Text(PhoneSetupCopy.BACKEND_HINT, Modifier.padding(top = 6.dp), fontSize = 12.5.sp, lineHeight = 17.sp, color = c.ink3)
+}
+
+/** 切换手机操作方式后提示重启:Mika 的引擎/平台在进程启动时按所选方式建,重启才换成新的。 */
+@Composable
+private fun RestartPrompt(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(PhoneSetupCopy.RESTART_TITLE) },
+        text = { Text(PhoneSetupCopy.RESTART_BODY) },
+        confirmButton = { TextButton({ restartApp(context) }) { Text(PhoneSetupCopy.RESTART_NOW) } },
+        dismissButton = { TextButton(onDismiss) { Text(PhoneSetupCopy.RESTART_LATER) } },
+    )
+}
+
+/** Shizuku 分支的引导页:三件事的真实状态 + 对应动作;三件都齐了就显示连接/成功。 */
+@Composable
+private fun ShizukuSetupScreen(
+    phone: PhoneServices,
+    backend: PhoneBackend,
+    shell: BuiltinShellStatus,
+    onBackendChange: (PhoneBackend) -> Unit,
+    onFix: (Fix) -> Unit,
+    onboarding: Boolean,
+    onClose: () -> Unit,
+) {
+    val state by phone.shellManager.shizukuSetup.state.collectAsState()
+    var restartPrompt by rememberSaveable { mutableStateOf(false) }
+    val c = MikaTheme.colors
+    BackHandler(onBack = onClose)
+    PageBackground {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
+            TopBar(PhoneSetupCopy.BAR_TITLE, MikaIcons.Back, onClose, stringResource(R.string.back))
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                BackendChoice(backend) { onBackendChange(it); restartPrompt = true }
+                val running = state.authorized && shell == BuiltinShellStatus.Running
+                if (running) {
+                    Text(
+                        PhoneSetupCopy.SUCCESS_LINE, Modifier.padding(top = 4.dp, bottom = 12.dp).testTag("shizuku-success"),
+                        style = MikaType.Body, fontWeight = FontWeight.SemiBold, color = c.ok,
+                    )
+                } else if (state.authorized) {
+                    Row(Modifier.padding(top = 4.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(Modifier.size(16.dp), color = c.accent, strokeWidth = 2.dp)
+                        Text(PhoneSetupCopy.SHIZUKU_READY, fontSize = 13.5.sp, color = c.ink2)
+                    }
+                }
+                GroupCard {
+                    ShizukuStepRow(
+                        PhoneSetupCopy.SHIZUKU_INSTALL, PhoneSetupCopy.SHIZUKU_INSTALL_BODY, 1, state.installed, first = true,
+                        action = if (!state.installed) PhoneSetupCopy.SHIZUKU_INSTALL_ACTION else null,
+                        onAction = { onFix(Fix.OpenShizuku) },
+                    )
+                    ShizukuStepRow(
+                        PhoneSetupCopy.SHIZUKU_START, PhoneSetupCopy.SHIZUKU_START_BODY, 2, state.running, first = false,
+                        action = if (state.installed && !state.running) PhoneSetupCopy.SHIZUKU_START_ACTION else null,
+                        onAction = { onFix(Fix.OpenShizuku) },
+                    )
+                    ShizukuStepRow(
+                        PhoneSetupCopy.SHIZUKU_AUTHORIZE, PhoneSetupCopy.SHIZUKU_AUTHORIZE_BODY, 3, state.authorized, first = false,
+                        action = if (state.running && !state.authorized) PhoneSetupCopy.SHIZUKU_AUTHORIZE_ACTION else null,
+                        onAction = { phone.shellManager.shizukuSetup.requestPermission() },
+                    )
+                }
+            }
+            Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)) {
+                val running = state.authorized && shell == BuiltinShellStatus.Running
+                if (running) {
+                    Text(
+                        PhoneSetupCopy.SHIZUKU_SUCCESS_NOTE, Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        style = MikaType.Caption, color = c.ink3, textAlign = TextAlign.Center,
+                    )
+                }
+                if (onboarding) ProgressDots(Onboarding.DOTS, Onboarding.dot(OnboardingStep.Phone), Modifier.padding(bottom = 8.dp))
+                if (running) {
+                    MikaButton(
+                        if (onboarding) PhoneSetupCopy.START_USING else PhoneSetupCopy.SUCCESS_DONE, onClose,
+                        Modifier.fillMaxWidth().testTag("shizuku-done"),
+                    )
+                } else {
+                    MikaButton(
+                        PhoneSetupCopy.LATER, onClose, Modifier.fillMaxWidth().testTag("shizuku-later"),
+                        kind = ButtonKind.Text, size = ButtonSize.Medium,
+                    )
+                }
+            }
+        }
+    }
+    if (restartPrompt) RestartPrompt { restartPrompt = false }
+}
+
+/** Shizuku 引导页里的一步:标题、说明、做完打勾,没做完给对应动作。 */
+@Composable
+private fun ShizukuStepRow(
+    title: String, body: String, n: Int, done: Boolean, first: Boolean,
+    action: String?, onAction: () -> Unit,
+) {
+    val c = MikaTheme.colors
+    Box(Modifier.fillMaxWidth().testTag("shizuku-step-$n")) {
+        if (!first) Box(Modifier.padding(start = 52.dp).fillMaxWidth().height(0.5.dp).background(c.hair))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            ShizukuStepBadge(n, done)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    title, style = MikaType.Body,
+                    fontWeight = if (done) FontWeight.Medium else FontWeight.SemiBold,
+                    color = c.ink,
+                )
+                Text(body, Modifier.padding(top = 2.dp), style = MikaType.Caption, color = c.ink2)
+                if (action != null) {
+                    MikaButton(
+                        action, onAction, Modifier.padding(top = 10.dp),
+                        kind = ButtonKind.Primary, size = ButtonSize.Small,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShizukuStepBadge(n: Int, done: Boolean) {
+    val c = MikaTheme.colors
+    Box(
+        Modifier.size(28.dp).background(if (done) c.ok else c.greySoft, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (done) Icon(MikaIcons.Check, null, Modifier.size(15.dp), tint = c.onAccent)
+        else Text("$n", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.ink3)
     }
 }

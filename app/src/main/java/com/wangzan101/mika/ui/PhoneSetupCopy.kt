@@ -177,6 +177,10 @@ object PhoneSetupCopy {
             tr(R.string.fail_usb_stopped),
             tr(R.string.fail_usb_stopped_body),
         )
+        BuiltinShellFailure.ShizukuUnavailable -> FailureCopy(
+            tr(R.string.fail_shizuku),
+            tr(R.string.fail_shizuku_body),
+        )
         BuiltinShellFailure.Unknown -> FailureCopy(
             tr(R.string.fail_unknown),
             tr(R.string.fail_unknown_body),
@@ -189,7 +193,35 @@ object PhoneSetupCopy {
         BuiltinShellFix.OpenWifi -> tr(R.string.phone_open_wifi)
         BuiltinShellFix.OpenWirelessDebugging -> tr(R.string.phone_open_wireless)
         BuiltinShellFix.RunUsbCommand -> USB_COPY
+        BuiltinShellFix.OpenShizuku -> tr(R.string.phone_open_shizuku)
     }
+
+    // ---------- 手机操作方式 ----------
+
+    val BACKEND_LABEL: String get() = tr(R.string.phone_backend_label)
+    val BACKEND_WIRELESS: String get() = tr(R.string.phone_backend_wireless)
+    val BACKEND_WIRELESS_SUB: String get() = tr(R.string.phone_backend_wireless_sub)
+    val BACKEND_SHIZUKU: String get() = tr(R.string.phone_backend_shizuku)
+    val BACKEND_SHIZUKU_SUB: String get() = tr(R.string.phone_backend_shizuku_sub)
+    val BACKEND_HINT: String get() = tr(R.string.phone_backend_hint)
+    val RESTART_TITLE: String get() = tr(R.string.phone_backend_restart_title)
+    val RESTART_BODY: String get() = tr(R.string.phone_backend_restart_body)
+    val RESTART_NOW: String get() = tr(R.string.phone_backend_restart_now)
+    val RESTART_LATER: String get() = tr(R.string.phone_backend_restart_later)
+
+    // ---------- Shizuku 引导 ----------
+
+    val SHIZUKU_INSTALL: String get() = tr(R.string.phone_shizuku_step_install)
+    val SHIZUKU_INSTALL_BODY: String get() = tr(R.string.phone_shizuku_step_install_body)
+    val SHIZUKU_INSTALL_ACTION: String get() = tr(R.string.phone_shizuku_install)
+    val SHIZUKU_START: String get() = tr(R.string.phone_shizuku_step_start)
+    val SHIZUKU_START_BODY: String get() = tr(R.string.phone_shizuku_step_start_body)
+    val SHIZUKU_START_ACTION: String get() = tr(R.string.phone_shizuku_start)
+    val SHIZUKU_AUTHORIZE: String get() = tr(R.string.phone_shizuku_step_authorize)
+    val SHIZUKU_AUTHORIZE_BODY: String get() = tr(R.string.phone_shizuku_step_authorize_body)
+    val SHIZUKU_AUTHORIZE_ACTION: String get() = tr(R.string.phone_shizuku_authorize)
+    val SHIZUKU_READY: String get() = tr(R.string.phone_shizuku_ready)
+    val SHIZUKU_SUCCESS_NOTE: String get() = tr(R.string.phone_shizuku_success_note)
 
     // ---------- 设置页 ----------
 

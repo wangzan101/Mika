@@ -84,6 +84,7 @@ class BuiltinShellEngine(
     private val discoveryTimeoutMs: Long = 10 * 60_000L,
     private val pairingPortTimeoutMs: Long = 5_000,
     private val autoOn: WirelessDebuggingAutoOn? = null,
+    private val backend: PhoneBackend = PhoneBackend.Wireless,
 ) : BuiltinShellControl {
     private val _status = MutableStateFlow(initialStatus())
     override val status: StateFlow<BuiltinShellStatus> = _status.asStateFlow()
@@ -103,7 +104,7 @@ class BuiltinShellEngine(
     override val paired: Boolean get() = platform.paired()
 
     override val restart: HelperRestart get() = when {
-        platform.paired() -> HelperRestart.Wireless
+        platform.paired() -> if (backend == PhoneBackend.Shizuku) HelperRestart.Shizuku else HelperRestart.Wireless
         platform.usbStarted() -> HelperRestart.UsbCommand
         else -> HelperRestart.None
     }
@@ -262,6 +263,9 @@ class BuiltinShellEngine(
     } catch (e: AdbKeyUnreadableException) {
         lastError = describe(e)
         BuiltinShellFailure.KeyUnreadable
+    } catch (e: ShizukuUnavailableException) {
+        lastError = describe(e)
+        BuiltinShellFailure.ShizukuUnavailable
     } catch (e: Exception) {
         lastError = describe(e)
         BuiltinShellFailure.Unknown
@@ -333,6 +337,19 @@ class BuiltinShellEngine(
             return
         }
         launchOnce()
+    }
+
+    /**
+     * Shizuku 服务掉线:停掉自动重试,状态改成「去处理 Shizuku」。[BuiltinShellFailure.ShizukuUnavailable]
+     * 不进 retryable(),所以这里取消排着的重试后不会自己再试,等 Shizuku 的 binderReceived 回调再 [retry]。
+     */
+    override fun shizukuUnavailable() {
+        synchronized(this) {
+            retryJob?.cancel()
+            retryJob = null
+            failures = 0
+        }
+        _status.value = BuiltinShellStatus.Failed(BuiltinShellFailure.ShizukuUnavailable)
     }
 
     override suspend fun unpair() {

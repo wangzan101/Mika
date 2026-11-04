@@ -158,10 +158,24 @@ class McpClientTest {
                 put("type", "object"); put("properties", JsonNull)
                 put("required", buildJsonArray { add(JsonPrimitive("q")) })
             }),
+            // properties 是数组(非对象非 null)→ 按无参数处理
+            McpToolDescriptor("q7", "properties as array", buildJsonObject {
+                put("type", "object"); put("properties", buildJsonArray { add(JsonPrimitive("x")) })
+            }),
+            // required 显式 null → 忽略
+            McpToolDescriptor("q8", "required null", buildJsonObject {
+                put("type", "object"); put("properties", JsonNull); put("required", JsonNull)
+            }),
+            // required 里的空字符串不指向任何属性 → 按无效项丢弃
+            McpToolDescriptor("q9", "required with empty string", buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject { put("q", buildJsonObject { put("type", "string") }) })
+                put("required", buildJsonArray { add(JsonPrimitive("")); add(JsonPrimitive("q")) })
+            }),
         )
         val defs = toolDispatcher(FakeScreen(), mcpServers = listOf(McpConnection(endpoint)))
             .definitions().filter { it.name.startsWith("mcp_demo__q") }
-        assertEquals(6, defs.size)
+        assertEquals(9, defs.size)
         fun paramsOf(name: String) = Json.parseToJsonElement(
             defs.first { it.name == "mcp_demo__$name" }.parametersJsonSchema,
         ).jsonObject
@@ -179,6 +193,12 @@ class McpClientTest {
         // q6:幽灵 required 被补回空宽松 schema,工具可调用
         assertTrue("q" in (paramsOf("q6")["properties"]?.jsonObject?.keys ?: emptySet()))
         assertEquals(listOf("q"), paramsOf("q6")["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+        // q7:properties 是数组 → 按无参数处理
+        assertEquals(listOf("reason"), paramsOf("q7")["properties"]?.jsonObject?.keys?.toList())
+        // q8:required 显式 null → 忽略
+        assertEquals(emptyList<String>(), paramsOf("q8")["required"]?.jsonArray?.map { it.jsonPrimitive.content } ?: emptyList<String>())
+        // q9:required 里的空字符串不指向任何属性 → 丢弃,有效项保留
+        assertEquals(listOf("q"), paramsOf("q9")["required"]?.jsonArray?.map { it.jsonPrimitive.content })
     }
 
     @Test fun unattendedExternalMcpCallIsNotAskedAndNotCalledByTheJudge() = runBlocking {

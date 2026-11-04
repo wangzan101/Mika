@@ -216,7 +216,7 @@ private class McpClientTool(
         val props = (schema["properties"] as? JsonObject).orEmpty()
             .mapValues { (_, v) -> v as? JsonObject ?: JsonObject(emptyMap()) }
         val required = (schema["required"] as? JsonArray).orEmpty()
-            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString && p.content.isNotBlank() }?.content }
         ToolDef(
             "mcp_${endpoint.serverId.replace(Regex("[^A-Za-z0-9_]"), "_")}__${descriptor.name.replace(Regex("[^A-Za-z0-9_]"), "_")}",
             descriptor.description,

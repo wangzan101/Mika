@@ -5,6 +5,10 @@ import com.wangzan101.mika.i18n.tr
 import androidx.compose.ui.res.stringResource
 import com.wangzan101.mika.settings.ProviderConnection
 import android.app.ActivityManager
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import com.wangzan101.mika.ui.components.MikaDialog
 import androidx.compose.material3.Text
@@ -35,6 +39,7 @@ import com.wangzan101.mika.settings.FeatureFlags
 import com.wangzan101.mika.settings.Prerequisites
 import com.wangzan101.mika.settings.Problem
 import com.wangzan101.mika.settings.ProviderStore
+import com.wangzan101.mika.voice.WakeWordService
 import com.wangzan101.mika.settings.NetProxyStore
 import com.wangzan101.mika.cap.web.WebProxy
 import com.wangzan101.mika.settings.SystemStatus
@@ -97,6 +102,17 @@ fun SettingsScreen(
 
     // 并行任务的上限只在实验开关 parallelTasks 打开时出现;设备能力按此刻算,第二块屏建失败过就按失败算
     val context = LocalContext.current
+    val wakeActive by WakeWordService.active.collectAsState()
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) WakeWordService.start(context)
+    }
+    val toggleWake: () -> Unit = {
+        if (wakeActive) WakeWordService.stop(context)
+        else if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+            WakeWordService.start(context)
+        else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        Unit
+    }
     val flags = remember { FeatureFlags.get(context) }
     var parallelMax by remember { mutableIntStateOf(flags.parallelMax()) }
     var keepScreenOn by remember { mutableStateOf(flags.keepScreenOn()) }
@@ -156,6 +172,7 @@ fun SettingsScreen(
             onOpenPhoneOps = { page = SettingsPage.PhoneOps },
             onOpenAppAccess = { page = SettingsPage.AppAccess },
             onOpenDuringWork = { page = SettingsPage.DuringWork },
+            wakeActive = wakeActive, onWakeToggle = toggleWake,
             capsuleMode = capsuleMode, onOpenCapsule = { page = SettingsPage.Capsule },
             onOpenNotifications = { page = SettingsPage.Notifications },
             language = language, onOpenLanguage = { page = SettingsPage.Language },
@@ -246,6 +263,8 @@ fun SettingsContent(
     onOpenPhoneOps: () -> Unit = {},
     onOpenAppAccess: () -> Unit = {},
     onOpenDuringWork: () -> Unit = {},
+    wakeActive: Boolean? = null,
+    onWakeToggle: () -> Unit = {},
     /** 悬浮胶囊此刻的选择,写在「悬浮胶囊」一行的右边。 */
     capsuleMode: CapsuleMode = CapsuleMode.DEFAULT,
     onOpenCapsule: () -> Unit = {},
@@ -274,6 +293,11 @@ fun SettingsContent(
                 RowChevron()
             }
             ListRow(MikaIcons.Moon, stringResource(R.string.settings_during_work), stringResource(R.string.settings_during_work_sub), onClick = onOpenDuringWork) { RowChevron() }
+            wakeActive?.let { on ->
+                ListRow(MikaIcons.Bell, stringResource(R.string.wake_settings_title), stringResource(R.string.wake_settings_subtitle), onClick = onWakeToggle) {
+                    RowValue(stringResource(if (on) R.string.wake_listening else R.string.wake_off))
+                }
+            }
             ListRow(MikaIcons.Message, CapsuleSettingsCopy.TITLE, CapsuleSettingsCopy.SUBTITLE, onClick = onOpenCapsule) {
                 RowValue(CapsuleSettingsCopy.label(capsuleMode))
                 RowChevron()

@@ -889,6 +889,33 @@ class TaskService : Service() {
             )
         }
 
+        /** Fallback when Android blocks a background service from starting another foreground service. */
+        fun voiceAction(context: Context, goal: String, conversationId: String): PendingIntent = PendingIntent.getForegroundService(
+            context, 19002,
+            Intent(context, TaskService::class.java).setAction(ACTION_START).putExtra(EXTRA_GOAL, goal)
+                .putExtra(EXTRA_CONVERSATION, conversationId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT,
+        )
+
+        /** An active voice task accepts another utterance in its existing conversation. */
+        fun voiceSteer(context: Context, text: String, conversationId: String, messageId: String) {
+            context.startService(Intent(context, TaskService::class.java).setAction(ACTION_START)
+                .putExtra(EXTRA_GOAL, text).putExtra(EXTRA_CONVERSATION, conversationId)
+                .putExtra(EXTRA_MESSAGE_ID, messageId))
+        }
+
+        fun voiceSteerAction(context: Context, text: String, conversationId: String, messageId: String): PendingIntent =
+            PendingIntent.getService(context, 19003,
+                Intent(context, TaskService::class.java).setAction(ACTION_START).putExtra(EXTRA_GOAL, text)
+                    .putExtra(EXTRA_CONVERSATION, conversationId).putExtra(EXTRA_MESSAGE_ID, messageId),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT)
+
+        fun voiceAnswerAction(context: Context, text: String, runKey: String): PendingIntent =
+            PendingIntent.getService(context, 19004,
+                Intent(context, TaskService::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_ANSWER, text)
+                    .putExtra(EXTRA_RUN, runKey),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_ONE_SHOT)
+
         fun startTrigger(context: Context, goal: String, threadId: String, windowKey: String, conditionGoal: String?) {
             val checking = conditionGoal != null
             val runGoal = if (checking) "$conditionGoal\nRead-only check. At the end, output only JSON: {\"met\":true or false,\"evidence\":\"short supporting evidence\"}. If you cannot check, report failure; do not guess." else goal

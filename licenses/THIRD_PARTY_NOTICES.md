@@ -1,5 +1,21 @@
 # Third-party notices
 
+## Sherpa-ONNX
+
+- Project: https://github.com/k2-fsa/sherpa-onnx
+- Artifact: Android AAR v2.0.1 (`app/libs/sherpa-onnx-2.0.1.aar`).
+- License: Apache-2.0 (https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE).
+- Usage: Local, on-device keyword spotting after the user enables the microphone service.
+- Source and integrity details: `docs/voice-edition.md`.
+
+## Sherpa-ONNX Chinese-English KWS model
+
+- Project: https://www.modelscope.cn/models/pkufool/icefall-kws-zipformer-zh-en-3M-2025-12-20
+- Artifact: `sherpa-onnx-kws-zipformer-zh-en-3M-2025-12-20` ONNX weights and token list in `app/src/main/assets/wake/`.
+- License: Apache-2.0, as confirmed by the model author and Sherpa maintainer at https://github.com/k2-fsa/sherpa-onnx/issues/3802 .
+- Usage: Local, on-device recognition of the user-selected wake phrase.
+- Source and integrity details: `docs/voice-edition.md`.
+
 ## scrcpy
 
 - Project: https://github.com/Genymobile/scrcpy

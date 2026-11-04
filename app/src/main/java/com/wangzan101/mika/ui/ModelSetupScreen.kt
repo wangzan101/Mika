@@ -117,6 +117,9 @@ fun ModelSetupScreen(
     }
     val ui by vm.state.collectAsState()
     var picking by rememberSaveable { mutableStateOf<ModelRole?>(null) }
+    var groupsOpen by rememberSaveable { mutableStateOf(false) }
+    // "" 表示新建,null 表示不在编辑组
+    var groupEditing by rememberSaveable { mutableStateOf<String?>(null) }
     var openProvider by rememberSaveable { mutableStateOf<String?>(null) }
     var allModels by rememberSaveable { mutableStateOf(false) }
     // 账号登录的面板:在添加表单和服务商详情里都能打开,登录中关掉也不打断登录
@@ -139,6 +142,25 @@ fun ModelSetupScreen(
     val provider = openProvider?.let { id -> ui.providers.firstOrNull { it.id == id } }
     val role = picking
     when {
+        groupEditing != null -> {
+            BackHandler { groupEditing = null }
+            ModelGroupEditorScreen(
+                ui, groupEditing?.takeIf { it.isNotEmpty() },
+                onBack = { groupEditing = null },
+                onSave = { vm.saveGroup(it) },
+                onDelete = { vm.deleteGroup(it) },
+                ensureConfig = { p, m -> vm.ensureConfig(p, m) },
+                onSetContext = vm::setModelContext,
+            )
+        }
+        groupsOpen -> {
+            BackHandler { groupsOpen = false }
+            ModelGroupsScreen(
+                ui, onBack = { groupsOpen = false },
+                onNew = { groupEditing = "" },
+                onEdit = { groupEditing = it },
+            )
+        }
         provider != null -> {
             LaunchedEffect(provider.id) { vm.ensureListed() }
             val accountKind = when {
@@ -186,6 +208,8 @@ fun ModelSetupScreen(
                     },
                     pickManual = { pid, model -> vm.pickManual(role, pid, model) { picking = null } },
                     choose = { vm.choose(role, it); picking = null },
+                    chooseGroup = { vm.chooseGroup(role, it); picking = null },
+                    manageGroups = { picking = null; groupsOpen = true },
                     addProvider = { vm.openForm(); picking = null },
                 ),
                 onBack = { picking = null },
@@ -204,6 +228,7 @@ fun ModelSetupScreen(
                     openProvider = { openProvider = it; allModels = false }, pickRole = { picking = it }, next = onDone, openSpeech = onOpenSpeech,
                     openUsage = onOpenUsage,
                     openSignIn = { signInSheet = it },
+                    openGroups = { groupsOpen = true },
                     setReasoningEffort = vm::setReasoningEffort,
                     setModelContext = vm::setModelContext,
                 ),
@@ -259,6 +284,8 @@ class ModelSetupActions(
     val next: () -> Unit = {},
     /** 打开一家账号登录的说明面板。 */
     val openSignIn: (SignInKind) -> Unit = {},
+    /** 打开模型组管理页;上手流程不显示入口。 */
+    val openGroups: () -> Unit = {},
     val setReasoningEffort: (ModelRole, String?) -> Unit = { _, _ -> },
     val setModelContext: (String, ModelContextSettings) -> Boolean = { _, _ -> false },
 )
@@ -291,6 +318,9 @@ fun ModelSetupContent(ui: ModelSetupUi, onboarding: Boolean, actions: ModelSetup
                     FooterNote(ModelSetupCopy.ONBOARDING_NOTE)
                 } else {
                     RolesSection(ui, onPick, actions.setReasoningEffort, actions.openSpeech, actions.setModelContext)
+                    GroupCard(Modifier.padding(top = 8.dp)) {
+                        ListRow(MikaIcons.Leaf, ModelsCopy.GROUPS, first = true, onClick = actions.openGroups) { RowChevron() }
+                    }
                     ProvidersSection(ui, actions)
                     actions.openUsage?.let { openUsage ->
                         GroupCard {
@@ -336,7 +366,7 @@ private fun ProvidersSection(ui: ModelSetupUi, actions: ModelSetupActions) {
     }
     ui.probeNote?.let { FooterNote(it, Modifier.testTag("setup-probe-note"), color = c.warn) }
     // 刚存下的那家一个模型都没试通过:直接去选主模型(选的时候先试调用)
-    if (ui.pickToProbe != null && ui.roles.main == null) {
+    if (ui.pickToProbe != null && !ui.roles.hasMain) {
         Text(
             ModelSetupCopy.PICK_MAIN,
             Modifier.padding(start = 16.dp, bottom = 12.dp).clickable { actions.pickRole(ModelRole.Main) }.testTag("setup-pick-main").padding(vertical = 4.dp),
@@ -564,18 +594,30 @@ private fun RolesSection(ui: ModelSetupUi, onPick: (ModelRole) -> Unit, onReason
 }
 
 private fun hasModelContextControl(ui: ModelSetupUi, role: ModelRole): Boolean =
-    ui.roles[role] is RoleChoice.Model && ui.configFor(role) != null
+    (ui.roles[role] is RoleChoice.Model || ui.roles[role] is RoleChoice.Group) && ui.configFor(role) != null
 
 @Composable
 private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
     onSave: (String, ModelContextSettings) -> Boolean, modifier: Modifier = Modifier,
 ) {
-    if (ui.roles[role] !is RoleChoice.Model) return
+    // 具体模型和组都能设;组先给排在最前的成员,成员级设置在组编辑页
+    if (ui.roles[role] !is RoleChoice.Model && ui.roles[role] !is RoleChoice.Group) return
     val cfg = ui.configFor(role) ?: return
     val saved = ui.providerOf(cfg)?.contextSettings?.get(cfg.model) ?: ModelContextSettings()
     var open by rememberSaveable(cfg.id) { mutableStateOf(false) }
     ModelOptionButton(stringResource(R.string.model_context_title), "context-${role.name.lowercase()}", modifier) { open = true }
     if (!open) return
+    ModelContextDialog(cfg, saved, "context", { settings -> onSave(cfg.id, settings) }) {
+        open = false
+    }
+}
+
+/** 一个模型配置的上下文窗口/压缩触发点;用途页和组编辑页共用。[onSave] 返回 false 时留在对话框上说明。 */
+@Composable
+internal fun ModelContextDialog(
+    cfg: ProviderConfig, saved: ModelContextSettings, tagPrefix: String,
+    onSave: (ModelContextSettings) -> Boolean, onDismiss: () -> Unit,
+) {
     var window by rememberSaveable(cfg.id) { mutableStateOf(saved.windowTokens?.toString().orEmpty()) }
     var trigger by rememberSaveable(cfg.id) { mutableStateOf(saved.triggerTokens?.toString().orEmpty()) }
     var saveFailed by remember { mutableStateOf(false) }
@@ -587,7 +629,7 @@ private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
     val badTrigger = trigger.isNotBlank() && (settings.triggerTokens == null || (!badWindow && settings.triggerTokens != limits.trigger))
     val keyboard = KeyboardOptions(keyboardType = KeyboardType.Number)
     MikaDialog(
-        onDismissRequest = { open = false },
+        onDismissRequest = onDismiss,
         modifier = Modifier.imePadding(),
         title = { Text(stringResource(R.string.model_context_title)) },
         text = {
@@ -595,13 +637,13 @@ private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
                 Text(cfg.model)
                 Text(stringResource(R.string.model_context_note))
                 OutlinedTextField(window, { window = it; saveFailed = false },
-                    modifier = Modifier.fillMaxWidth().testTag("context-window"), singleLine = true, keyboardOptions = keyboard,
+                    modifier = Modifier.fillMaxWidth().testTag("$tagPrefix-window"), singleLine = true, keyboardOptions = keyboard,
                     label = { Text(stringResource(R.string.model_context_window)) },
                     placeholder = { Text(stringResource(R.string.model_context_auto, modelWindow)) },
                     supportingText = if (badWindow) ({ Text(stringResource(R.string.model_context_integer)) }) else null,
                     isError = badWindow)
                 OutlinedTextField(trigger, { trigger = it; saveFailed = false },
-                    modifier = Modifier.fillMaxWidth().testTag("context-trigger"), singleLine = true, keyboardOptions = keyboard,
+                    modifier = Modifier.fillMaxWidth().testTag("$tagPrefix-trigger"), singleLine = true, keyboardOptions = keyboard,
                     label = { Text(stringResource(R.string.model_context_trigger)) },
                     placeholder = { Text(stringResource(R.string.model_context_auto, limits.trigger)) },
                     supportingText = {
@@ -610,15 +652,15 @@ private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
                         else if (badTrigger) Text(stringResource(R.string.model_context_integer))
                     }, isError = badTrigger)
                 if (!badWindow && (trigger.isBlank() || settings.triggerTokens != null)) Text(stringResource(R.string.model_context_effective, limits.window, limits.trigger),
-                    modifier = Modifier.testTag("context-effective"))
+                    modifier = Modifier.testTag("$tagPrefix-effective"))
                 TextButton(onClick = { window = ""; trigger = ""; saveFailed = false }) { Text(stringResource(R.string.reset)) }
                 if (saveFailed) Text(stringResource(R.string.model_context_save_failed), color = MikaTheme.colors.bad)
             }
         },
         confirmButton = { TextButton(onClick = {
-            if (onSave(cfg.id, settings)) open = false else saveFailed = true
-        }, enabled = !badWindow && !badTrigger, modifier = Modifier.testTag("context-save")) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = { open = false }) { Text(stringResource(R.string.cancel)) } },
+            if (onSave(settings)) onDismiss() else saveFailed = true
+        }, enabled = !badWindow && !badTrigger, modifier = Modifier.testTag("$tagPrefix-save")) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

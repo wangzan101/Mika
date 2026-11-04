@@ -8,6 +8,7 @@ import com.wangzan101.mika.chat.BranchOrigin
 import com.wangzan101.mika.chat.BranchWorkspace
 import com.wangzan101.mika.chat.ConversationStore
 import com.wangzan101.mika.chat.CurrentChat
+import com.wangzan101.mika.chat.WorkspaceChoice
 import com.wangzan101.mika.confirm.ConfirmationNotifier
 import com.wangzan101.mika.core.agent.FailKind
 import com.wangzan101.mika.core.agent.GateReason
@@ -20,6 +21,7 @@ import com.wangzan101.mika.core.risk.IrrevAction
 import com.wangzan101.mika.core.agent.Turn
 import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.settings.AccessibilityState
+import com.wangzan101.mika.settings.ModelChoice
 import com.wangzan101.mika.settings.Prerequisites
 import com.wangzan101.mika.settings.Problem
 import com.wangzan101.mika.core.shell.BuiltinShellStatus
@@ -30,7 +32,9 @@ import com.wangzan101.mika.task.SteerState
 import com.wangzan101.mika.ui.PipPhysics.Corner
 import com.wangzan101.mika.core.cap.web.AttachedPage
 import com.wangzan101.mika.core.userscreen.UserScreenMessage
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -769,6 +773,45 @@ class ChatViewModelTest {
         vm.attach(listOf("content://x/3"))
         runCurrent()
         assertTrue(vm.ui.value.attachments.isEmpty())
+    }
+
+    /** 新对话里先选设置,再带附件发送:导入期间改档位不能丢,开始任务时整份落盘。 */
+    @Test fun settingsChangedDuringAttachmentImportAreNotLost() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val store = ConversationStore(tmp.newFolder())
+        val choice = ModelChoice.Model("cfg-2")
+        val catalog = FakeMainModelCatalog(
+            global = "m1", options = listOf(MainModelOption(choice, "m2")),
+            labels = mapOf(choice to "m2"), allowed = setOf(choice),
+            levels = listOf("low", "high"),
+        )
+        val vm = ChatViewModel(
+            backgroundScope, state, stage, actions, store,
+            sandboxReady = MutableStateFlow(true),
+            mainModels = catalog,
+            importAttachments = { _, _ ->
+                gate.await()
+                com.wangzan101.mika.cap.sandbox.ImportResult(listOf("/workspace/inbox/a.jpg" to 10L), emptyList())
+            },
+        ).also { runCurrent() }
+
+        vm.chooseMainModel(choice)
+        vm.attach(listOf("content://x/1"))
+        runCurrent()
+        assertTrue(vm.send("带附件", ok))
+        runCurrent()
+        val id = vm.ui.value.conversationId!!
+        assertTrue(vm.ui.value.importing)
+
+        // 导入还没完:设置仍然是 pending,改档位应该改 pending,而不是先写一份再被覆盖
+        vm.chooseReasoningEffort("high")
+        runCurrent()
+        gate.complete(Unit)
+        runCurrent()
+
+        val saved = store.settings(id)
+        assertEquals(choice, saved.main)
+        assertEquals("high", saved.reasoningEffort)
     }
 
     @Test fun attachmentsAloneCanBeSent() = runTest {
@@ -2182,4 +2225,130 @@ class ChatViewModelTest {
         assertTrue(vm.send("新一句", ok))
         assertNull(vm.branchBefore(0))
     }
+
+    /** 新对话先选模型:给对话编号,写进对话设置,不碰设置里的用途选择。 */
+    @Test fun choosingMainModelWritesConversationSettings() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val choice = ModelChoice.Model("cfg-2")
+        val catalog = FakeMainModelCatalog(
+            global = "m1", options = listOf(MainModelOption(choice, "m2")),
+            labels = mapOf(choice to "m2"), allowed = setOf(choice),
+        )
+        val vm = ChatViewModel(backgroundScope, state, stage, actions, store, mainModels = catalog).also { runCurrent() }
+
+        vm.chooseMainModel(choice)
+        runCurrent()
+        // 还没说话的对话没有编号,先记在内存里,不写旁文件
+        assertNull(vm.ui.value.conversationId)
+        assertEquals(choice, vm.ui.value.mainModel.override)
+        assertEquals("m2", vm.ui.value.mainModel.label)
+        assertFalse(vm.ui.value.mainModel.fallback)
+
+        // 第一句话定下对话编号时才写进这个对话的设置
+        assertTrue(vm.send("用新模型", ok))
+        val id = vm.ui.value.conversationId
+        assertNotNull(id)
+        assertEquals(choice, store.settings(id!!).main)
+
+        // 回到跟随设置:旁文件删掉
+        vm.chooseMainModel(null)
+        runCurrent()
+        assertNull(store.settings(id).main)
+        assertNull(vm.ui.value.mainModel.override)
+        assertEquals("m1", vm.ui.value.mainModel.label)
+    }
+
+    /** 设置里删掉了对话选的那个模型:chip 显示回退到设置里的主模型。 */
+    @Test fun unavailableChoiceFallsBackOnTheChip() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val id = store.newConversation()
+        store.append(id, Turn("一", "甲", "succeeded"))
+        store.setSettings(id, com.wangzan101.mika.chat.ConversationSettings(ModelChoice.Model("gone")))
+        val catalog = FakeMainModelCatalog(global = "m1", allowed = emptySet())
+        val vm = ChatViewModel(backgroundScope, state, stage, actions, store, mainModels = catalog).also { runCurrent() }
+
+        vm.openConversation(id)
+        runCurrent()
+        assertTrue(vm.ui.value.mainModel.fallback)
+        assertEquals("m1", vm.ui.value.mainModel.label)
+        assertEquals(ModelChoice.Model("gone"), vm.ui.value.mainModel.override)
+    }
+
+    /** 新对话先选模型、档位和工具范围:第一句话时整份设置落盘,不是只留主模型。 */
+    @Test fun effortAndToolScopesAreKeptWithTheConversation() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val choice = ModelChoice.Model("cfg-2")
+        val catalog = FakeMainModelCatalog(
+            global = "m1", options = listOf(MainModelOption(choice, "m2")),
+            labels = mapOf(choice to "m2"), allowed = setOf(choice),
+            levels = listOf("low", "high"),
+        )
+        val workspace = FakeWorkspaceCatalog(skills = listOf(WorkspaceItem("documents", "Documents")), mcp = listOf(WorkspaceItem("mcp-1", "Server")))
+        val vm = ChatViewModel(
+            backgroundScope, state, stage, actions, store, mainModels = catalog, workspaceItems = workspace,
+        ).also { runCurrent() }
+
+        vm.chooseMainModel(choice)
+        vm.chooseReasoningEffort("high")
+        vm.chooseSkillScope(WorkspaceChoice.Only(setOf("documents")))
+        vm.chooseMcpScope(WorkspaceChoice.All)
+        runCurrent()
+        // 清单在打开面板时现取,不在每轮保存时读资源
+        vm.refreshConversationUi()
+        assertEquals(listOf("low", "high"), vm.ui.value.mainModel.efforts)
+        assertEquals("high", vm.ui.value.mainModel.reasoningEffort)
+        assertEquals(listOf("Documents"), vm.ui.value.mainModel.skillItems.map { it.label })
+
+        assertTrue(vm.send("用新设置", ok))
+        val id = vm.ui.value.conversationId!!
+        val saved = store.settings(id)
+        assertEquals(choice, saved.main)
+        assertEquals("high", saved.reasoningEffort)
+        assertEquals(WorkspaceChoice.Only(setOf("documents")), saved.skills)
+        assertEquals(WorkspaceChoice.All, saved.mcpServers)
+    }
+
+    /** 设置里的模型/组改了:chip 跟着重算(覆盖没变,跟随的名字变)。 */
+    @Test fun catalogChangesRefreshTheChip() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        val catalog = FakeMainModelCatalog(global = "m1")
+        val vm = ChatViewModel(backgroundScope, state, stage, actions, store, mainModels = catalog).also { runCurrent() }
+        assertEquals("m1", vm.ui.value.mainModel.label)
+
+        catalog.global = "m3"
+        catalog.changes.emit(Unit)
+        runCurrent()
+        assertEquals("m3", vm.ui.value.mainModel.label)
+    }
+}
+
+/** 对话页模型入口的假目录;测试里直接改字段来模拟设置变化。 */
+private class FakeMainModelCatalog(
+    var global: String? = null,
+    private val options: List<MainModelOption> = emptyList(),
+    private val labels: Map<ModelChoice, String> = emptyMap(),
+    private val allowed: Set<ModelChoice> = emptySet(),
+    private val levels: List<String> = emptyList(),
+    private val fromProvider: Boolean = true,
+    private val globalIsGroup: Boolean = false,
+) : MainModelCatalog {
+    override val changes = MutableSharedFlow<Unit>()
+    override fun options(): List<MainModelOption> = options
+    override fun usable(choice: ModelChoice?): ModelChoice? = choice?.takeIf { it in allowed }
+    override fun label(choice: ModelChoice): String? = labels[choice]
+    override fun globalLabel(): String? = global
+    override fun isGroup(choice: ModelChoice): Boolean = choice is ModelChoice.Group
+    override fun globalGroup(): Boolean = globalIsGroup
+    override fun reasoningLevels(choice: ModelChoice?): List<String> = levels
+    override fun reasoningLevelsInfo(choice: ModelChoice?): com.wangzan101.mika.settings.ReasoningLevels =
+        com.wangzan101.mika.settings.ReasoningLevels(levels, fromProvider)
+}
+
+private class FakeWorkspaceCatalog(
+    private val skills: List<WorkspaceItem> = emptyList(),
+    private val mcp: List<WorkspaceItem> = emptyList(),
+) : WorkspaceCatalog {
+    override val changes = MutableSharedFlow<Unit>()
+    override fun skills(): List<WorkspaceItem> = skills
+    override fun mcpServers(): List<WorkspaceItem> = mcp
 }

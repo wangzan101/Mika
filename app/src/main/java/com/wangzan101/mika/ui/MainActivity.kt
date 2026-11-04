@@ -227,7 +227,7 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
     var sourceLegacyText by rememberSaveable { mutableStateOf<String?>(null) }
     val status by monitor.status.collectAsState()
     val roles by store.roles.collectAsState()
-    val hasMain = roles.main != null
+    val hasMain = roles.hasMain
     val check = Prerequisites.check(status, hasMain)
     val context = LocalContext.current
     val app = context.applicationContext as MikaApp
@@ -249,7 +249,7 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
     // 第一次打开:欢迎 → 配置模型 → 手机操作;配过模型的跳过前两步,手机操作已就绪或看过引导的跳过最后一步
     val onboardingState = remember { OnboardingState(context) }
     fun onboardingInputs() = Onboarding.Inputs(
-        hasMainModel = store.roles.value.main != null,
+        hasMainModel = store.roles.value.hasMain,
         modelSetupDone = onboardingState.modelSetupDone(),
         phoneNeeded = status.builtinShell != BuiltinShellStatus.Running && status.sdkInt >= Prerequisites.MIN_SDK,
         phoneGuideSeen = phoneSetup.guideSeen(),
@@ -336,6 +336,7 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
                     },
                     voice = app.voice,
                     openSpeechModel = { nav.push(Route.SpeechModel) },
+                    openModels = { nav.push(Route.Models) },
                 )
             }
         }
@@ -345,7 +346,7 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
                 onOpenModels = { nav.push(Route.Models) },
                 autonomous = autonomous, onAutonomous = app.approvalControl::setAutonomous,
                 updateVersion = updateState.update?.version, onOpenAbout = { nav.push(Route.About) },
-                mcpServers = app.mcpServers)
+                mcpServers = app.mcpServers, workspaceAccess = app.workspaceAccess)
         }
         Route.Models -> ModelsScreen(store, onBack = back, onOpenSpeech = { nav.push(Route.SpeechModel) }, onOpenUsage = { nav.push(Route.Usage) })
         Route.Usage -> UsageScreen(app.usage, store.providers, onBack = back)
@@ -408,6 +409,8 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
                         vmScope.launch { routeCount = withContext(Dispatchers.IO) { routeStore.clear(); routeStore.count() } }
                     },
                     onBack = { memoryRuntime.requestOpen(null); nav.back() },
+                    workspaceAccess = app.workspaceAccess,
+                    workspaceCatalog = remember { AppWorkspaceCatalog(app) },
                 )
             }
         }

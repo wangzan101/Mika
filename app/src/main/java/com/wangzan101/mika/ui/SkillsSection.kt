@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.wangzan101.mika.core.knowledge.AppKnowledgeStage
 import com.wangzan101.mika.core.skills.SkillImport
+import com.wangzan101.mika.settings.WorkspaceAccessStore
 import com.wangzan101.mika.ui.components.ActionSheet
 import com.wangzan101.mika.ui.components.ButtonKind
 import com.wangzan101.mika.ui.components.ButtonSize
@@ -46,7 +48,10 @@ import com.wangzan101.mika.ui.theme.MikaType
  * 个人技能可以分享全文出去,别人分享来的全文从「导入技能」粘进来,先进「待确认」(#165)。
  */
 @Composable
-internal fun SkillsSection(vm: MemoryViewModel, ui: SkillsUi, pending: Boolean) {
+internal fun SkillsSection(
+    vm: MemoryViewModel, ui: SkillsUi, pending: Boolean,
+    access: WorkspaceAccessStore? = null, workspace: WorkspaceCatalog? = null,
+) {
     var viewing by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<SkillRow?>(null) }
     var acting by remember { mutableStateOf<SkillRow?>(null) }
@@ -108,6 +113,25 @@ internal fun SkillsSection(vm: MemoryViewModel, ui: SkillsUi, pending: Boolean) 
             GroupCard {
                 inUse.forEachIndexed { i, row -> AppKnowledgeItem(vm, row, i == 0, viewing == row.id) { toggle(row.id) } }
             }
+        }
+        if (access != null && workspace != null) {
+            val allowed by access.state.collectAsState()
+            // 技能目录只在个人技能列表变化时重算,不在每次重组时读资源
+            val items = remember(ui.installed) { workspace.skills() }
+            val ids = items.map { it.id }.toSet()
+            AllowListSection(
+                title = stringResource(R.string.workspace_skills_title),
+                allLabel = stringResource(R.string.workspace_skills_all),
+                note = stringResource(R.string.workspace_skills_note),
+                all = allowed.skillsAll,
+                items = items,
+                selected = allowed.skills,
+                known = allowed.skillsKnown,
+                onAll = { on -> if (on) access.setAllSkills(true, ids) else access.customizeSkills(ids) },
+                onSelectAll = { access.setAllSkills(true, ids) },
+                onSelectNone = { access.setAllSkills(false, ids) },
+                onItem = { id, on -> access.setSkill(id, on, ids) },
+            )
         }
     }
 

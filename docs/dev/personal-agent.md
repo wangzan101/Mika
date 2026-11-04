@@ -4,7 +4,7 @@
 
 ## 消息和执行
 
-- `core/personal/PersonalAgent` 是可测试的协调器，使用现有 ChatModel 协议。模型调用来自宿主模型来源，照常记用量。
+- `core/personal/PersonalAgent.kt` 是可测试的协调器，使用现有 ChatModel 协议。模型调用来自宿主模型来源，照常记用量。
 - 主聊天使用单独的收件队列，不占用 TaskCenter 执行名额。新文字立即记入主会话，当前回复处理后消费下一批；连续输入不会自动变成后台任务的插话。
 - 模型提供 delegate_task、revise_task、cancel_task、remember、recall_history。明确行动请求才委派；明确补充才修改对应任务；普通讨论保持聊天。
 - 委派前保存任务与独立 conversationId，再调用 TaskService。后台任务可以因资源限制排队，主聊天仍能回复。

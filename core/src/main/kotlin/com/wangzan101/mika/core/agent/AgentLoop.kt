@@ -160,6 +160,8 @@ class AgentLoop(
         require(maxSteps > 0) { "maxSteps must be positive" }
         // 只有开着回放才在写操作前取目标元素与锚点
         tools.captureTargets = flags.replay
+        // Phase 0:每次工具调用记一条权限观察,只记录,不改执行
+        tools.permissionObserver = ::emit
     }
 
     /** 运行记录:按因果先后写(见 [RecordOrder])。 */
@@ -652,8 +654,8 @@ class AgentLoop(
                         recordReply(Redactor.args(tools.verb(first.name), first.argsJson, secretField = true))
                         return StopRules.guard(it)
                     }
-                    // 应用权限拒绝已经由执行入口作为工具结果交给模型:不结束任务,让模型换路线或向用户说明
-                    if (AppAccessDenied.isAppAccessCode(action.code)) {
+                    // 应用权限和 Mika 权限的拒绝已经由执行入口作为工具结果交给模型:不结束任务,让模型换路线或向用户说明
+                    if (AppAccessDenied.isAppAccessCode(action.code) || action.code.startsWith("permission_")) {
                         track.after(tools.verb(first.name), ok = false, guard = false, changed = null, recovery = false, app = null)
                         continue
                     }

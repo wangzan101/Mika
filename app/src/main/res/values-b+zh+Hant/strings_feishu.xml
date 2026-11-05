@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feishu_title">飛書機器人</string>
+    <string name="feishu_settings_sub">在飛書下達任務並接收手機結果</string>
+    <string name="feishu_intro">使用企業自建應用機器人，啟用長連線並訂閱訊息事件。無需電腦或公網連接埠。請勿同時使用同一應用的電腦橋接。 事件設定訂閱 im.message.receive_v1；回呼設定訂閱 card.action.trigger（皆使用長連線）。</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">留空以保留已儲存的密鑰</string>
+    <string name="feishu_enable">啟用飛書連線</string>
+    <string name="feishu_mirror">也將本機與排程任務的結果傳送至已配對的私聊</string>
+    <string name="feishu_connected">已連線至飛書</string>
+    <string name="feishu_disconnected">未連線（已關閉或正在重新連線）</string>
+    <string name="feishu_paired">已配對擁有者。變更應用憑證會清除配對。</string>
+    <string name="feishu_pair">請私聊機器人傳送：/pair %1$s</string>
+    <string name="feishu_boundary">不逐步傳送進度。付款核准與接管仍在手機完成。啟用後會顯示常駐通知；強制停止後請重新開啟 Mika。</string>
+    <string name="feishu_save_error">無法儲存或啟動，請檢查憑證與背景限制。</string>
+    <string name="feishu_save">儲存並套用</string>
+    <string name="feishu_reset_binding">解除配對並產生新的配對碼</string>
+    <string name="feishu_service">保持私聊機器人連線可用</string>
+</resources>

@@ -349,6 +349,20 @@ class TaskRun(
     }
 
     /** 远程追加只归当前任务;与状态发布互斥,收件箱再原子核对是否已经结束/取消。 */
+    /** Explicit channel steering targets this run; a late instruction must never create another task. */
+    internal fun steerFromChannel(text: String, messageId: String): Boolean = synchronized(publishLock) delivery@{
+        if (ended || stopPressed || channelPeer == null || _state.value !is TaskState.Running) return@delivery false
+        if (loop?.state?.value?.let { it !is TaskState.Running } == true) return@delivery false
+        synchronized(service.taskState.shownLock) {
+            _steers.value = _steers.value + SteerNote(messageId, text, SteerState.Received, remote = true)
+            if (inbox.steerCurrent(messageId, text) != InputReceipt.Accepted) {
+                _steers.value = _steers.value.filterNot { it.id == messageId }
+                return@delivery false
+            }
+            true
+        }
+    }
+
     fun steerRemote(text: String): String? = synchronized(publishLock) delivery@{
         if (ended || stopPressed || mcpExternalId == null || _state.value !is TaskState.Running) return@delivery null
         if (loop?.state?.value?.let { it !is TaskState.Running } == true) return@delivery null

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feishu_title">Feishu ボット</string>
+    <string name="feishu_settings_sub">Feishu からタスクを実行し、スマートフォンの結果を受信</string>
+    <string name="feishu_intro">企業のカスタムアプリボットで長時間接続のメッセージイベントを使用します。PC や公開ポートは不要です。同じアプリの PC ブリッジと同時に実行しないでください。 イベント im.message.receive_v1 とカードコールバック card.action.trigger を長時間接続で購読してください。</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">保存済みのシークレットを保持する場合は空欄</string>
+    <string name="feishu_enable">Feishu 接続を有効にする</string>
+    <string name="feishu_mirror">ローカルおよび予約タスクの結果もペアリング済みの個人チャットに送信</string>
+    <string name="feishu_connected">Feishu に接続済み</string>
+    <string name="feishu_disconnected">未接続（無効または再接続中）</string>
+    <string name="feishu_paired">所有者をペアリング済み。アプリの認証情報を変更すると解除されます。</string>
+    <string name="feishu_pair">ボットの個人チャットに送信：/pair %1$s</string>
+    <string name="feishu_boundary">各ステップの進捗は通知しません。支払いの承認と引き継ぎはスマートフォンで行います。有効時は常駐通知が表示されます。強制停止後は Mika を再度開いてください。</string>
+    <string name="feishu_save_error">保存または起動できません。認証情報とバックグラウンド制限を確認してください。</string>
+    <string name="feishu_save">保存して適用</string>
+    <string name="feishu_reset_binding">ペアリングを解除して新しいコードを生成</string>
+    <string name="feishu_service">個人チャットのボット接続を維持</string>
+</resources>

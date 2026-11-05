@@ -61,7 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** 设置里能进入的子页面;[Home] 是设置首页,[Advanced] 集中放置连接、维护和工程能力。 */
-private enum class SettingsPage { Home, Advanced, AppAccess, PhoneOps, Wechat, DuringWork, Capsule, Language, Notifications, Sandbox, Recovery, SelfCheck, ComputerAccess, McpServers, Developer, RunStats }
+private enum class SettingsPage { Feishu, Home, Advanced, AppAccess, PhoneOps, Wechat, DuringWork, Capsule, Language, Notifications, Sandbox, Recovery, SelfCheck, ComputerAccess, McpServers, Developer, RunStats }
 
 /**
  * 设置页:总状态卡 + 常用 / 我的数据 / 其他。高级与其他只增加一层,各子页返回来时的页面。
@@ -163,6 +163,7 @@ fun SettingsScreen(
             onOpenDuringWork = { page = SettingsPage.DuringWork },
             capsuleMode = capsuleMode, onOpenCapsule = { page = SettingsPage.Capsule },
             onOpenNotifications = { page = SettingsPage.Notifications },
+            onOpenFeishu = { page = SettingsPage.Feishu },
             language = language, onOpenLanguage = { page = SettingsPage.Language },
             onOpenMemory = onOpenMemory,
             onOpenAdvanced = { page = SettingsPage.Advanced },
@@ -177,6 +178,7 @@ fun SettingsScreen(
             showDeveloper = showDeveloper, onOpenDeveloper = { page = SettingsPage.Developer },
             onBack = toHome,
         )
+        SettingsPage.Feishu -> FeishuScreen(onBack = toHome)
         SettingsPage.AppAccess -> AppAccessScreen(onBack = toHome)
         SettingsPage.Wechat -> WechatSettingsScreen(wechat, onBack = toHome)
         SettingsPage.PhoneOps -> PhoneOpsScreen(
@@ -259,6 +261,7 @@ fun SettingsContent(
     capsuleMode: CapsuleMode = CapsuleMode.DEFAULT,
     onOpenCapsule: () -> Unit = {},
     onOpenNotifications: () -> Unit = {},
+    onOpenFeishu: () -> Unit = {},
     /** 此刻选的界面语言,写在「语言与外观」一行的右边。 */
     language: AppLanguage = AppLanguage.System,
     onOpenLanguage: () -> Unit = {},
@@ -295,6 +298,7 @@ fun SettingsContent(
                 RowValue(languageLabel(language))
                 RowChevron()
             }
+            ListRow(MikaIcons.Message, stringResource(R.string.feishu_title), stringResource(R.string.feishu_settings_sub), onClick = onOpenFeishu) { RowChevron() }
             val (notifText, notifTone) = StatusCopy.notificationSummary(status.notificationOverview().summary)
             ListRow(MikaIcons.Bell, StatusCopy.NOTIFICATIONS, stringResource(R.string.settings_notif_sub), onClick = onOpenNotifications) {
                 RowValue(notifText, notifTone)

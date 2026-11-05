@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feishu_title">روبوت Feishu</string>
+    <string name="feishu_settings_sub">تشغيل المهام من Feishu واستلام نتائج الهاتف</string>
+    <string name="feishu_intro">استخدم روبوت تطبيق مؤسسي مخصص مع أحداث الرسائل عبر اتصال طويل. لا يلزم حاسوب أو منفذ عام. لا تشغل جسر الحاسوب للتطبيق نفسه في الوقت ذاته. اشترك في أحداث im.message.receive_v1 واستدعاءات البطاقات card.action.trigger عبر الاتصال الطويل.</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">اتركه فارغًا للاحتفاظ بالسر المحفوظ</string>
+    <string name="feishu_enable">تفعيل اتصال Feishu</string>
+    <string name="feishu_mirror">إرسال نتائج المهام المحلية والمجدولة أيضًا إلى المحادثة الخاصة المقترنة</string>
+    <string name="feishu_connected">متصل بـ Feishu</string>
+    <string name="feishu_disconnected">غير متصل (معطل أو جارٍ إعادة الاتصال)</string>
+    <string name="feishu_paired">تم إقران المالك. تغيير بيانات اعتماد التطبيق يلغي الإقران.</string>
+    <string name="feishu_pair">أرسل إلى الروبوت في محادثة خاصة: /pair %1$s</string>
+    <string name="feishu_boundary">لا تُرسل تفاصيل كل خطوة. تبقى الموافقة على الدفع وتسلم التحكم على الهاتف. يظهر إشعار دائم عند التفعيل؛ أعد فتح Mika بعد الإيقاف الإجباري.</string>
+    <string name="feishu_save_error">تعذر الحفظ أو التشغيل. تحقق من بيانات الاعتماد وقيود الخلفية.</string>
+    <string name="feishu_save">حفظ وتطبيق</string>
+    <string name="feishu_reset_binding">إلغاء الإقران وإنشاء رمز إقران جديد</string>
+    <string name="feishu_service">إبقاء اتصال روبوت المحادثة الخاصة متاحًا</string>
+</resources>

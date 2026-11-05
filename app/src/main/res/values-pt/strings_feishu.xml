@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feishu_title">Bot do Feishu</string>
+    <string name="feishu_settings_sub">Executar tarefas pelo Feishu e receber resultados do telefone</string>
+    <string name="feishu_intro">Use um bot de aplicativo empresarial próprio com eventos por conexão persistente. Não precisa de PC nem de porta pública. Não execute ao mesmo tempo uma ponte de PC para o mesmo aplicativo. Assine os eventos im.message.receive_v1 e os retornos de cartões card.action.trigger por conexão persistente.</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">Deixe vazio para manter o segredo salvo</string>
+    <string name="feishu_enable">Ativar conexão com o Feishu</string>
+    <string name="feishu_mirror">Enviar também resultados de tarefas locais e agendadas ao chat privado vinculado</string>
+    <string name="feishu_connected">Conectado ao Feishu</string>
+    <string name="feishu_disconnected">Desconectado (desativado ou reconectando)</string>
+    <string name="feishu_paired">Proprietário vinculado. Alterar as credenciais do aplicativo remove o vínculo.</string>
+    <string name="feishu_pair">Envie ao bot em um chat privado: /pair %1$s</string>
+    <string name="feishu_boundary">O progresso de cada etapa não é enviado. A aprovação de pagamentos e a transferência de controle continuam no telefone. Uma notificação permanente aparece quando ativado; reabra o Mika após forçar a parada.</string>
+    <string name="feishu_save_error">Não foi possível salvar ou iniciar. Verifique as credenciais e restrições em segundo plano.</string>
+    <string name="feishu_save">Salvar e aplicar</string>
+    <string name="feishu_reset_binding">Desvincular e gerar um novo código</string>
+    <string name="feishu_service">Manter disponível a conexão do bot de chat privado</string>
+</resources>

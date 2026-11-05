@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feishu_title">Бот Feishu</string>
+    <string name="feishu_settings_sub">Запускайте задачи из Feishu и получайте результаты с телефона</string>
+    <string name="feishu_intro">Используйте бота корпоративного приложения с событиями через постоянное соединение. Компьютер и открытый порт не нужны. Не запускайте одновременно мост на компьютере для того же приложения. Подпишитесь на события im.message.receive_v1 и обратные вызовы карточек card.action.trigger через постоянное соединение.</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">Оставьте пустым, чтобы сохранить прежний секрет</string>
+    <string name="feishu_enable">Включить соединение с Feishu</string>
+    <string name="feishu_mirror">Также отправлять результаты локальных и запланированных задач в связанный личный чат</string>
+    <string name="feishu_connected">Соединение с Feishu установлено</string>
+    <string name="feishu_disconnected">Нет соединения (выключено или повторное подключение)</string>
+    <string name="feishu_paired">Владелец привязан. Смена учётных данных приложения удалит привязку.</string>
+    <string name="feishu_pair">Отправьте боту в личном чате: /pair %1$s</string>
+    <string name="feishu_boundary">Пошаговые уведомления не отправляются. Подтверждение оплаты и передача управления остаются на телефоне. При включении отображается постоянное уведомление; после принудительной остановки откройте Mika снова.</string>
+    <string name="feishu_save_error">Не удалось сохранить или запустить. Проверьте учётные данные и фоновые ограничения.</string>
+    <string name="feishu_save">Сохранить и применить</string>
+    <string name="feishu_reset_binding">Удалить привязку и создать новый код</string>
+    <string name="feishu_service">Поддерживать соединение бота личного чата</string>
+</resources>

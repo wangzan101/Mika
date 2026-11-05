@@ -238,6 +238,7 @@ object TriggerRuntime {
     }
 
     private fun notifyLocal(context: Context, threadId: String, key: String, title: String, text: String) {
+        (context.applicationContext as? MikaApp)?.feishu?.mirror("trigger:$key:$title", "$title\n$text")
         val notifications = context.getSystemService(NotificationManager::class.java)
         TaskService.ensureChannels(context)
         val open = PendingIntent.getActivity(context, key.hashCode(),

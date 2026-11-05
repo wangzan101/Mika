@@ -69,4 +69,21 @@
     <string name="speech_doubao_plan">计费方式</string>
     <string name="speech_doubao_duration_note">按识别时长计费</string>
     <string name="speech_doubao_concurrent_note">按同时连接数计费</string>
+    <string name="feishu_title">飞书机器人</string>
+    <string name="feishu_settings_sub">在飞书下发任务并接收手机结果</string>
+    <string name="feishu_intro">使用企业自建应用机器人，开启长连接并订阅接收消息。无需电脑或公网端口。请勿与电脑桥接同时使用同一个飞书应用。 事件配置订阅 im.message.receive_v1；回调配置订阅 card.action.trigger（均使用长连接）。</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">留空保留已保存的密钥</string>
+    <string name="feishu_enable">启用飞书连接</string>
+    <string name="feishu_mirror">把手机本地及定时任务的最终结果也发送到已绑定私聊</string>
+    <string name="feishu_connected">飞书已连接</string>
+    <string name="feishu_disconnected">未连接（关闭或正在重连）</string>
+    <string name="feishu_paired">已绑定主人。更换应用凭据会清除绑定。</string>
+    <string name="feishu_pair">请私聊机器人发送：绑定 %1$s</string>
+    <string name="feishu_boundary">默认不发送逐步进度。付款审批、手机接管仍在手机完成。启用后会显示常驻通知；安卓强行停止后需重新打开 Mika。</string>
+    <string name="feishu_save_error">未能保存或启动，请检查凭据与系统后台限制。</string>
+    <string name="feishu_save">保存并应用</string>
+    <string name="feishu_reset_binding">解除绑定并生成新绑定码</string>
+    <string name="feishu_service">保持私聊机器人连接可用</string>
 </resources>

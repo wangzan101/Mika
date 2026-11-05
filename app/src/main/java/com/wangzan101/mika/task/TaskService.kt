@@ -143,7 +143,8 @@ class TaskService : Service() {
 
     private fun channelFor(peer: ChannelPeer): Channel = when (peer.channelId) {
         LocalChannel.ID -> localChannel
-        else -> checkNotNull((application as com.wangzan101.mika.MikaApp).wechat.channelFor(peer.channelId)) {
+        else -> checkNotNull((application as com.wangzan101.mika.MikaApp).feishu.channelFor(peer.channelId)
+            ?: (application as com.wangzan101.mika.MikaApp).wechat.channelFor(peer.channelId)) {
             "unknown channel ${peer.channelId}"
         }
     }
@@ -779,6 +780,7 @@ class TaskService : Service() {
 
     private suspend fun notifyResult(run: TaskRun, end: TaskState, deliveryId: String): DeliveryState {
         val (title, text) = describe(end)
+        if (run.mcpExternalId == null && run.channelPeer == null) (application as? com.wangzan101.mika.MikaApp)?.feishu?.mirror(deliveryId, "$title\n$text")
         val peer = run.channelPeer ?: ChannelPeer(LocalChannel.ID, "phone-owner", run.conversationId)
         val started = SystemClock.elapsedRealtime()
         val delivered = outbox.deliver(channelFor(peer), peer, Delivery.Result(deliveryId, run.conversationId, text, title = title))

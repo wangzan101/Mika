@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feishu_title">Bot Feishu</string>
+    <string name="feishu_settings_sub">Jalankan tugas dari Feishu dan terima hasil dari ponsel</string>
+    <string name="feishu_intro">Gunakan bot aplikasi internal perusahaan dengan peristiwa pesan melalui koneksi persisten. Tidak memerlukan PC atau port publik. Jangan jalankan jembatan PC untuk aplikasi yang sama secara bersamaan. Langgani peristiwa im.message.receive_v1 dan callback kartu card.action.trigger melalui koneksi persisten.</string>
+    <string name="feishu_app_id">App ID</string>
+    <string name="feishu_secret">App Secret</string>
+    <string name="feishu_secret_keep">Kosongkan untuk mempertahankan rahasia tersimpan</string>
+    <string name="feishu_enable">Aktifkan koneksi Feishu</string>
+    <string name="feishu_mirror">Kirim juga hasil tugas lokal dan terjadwal ke percakapan pribadi yang dipasangkan</string>
+    <string name="feishu_connected">Terhubung ke Feishu</string>
+    <string name="feishu_disconnected">Terputus (dinonaktifkan atau menyambung ulang)</string>
+    <string name="feishu_paired">Pemilik dipasangkan. Mengubah kredensial aplikasi menghapus pemasangan.</string>
+    <string name="feishu_pair">Kirim ke bot dalam percakapan pribadi: /pair %1$s</string>
+    <string name="feishu_boundary">Kemajuan setiap langkah tidak dikirim. Persetujuan pembayaran dan pengambilalihan tetap di ponsel. Notifikasi tetap muncul saat diaktifkan; buka kembali Mika setelah penghentian paksa.</string>
+    <string name="feishu_save_error">Tidak dapat menyimpan atau memulai. Periksa kredensial dan pembatasan latar belakang.</string>
+    <string name="feishu_save">Simpan dan terapkan</string>
+    <string name="feishu_reset_binding">Lepas pasangan dan buat kode baru</string>
+    <string name="feishu_service">Pertahankan koneksi bot percakapan pribadi</string>
+</resources>

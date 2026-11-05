@@ -196,4 +196,12 @@
     <string name="models_daily_token_budget">Daily token budget</string>
     <string name="models_daily_token_budget_sub">Counts all models and purposes for this provider in the local calendar day. Only reported input and output tokens count. At the limit, the next request is blocked; in-flight requests may exceed it. Resets when the local date changes.</string>
     <string name="models_daily_token_budget_save_failed">The budget could not be saved. The previous setting is still active.</string>
+    <string name="balance_title">Balance</string>
+    <string name="balance_checking">Checking the balance…</string>
+    <string name="balance_need_key">Enter an API key to check the balance.</string>
+    <string name="balance_auth">The API key was rejected.</string>
+    <string name="balance_http">The provider returned HTTP %1$d.</string>
+    <string name="balance_network">The provider couldn’t be reached.</string>
+    <string name="balance_unreadable">The balance response couldn’t be read.</string>
+    <string name="balance_refresh">Check again</string>
 </resources>

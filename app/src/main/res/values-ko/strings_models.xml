@@ -190,4 +190,12 @@
     <string name="models_daily_token_budget">제공업체 일일 Token 예산</string>
     <string name="models_daily_token_budget_sub">현지 달력 날짜를 기준으로 이 제공업체의 모든 모델과 용도에서 보고된 입력 및 출력 Token을 집계합니다. 예산에 도달하면 다음 요청을 차단하며, 진행 중인 요청은 예산을 초과할 수 있습니다. 보고되지 않은 사용량은 0으로 계산하고 현지 날짜가 바뀌면 초기화됩니다.</string>
     <string name="models_daily_token_budget_save_failed">예산을 저장하지 못했습니다. 이전 설정이 그대로 유지됩니다.</string>
+    <string name="balance_title">잔액</string>
+    <string name="balance_checking">잔액을 확인하는 중…</string>
+    <string name="balance_need_key">API 키를 입력하면 잔액을 확인할 수 있습니다.</string>
+    <string name="balance_auth">API 키가 거부되었습니다.</string>
+    <string name="balance_http">제공자가 HTTP %1$d을 반환했습니다.</string>
+    <string name="balance_network">제공자에 연결하지 못했습니다.</string>
+    <string name="balance_unreadable">잔액 응답을 읽지 못했습니다.</string>
+    <string name="balance_refresh">다시 확인</string>
 </resources>

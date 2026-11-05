@@ -196,4 +196,12 @@
     <string name="models_daily_token_budget">سقف توکن روزانه</string>
     <string name="models_daily_token_budget_save_failed">سقف ذخیره نشد. تنظیم قبلی همچنان فعال است.</string>
     <string name="models_daily_token_budget_sub">تمام مدل‌ها و کاربردهای این ارائه‌دهنده را در روز تقویمی محلی می‌شمارد. فقط توکن‌های ورودی و خروجی گزارش‌شده حساب می‌شوند. با رسیدن به سقف، درخواست بعدی مسدود می‌شود؛ درخواست‌های در حال اجرا ممکن است از آن عبور کنند. با تغییر تاریخ محلی بازنشانی می‌شود.</string>
+    <string name="balance_title">موجودی</string>
+    <string name="balance_checking">در حال بررسی موجودی…</string>
+    <string name="balance_need_key">برای بررسی موجودی، کلید API را وارد کنید.</string>
+    <string name="balance_auth">کلید API رد شد.</string>
+    <string name="balance_http">ارائه‌دهنده HTTP %1$d برگرداند.</string>
+    <string name="balance_network">اتصال به ارائه‌دهنده برقرار نشد.</string>
+    <string name="balance_unreadable">پاسخ موجودی قابل خواندن نبود.</string>
+    <string name="balance_refresh">بررسی دوباره</string>
 </resources>

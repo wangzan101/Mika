@@ -192,4 +192,12 @@
     <string name="models_daily_token_budget">プロバイダーの1日の Token 予算</string>
     <string name="models_daily_token_budget_sub">ローカル暦日で、このプロバイダーの全モデル・全用途について報告された入力・出力 Token を集計します。予算に達すると次のリクエストを止めます。実行中のリクエストで超過する場合があり、未報告の使用量は 0 です。ローカル日付が変わると再開します。</string>
     <string name="models_daily_token_budget_save_failed">予算を保存できませんでした。以前の設定が引き続き使われます。</string>
+    <string name="balance_title">残高</string>
+    <string name="balance_checking">残高を確認しています…</string>
+    <string name="balance_need_key">APIキーを入力すると残高を確認できます。</string>
+    <string name="balance_auth">APIキーが拒否されました。</string>
+    <string name="balance_http">プロバイダが HTTP %1$d を返しました。</string>
+    <string name="balance_network">プロバイダに接続できませんでした。</string>
+    <string name="balance_unreadable">残高の応答を読み取れませんでした。</string>
+    <string name="balance_refresh">再確認</string>
 </resources>

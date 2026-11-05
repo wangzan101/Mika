@@ -68,6 +68,7 @@ import com.wangzan101.mika.settings.ModelOptions
 import com.wangzan101.mika.settings.ProviderConfig
 import com.wangzan101.mika.settings.ProviderPresets
 import com.wangzan101.mika.settings.ProviderStore
+import com.wangzan101.mika.settings.balance.BalanceCatalog
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.ui.components.ButtonKind
 import com.wangzan101.mika.ui.components.ButtonSize
@@ -141,7 +142,10 @@ fun ModelSetupScreen(
     val role = picking
     when {
         provider != null -> {
-            LaunchedEffect(provider.id) { vm.ensureListed() }
+            LaunchedEffect(provider.id, provider.id in ui.keyed) {
+                vm.ensureListed()
+                vm.loadBalance(provider.id)
+            }
             val accountKind = when {
                 provider.kind == ProviderConfig.Kind.Xai -> SignInKind.Xai
                 provider.signIn == ProviderStore.OPENROUTER_SIGN_IN -> SignInKind.OpenRouter
@@ -166,6 +170,7 @@ fun ModelSetupScreen(
                 },
                 useAsMain = { vm.useAsMain(provider.id) },
                 setDailyBudget = { vm.setDailyTokenBudget(provider.id, it) },
+                refreshBalance = { vm.loadBalance(provider.id) },
             )
             if (allModels) {
                 BackHandler { allModels = false }
@@ -208,6 +213,8 @@ fun ModelSetupScreen(
                     openSignIn = { signInSheet = it },
                     setReasoningEffort = vm::setReasoningEffort,
                     setModelContext = vm::setModelContext,
+                    watchDraftBalance = vm::watchDraftBalance,
+                    refreshDraftBalance = vm::refreshDraftBalance,
                 ),
                 onBack,
             )
@@ -263,6 +270,9 @@ class ModelSetupActions(
     val openSignIn: (SignInKind) -> Unit = {},
     val setReasoningEffort: (ModelRole, String?) -> Unit = { _, _ -> },
     val setModelContext: (String, ModelContextSettings) -> Boolean = { _, _ -> false },
+    /** 添加表单上的余额:Key 变化时稍等再查,点「再查一次」马上查。 */
+    val watchDraftBalance: () -> Unit = {},
+    val refreshDraftBalance: () -> Unit = {},
 )
 
 /**
@@ -418,6 +428,12 @@ private fun AddProviderForm(ui: ModelSetupUi, actions: ModelSetupActions) {
             )
         }
     }
+    LaunchedEffect(f.preset, f.kind, f.baseUrl, f.apiKey, f.name) { actions.watchDraftBalance() }
+    BalanceSection(
+        BalanceCatalog.shownDraft(ui.draftBalance, f.preset, f.kind, f.baseUrl, f.apiKey, f.providerName, f.isSelfHosted),
+        actions.refreshDraftBalance,
+        Modifier.testTag("setup-balance"),
+    )
     // 列表里没有要的模型、或这家不提供列表时,随时可以自己填(没列出模型时那一栏已经在了)
     if (!f.noList) {
         Text(

@@ -204,4 +204,12 @@
     <string name="models_daily_token_budget">Дневной бюджет токенов провайдера</string>
     <string name="models_daily_token_budget_sub">Учитываются сообщённые входные и выходные токены всех моделей и назначений провайдера за локальный календарный день. При достижении лимита следующий запрос блокируется; выполняемые запросы могут превысить его. Несообщённое использование считается равным 0. Учёт начинается заново при смене локальной даты.</string>
     <string name="models_daily_token_budget_save_failed">Не удалось сохранить бюджет. Прежняя настройка остаётся в силе.</string>
+    <string name="balance_title">Баланс</string>
+    <string name="balance_checking">Проверяем баланс…</string>
+    <string name="balance_need_key">Введите ключ API, чтобы проверить баланс.</string>
+    <string name="balance_auth">Ключ API отклонён.</string>
+    <string name="balance_http">Провайдер вернул HTTP %1$d.</string>
+    <string name="balance_network">Не удалось связаться с провайдером.</string>
+    <string name="balance_unreadable">Не удалось прочитать ответ баланса.</string>
+    <string name="balance_refresh">Проверить снова</string>
 </resources>

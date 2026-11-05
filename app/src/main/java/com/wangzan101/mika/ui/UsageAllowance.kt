@@ -120,7 +120,7 @@ private fun AllowanceRow(
     }
 }
 
-private fun allowanceText(value: ProviderAllowance): String = when (value) {
+internal fun allowanceText(value: ProviderAllowance): String = when (value) {
     is ProviderAllowance.Balance -> tr(R.string.usage_allowance_balance, value.amounts.joinToString(" · ", transform = ::formatAmount))
     is ProviderAllowance.KeyLimit -> {
         val remaining = value.remaining

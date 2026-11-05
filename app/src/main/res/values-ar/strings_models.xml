@@ -212,4 +212,12 @@
     <string name="models_daily_token_budget">ميزانية Token اليومية للمزود</string>
     <string name="models_daily_token_budget_sub">تُحسب رموز الإدخال والإخراج المُبلغ عنها لجميع نماذج هذا المزود وأغراضه خلال اليوم المحلي. عند بلوغ الحد يُحظر الطلب التالي، وقد تتجاوزه الطلبات الجارية. الاستخدام غير المُبلغ عنه يساوي صفرًا، وتُستأنف الطلبات عند تغير التاريخ المحلي.</string>
     <string name="models_daily_token_budget_save_failed">تعذر حفظ الميزانية. ما زال الإعداد السابق ساريًا.</string>
+    <string name="balance_title">الرصيد</string>
+    <string name="balance_checking">جارٍ التحقق من الرصيد…</string>
+    <string name="balance_need_key">أدخل مفتاح API للتحقق من الرصيد.</string>
+    <string name="balance_auth">تم رفض مفتاح API.</string>
+    <string name="balance_http">أعاد المزود HTTP %1$d.</string>
+    <string name="balance_network">تعذر الوصول إلى المزود.</string>
+    <string name="balance_unreadable">تعذر قراءة استجابة الرصيد.</string>
+    <string name="balance_refresh">تحقق مرة أخرى</string>
 </resources>

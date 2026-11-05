@@ -21,6 +21,17 @@ import com.wangzan101.mika.settings.ProviderPresets
 import com.wangzan101.mika.settings.ProbeResult
 import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.settings.ModelContextSettings
+import com.wangzan101.mika.core.usage.AllowanceSource
+import com.wangzan101.mika.core.usage.ProviderAllowance
+import com.wangzan101.mika.core.usage.ProviderAllowanceClient
+import com.wangzan101.mika.settings.balance.BalanceCatalog
+import com.wangzan101.mika.settings.balance.BalanceFailure
+import com.wangzan101.mika.settings.balance.BalanceSnapshot
+import com.wangzan101.mika.settings.balance.BalanceView
+import com.wangzan101.mika.settings.balance.dashboard
+import com.wangzan101.mika.settings.balance.idle
+import com.wangzan101.mika.settings.balance.source
+import com.wangzan101.mika.settings.balance.toBalanceFailure
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.settings.RoleChoices
 import com.wangzan101.mika.settings.ChatGptSignIns
@@ -46,6 +57,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -235,6 +248,10 @@ data class ModelSetupUi(
     val systemSpeech: SystemCapability = SystemCapability(available = false, onDevice = false),
     /** 正在拿一小段录音试转的服务商 id;没有时为 null。 */
     val speechTesting: String? = null,
+    /** 添加表单上一次余额查询,和当时的预设、地址、Key 绑在一起。 */
+    val draftBalance: BalanceSnapshot? = null,
+    /** 各服务商详情上的余额(按服务商 id)。 */
+    val providerBalances: Map<String, BalanceView> = emptyMap(),
 ) {
     /** 还没有服务商时表单总是展开。 */
     val showForm: Boolean get() = formOpen || providers.isEmpty()
@@ -303,7 +320,7 @@ data class ModelSetupUi(
  * 看图还可以「用主模型」「不用」,轻量可以「用主模型」。连上第一家(还没有主模型)时自动选它的一个模型为主模型。
  * 首次上手和设置 › 模型共用。
  */
-class ModelSetupViewModel(
+class ModelSetupViewModel internal constructor(
     private val store: ProviderStore,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -315,6 +332,8 @@ class ModelSetupViewModel(
     private val systemSpeech: () -> SystemCapability = { SystemCapability(available = false, onDevice = false) },
     /** 选语音模型时试转用的转写器,和按住说话用的是同一种建法(带客户端标识头)。 */
     private val transcriber: (Provider) -> Transcriber = { p -> Transcriber(ProviderStore.modelHttp, store.clientHeaders(p)) },
+    /** 查 API Key 余额，和 Token 用量页用同一个客户端。测试里换成不联网的。 */
+    private val queryAllowance: suspend (AllowanceSource, String) -> ProviderAllowance = ::querySharedAllowance,
 ) {
     private val _state = MutableStateFlow(snapshot(ModelSetupUi(AddForm.of(ProviderPresets.all.first()))))
     val state: StateFlow<ModelSetupUi> = _state.asStateFlow()
@@ -326,6 +345,8 @@ class ModelSetupViewModel(
 
     private var testJob: Job? = null
     private val refreshJobs = mutableMapOf<String, Job>()
+    private var draftBalanceJob: Job? = null
+    private val balanceJobs = mutableMapOf<String, Job>()
 
     init {
         // 别处(开发者选项等)改了存储时跟着更新
@@ -408,7 +429,8 @@ class ModelSetupViewModel(
 
     fun closeForm() {
         testJob?.cancel()
-        _state.update { it.copy(formOpen = false, form = AddForm.of(ProviderPresets.all.first())) }
+        draftBalanceJob?.cancel()
+        _state.update { it.copy(formOpen = false, form = AddForm.of(ProviderPresets.all.first()), draftBalance = null) }
     }
 
     fun selectPreset(label: String) {
@@ -1095,7 +1117,7 @@ class ModelSetupViewModel(
         else -> true
     }
 
-    /** 换 Key,然后用新 Key 重新列一次模型。 */
+    /** 换 Key,然后用新 Key 重新列一次模型,并再查一次余额。 */
     fun changeKey(providerId: String, apiKey: String) {
         val k = apiKey.trim()
         if (k.isEmpty()) return
@@ -1103,6 +1125,7 @@ class ModelSetupViewModel(
             withContext(io) { store.updateProviderKey(providerId, k) }
             refreshJobs.remove(providerId)?.cancel()
             refresh(providerId)
+            loadBalance(providerId)
         }
     }
 
@@ -1119,9 +1142,80 @@ class ModelSetupViewModel(
                 // OpenRouter 授权来的 Key 随服务商一起删;OpenRouter 那边的 Key 要用户自己到 Keys 页面删
                 store.removeProvider(providerId)
             }
-            _state.update { snapshot(it.copy(listing = it.listing - providerId)) }
+            balanceJobs.remove(providerId)?.cancel()
+            _state.update { snapshot(it.copy(listing = it.listing - providerId, providerBalances = it.providerBalances - providerId)) }
         }
     }
+
+    /**
+     * 添加表单上的余额。Key 还在往里填时稍等再查，免得每打一个字就请求一次；点「再查一次」不等。
+     * 本机预设、用量页也查不了的，不发请求。
+     */
+    fun watchDraftBalance() = queryDraft(wait = true)
+
+    fun refreshDraftBalance() = queryDraft(wait = false)
+
+    private fun queryDraft(wait: Boolean) {
+        draftBalanceJob?.cancel()
+        val form = _state.value.form
+        val token = form.balanceToken()
+        val target = form.balanceTarget()
+        val source = target.source
+        if (source == null || form.apiKey.isBlank()) {
+            _state.update { it.copy(draftBalance = BalanceSnapshot(token, target.idle(form.apiKey.isNotBlank()))) }
+            return
+        }
+        val key = form.apiKey.trim()
+        _state.update { it.copy(draftBalance = BalanceSnapshot(token, BalanceView.Loading)) }
+        val dashboard = target.dashboard
+        draftBalanceJob = scope.launch {
+            if (wait) delay(DRAFT_BALANCE_DELAY_MS)
+            val view = fetchBalance(source, key, dashboard)
+            if (!isActive || _state.value.form.balanceToken() != token) return@launch
+            _state.update { it.copy(draftBalance = BalanceSnapshot(token, view)) }
+        }
+    }
+
+    /** 服务商详情上的余额。没有 Key、或这家不支持时只改状态，不发请求。 */
+    fun loadBalance(providerId: String) {
+        val p = store.provider(providerId) ?: return
+        balanceJobs.remove(providerId)?.cancel()
+        val target = BalanceCatalog.targetFor(p)
+        val source = target.source
+        if (source == null) {
+            _state.update { it.copy(providerBalances = it.providerBalances + (providerId to target.idle(hasKey = false))) }
+            return
+        }
+        val revision = store.providerKeyRevisions.value[providerId] ?: 0L
+        val key = store.allowanceKey(p, revision)?.trim().orEmpty()
+        if (key.isEmpty()) {
+            _state.update { it.copy(providerBalances = it.providerBalances + (providerId to BalanceView.NeedKey)) }
+            return
+        }
+        _state.update { it.copy(providerBalances = it.providerBalances + (providerId to BalanceView.Loading)) }
+        val dashboard = target.dashboard
+        balanceJobs[providerId] = scope.launch {
+            val view = fetchBalance(source, key, dashboard)
+            if (!isActive || !store.matchesAllowanceConnection(p, revision)) return@launch
+            _state.update { it.copy(providerBalances = it.providerBalances + (providerId to view)) }
+        }
+    }
+
+    private suspend fun fetchBalance(source: AllowanceSource, key: String, dashboard: String?): BalanceView {
+        if (key.any { it == '\n' || it == '\r' }) return BalanceView.Failed(BalanceFailure.Auth, source, dashboard)
+        return try {
+            val allowance = withContext(io) { queryAllowance(source, key) }
+            BalanceView.Ready(allowance, source, dashboard)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            BalanceView.Failed(e.toBalanceFailure(), source, dashboard)
+        }
+    }
+
+    private fun AddForm.balanceToken() = BalanceCatalog.token(preset, kind, baseUrl, apiKey, providerName)
+
+    private fun AddForm.balanceTarget() = BalanceCatalog.targetForDraft(preset, kind, baseUrl, providerName, isSelfHosted)
 
     companion object {
         /** 「测试并保存」里试调用最多等多久。 */
@@ -1132,5 +1226,13 @@ class ModelSetupViewModel(
 
         /** 自定义服务商的名字最多几个字(服务商列表一行放得下)。 */
         const val MAX_NAME = 32
+
+        /** 添加页里 Key 还在输入时，停这么久再查余额。 */
+        const val DRAFT_BALANCE_DELAY_MS = 400L
     }
 }
+
+private val sharedAllowanceClient by lazy { ProviderAllowanceClient(ProviderStore.modelHttp) }
+
+private suspend fun querySharedAllowance(source: AllowanceSource, apiKey: String): ProviderAllowance =
+    sharedAllowanceClient.query(source, apiKey)

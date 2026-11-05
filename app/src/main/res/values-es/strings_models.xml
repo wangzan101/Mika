@@ -200,4 +200,12 @@
     <string name="models_daily_token_budget">Presupuesto diario de tokens</string>
     <string name="models_daily_token_budget_sub">Cuenta los tokens de entrada y salida informados para todos los modelos y usos de este proveedor durante el día local. Al llegar al límite se bloquea la siguiente solicitud; las solicitudes en curso pueden superarlo. El uso no informado cuenta como 0 y se restablece al cambiar la fecha local.</string>
     <string name="models_daily_token_budget_save_failed">No se pudo guardar el presupuesto. La configuración anterior sigue activa.</string>
+    <string name="balance_title">Saldo</string>
+    <string name="balance_checking">Comprobando el saldo…</string>
+    <string name="balance_need_key">Introduce una clave de API para consultar el saldo.</string>
+    <string name="balance_auth">La clave de API fue rechazada.</string>
+    <string name="balance_http">El proveedor respondió HTTP %1$d.</string>
+    <string name="balance_network">No se pudo contactar al proveedor.</string>
+    <string name="balance_unreadable">No se pudo leer la respuesta del saldo.</string>
+    <string name="balance_refresh">Consultar de nuevo</string>
 </resources>

@@ -193,4 +193,12 @@
     <string name="models_daily_token_budget">服务商每日 Token 预算</string>
     <string name="models_daily_token_budget_sub">按本地日历日统计这家所有模型和用途的已报告输入与输出 Token。达到预算后不再发起下一次请求；在途请求可能超量，未报告用量按 0 计。本地日期变更后自动恢复。</string>
     <string name="models_daily_token_budget_save_failed">预算保存失败，原设置未变。</string>
+    <string name="balance_title">余额</string>
+    <string name="balance_checking">正在查询余额…</string>
+    <string name="balance_need_key">填入 API Key 后可以查询余额。</string>
+    <string name="balance_auth">API Key 被拒绝。</string>
+    <string name="balance_http">服务商返回 HTTP %1$d。</string>
+    <string name="balance_network">连不上这家服务商。</string>
+    <string name="balance_unreadable">余额返回的内容无法读取。</string>
+    <string name="balance_refresh">再查一次</string>
 </resources>

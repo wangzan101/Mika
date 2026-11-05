@@ -18,6 +18,16 @@ Any app installed on your phone works, with no per-app integration: Mika looks a
 - Things only you should do (logging in, verification codes, payment) trigger a notification asking you to take over: the app moves to your main screen, you finish and hand it back, and Mika re-checks before continuing.
 - When a task is done, the apps Mika opened stay in the background on the page where it finished: you find them in recent apps, and the next time Mika opens one it continues from there. They never jump in front of what you are doing. An app that is playing sound or video at that moment is closed; say "keep the music playing" or "close it when you're done" and Mika does that instead.
 
+## Share to Mika from another app
+
+- Choose Mika in the Android share menu to bring in text, a link or one image. Local images can also use “Open with Mika”.
+- Opens a new conversation directly, with shared text in the composer and the image as a removable attachment thumbnail. Edit your request and use the normal Send button. Nothing is sent to the model automatically or appended to the last chat.
+- With parallel tasks off, a message explains that the shared draft will open after the current task finishes. Multiple images and choosing an existing conversation are not supported yet.
+
+Mika Dev (the local test build) in the Android share menu:
+
+<img src="media/share-to-mika-menu.png" alt="Mika Dev in the Android share menu" width="300" />
+
 ## Built-in browser
 
 - Opens any website in the background and operates the page with real clicks and keyboard input. Pages open in desktop mode by default.

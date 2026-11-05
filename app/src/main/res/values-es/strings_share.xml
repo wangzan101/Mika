@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">No se puede abrir este contenido. Comparte texto, un enlace o una imagen.</string>
+    <string name="share_read_failed">No pude leer esta imagen. Vuelve a la aplicación original y compártela de nuevo.</string>
+    <string name="share_busy">Hay otra tarea en curso. El borrador compartido se abrirá en un chat nuevo cuando termine.</string>
+    <string name="share_image_unsupported">Este dispositivo no admite imágenes adjuntas. Puedes compartir texto y enlaces.</string>
+</resources>

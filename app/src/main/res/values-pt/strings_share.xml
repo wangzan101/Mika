@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">Não foi possível abrir este conteúdo. Compartilhe texto, um link ou uma imagem.</string>
+    <string name="share_read_failed">Não consegui ler esta imagem. Volte ao aplicativo original e compartilhe novamente.</string>
+    <string name="share_busy">Outra tarefa está em execução. O rascunho compartilhado será aberto em uma nova conversa quando ela terminar.</string>
+    <string name="share_image_unsupported">Este dispositivo não aceita imagens anexadas. Você ainda pode compartilhar texto e links.</string>
+</resources>

@@ -199,7 +199,14 @@ fun ChatScreen(
     }
     val frame = live ?: lastFrame.takeIf { ui.pip.visible && ui.pip.mode == PipMode.Done }
     val webContent = if (ui.pip.mode == PipMode.Done) lastFrameWasWeb else webLive
-    var input by rememberSaveable { mutableStateOf("") }
+    var input by rememberConversationInput(ui.conversationId)
+    // 分享内容只填一次,之后用户就在原来的输入框里编辑并点击发送。
+    LaunchedEffect(ui.conversationId, ui.sharedText) {
+        ui.sharedText?.let {
+            input = it
+            vm.sharedTextApplied()
+        }
+    }
     var voiceHolding by remember { mutableStateOf(false) }
     var editRequest by remember { mutableIntStateOf(0) }
     var composerHeight by rememberSaveable { mutableIntStateOf(0) }

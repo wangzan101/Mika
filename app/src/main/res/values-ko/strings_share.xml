@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">이 내용을 열 수 없습니다. 텍스트, 링크 또는 이미지 한 장을 공유해 주세요.</string>
+    <string name="share_read_failed">이미지를 읽지 못했습니다. 원래 앱으로 돌아가 다시 공유해 주세요.</string>
+    <string name="share_busy">다른 작업이 실행 중입니다. 작업이 끝나면 공유한 내용이 새 채팅의 초안에 들어갑니다.</string>
+    <string name="share_image_unsupported">이 기기는 이미지 첨부를 지원하지 않습니다. 텍스트와 링크는 공유할 수 있습니다.</string>
+</resources>

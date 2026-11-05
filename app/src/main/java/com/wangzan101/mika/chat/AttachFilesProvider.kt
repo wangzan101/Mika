@@ -9,6 +9,7 @@ import androidx.core.content.FileProvider
  * 对话页附件用的 content:// 地址(见 res/xml/attach_files.xml),不对外导出,只在用到时临时授权:
  * - camera/:系统相机拍的照片写到这里(拍照时授权相机 App 写这一个文件),发送时再复制进对话工作区;
  * - viewing/:点开已发出的照片、文件时从工作区复制出来的一份,交给 App 里的查看页(或用户选的别的 App)只读打开。
+ * - incoming/:外部分享先暂存到这里,作为新对话的待发缩略图;发送或移除后清理。
  * 工作区本身不开放。除 camera/ 外只读;不许删、不许插入。
  */
 class AttachFilesProvider : FileProvider() {

@@ -88,7 +88,7 @@
         android:localeConfig="@xml/locales_config"
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
-        <!-- 界面只有一个:从桌面、通知、别的 App 或命令打开都回到这一个(新的打开交给 onNewIntent),不在上面叠出第二个 -->
+        <!-- 桌面、通知和外部分享都回到主界面;分享只填入新对话草稿,不自动发送。 -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
@@ -98,6 +98,18 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- 文字、链接和单张图片直接放进新对话的输入区。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:mimeType="image/*" />
             </intent-filter>
         </activity>
 

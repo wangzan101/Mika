@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">This content cannot be opened yet. Share text, a link, or one image.</string>
+    <string name="share_read_failed">I could not read this image. Go back to the original app and share it again.</string>
+    <string name="share_busy">Another task is running. The shared draft will open in a new chat when it finishes.</string>
+    <string name="share_image_unsupported">This device does not support image attachments. You can still share text and links.</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">這份內容暫時打不開。請分享文字、連結或一張圖片。</string>
+    <string name="share_read_failed">沒能讀到這張圖片。請回到原來的 App，重新分享一次。</string>
+    <string name="share_busy">另一個任務還在執行，結束後會開啟分享的新對話。</string>
+    <string name="share_image_unsupported">這台裝置暫不支援圖片附件，你仍然可以分享文字和連結。</string>
+</resources>

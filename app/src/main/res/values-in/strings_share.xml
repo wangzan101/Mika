@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">Konten ini belum dapat dibuka. Bagikan teks, tautan, atau satu gambar.</string>
+    <string name="share_read_failed">Gambar tidak dapat dibaca. Kembali ke aplikasi asal dan bagikan lagi.</string>
+    <string name="share_busy">Tugas lain sedang berjalan. Draf yang dibagikan akan terbuka di percakapan baru setelah tugas selesai.</string>
+    <string name="share_image_unsupported">Perangkat ini tidak mendukung lampiran gambar. Anda masih dapat membagikan teks dan tautan.</string>
+</resources>

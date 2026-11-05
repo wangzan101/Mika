@@ -89,6 +89,61 @@ class ChatViewModelTest {
         ChatViewModel(backgroundScope, state, stage, actions, store, appLabel = { if (it == "com.chat") "聊天" else it },
             activities = acts, steers = steerFlow).also { runCurrent() }
 
+    /** 分享直接进入全新会话的输入区,接收阶段不创建消息或调用任务服务。 */
+    @Test fun sharedContentOpensANewDraftWithoutSending() = runTest {
+        val store = ConversationStore(tmp.newFolder())
+        store.append("old", Turn("之前的话题", "之前的回答", "succeeded"))
+        val model = vm(store)
+        model.openConversation("old")
+        val image = PendingAttachment("content://cached/image", "image.png", 100L)
+        assertTrue(model.openSharedDraft("shared-new", "看看这张图片", image))
+        assertEquals("shared-new", model.ui.value.conversationId)
+        assertEquals("看看这张图片", model.ui.value.sharedText)
+        assertEquals(listOf(image), model.ui.value.attachments)
+        assertTrue(model.ui.value.exchanges.isEmpty())
+        assertTrue(calls.isEmpty())
+        assertEquals(1, store.turns("old").size)
+        model.sharedTextApplied()
+        assertNull(model.ui.value.sharedText)
+    }
+
+    /** 分享不覆盖原会话的附件和引用;切回去仍能继续编辑原草稿。 */
+    @Test fun switchingToASharedDraftPreservesTheOldAttachments() = runTest {
+        val model = vm()
+        val oldImage = PendingAttachment("content://cached/old", "old.png", 100L)
+        model.openSharedDraft("old", "原草稿", oldImage)
+        model.sharedTextApplied()
+        model.quote(QuoteMessage.From.You, "原来的引用")
+        val quote = model.ui.value.quote
+        model.openSharedDraft("shared-new", "新草稿", null)
+        model.openConversation("old")
+        assertEquals(listOf(oldImage), model.ui.value.attachments)
+        assertEquals(quote, model.ui.value.quote)
+        assertNull(model.ui.value.sharedText)
+        assertTrue(calls.isEmpty())
+    }
+
+    /** 接收文字分享不执行,用户点击原聊天页的发送后才走正常任务入口。 */
+    @Test fun aSharedDraftUsesTheNormalSendAction() = runTest {
+        val model = vm()
+        model.openSharedDraft("shared-new", "总结这段文字", null)
+        assertTrue(calls.isEmpty())
+        assertTrue(model.send("我修改后的要求", ok))
+        assertEquals(listOf("start:我修改后的要求"), calls)
+        assertEquals("shared-new", model.ui.value.conversationId)
+    }
+
+    /** 串行任务在跑时不切换,也不会取消旧任务或把分享当成插话。 */
+    @Test fun sharingWhileBusyDoesNotSteerOrCancelTheOldTask() = runTest {
+        val model = vm()
+        assertTrue(model.send("原来的任务", ok))
+        val oldId = model.ui.value.conversationId
+        assertFalse(model.openSharedDraft("shared-new", "分享的图片", null))
+        assertEquals(oldId, model.ui.value.conversationId)
+        assertEquals(listOf("start:原来的任务"), calls)
+        assertEquals("原来的任务", model.ui.value.exchanges.single().goal)
+    }
+
     /** 和 [vm] 一样,但能指定这块屏开没开。 */
     private fun TestScope.vmWithScreen(open: MutableStateFlow<Boolean>) =
         ChatViewModel(backgroundScope, state, stage, actions, ConversationStore(tmp.newFolder()),

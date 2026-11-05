@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">تعذّر فتح هذا المحتوى. شارك نصًا أو رابطًا أو صورة واحدة.</string>
+    <string name="share_read_failed">تعذّرت قراءة الصورة. ارجع إلى التطبيق الأصلي وشاركها مرة أخرى.</string>
+    <string name="share_busy">هناك مهمة أخرى قيد التنفيذ. ستُفتح مسودة المشاركة في محادثة جديدة عند انتهائها.</string>
+    <string name="share_image_unsupported">هذا الجهاز لا يدعم إرفاق الصور. يمكنك مشاركة النصوص والروابط.</string>
+</resources>

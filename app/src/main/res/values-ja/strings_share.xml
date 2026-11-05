@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="share_invalid">この内容は開けません。テキスト、リンク、または画像1枚を共有してください。</string>
+    <string name="share_read_failed">画像を読み込めませんでした。元のアプリに戻り、もう一度共有してください。</string>
+    <string name="share_busy">別のタスクを実行中です。完了すると、共有した内容が新しいチャットの下書きに入ります。</string>
+    <string name="share_image_unsupported">この端末は画像の添付に対応していません。テキストとリンクは共有できます。</string>
+</resources>

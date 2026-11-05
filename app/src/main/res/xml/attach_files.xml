@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 对话页附件:相机拍的照片、点开已发附件时复制出来的那一份;都在缓存目录下,工作区本身不开放 -->
+<!-- 对话附件:相机照片、查看副本、外部分享暂存;都在缓存目录下,工作区本身不开放 -->
 <paths>
     <cache-path name="camera" path="attach/camera/" />
     <cache-path name="viewing" path="attach/viewing/" />
+    <cache-path name="incoming" path="attach/incoming/" />
 </paths>

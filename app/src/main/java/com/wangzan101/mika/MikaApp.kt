@@ -318,6 +318,13 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
                 Attachments.importInto(app, uris.map(Uri::parse), dirs.workspace(id), dirs.gate, dirs.tree, sandbox::freeBytes) { sandbox.workspaceBytes(id) }
             },
             describeAttachments = { uris -> AttachFiles.describe(app, uris) },
+            releaseAttachments = { items ->
+                // 暂存图片已导入或被用户移除后后台清理,不阻塞输入框;清理失败不影响任务。
+                scope.launch(Dispatchers.IO) {
+                    runCatching { com.wangzan101.mika.ui.IncomingShareImages.release(app, items) }
+                        .onFailure { Log.w("MikaShare", "分享临时图片没能清理", it) }
+                }
+            },
             deletionImpact = conversationDeleter::impact,
             removeConversation = conversationDeleter::delete,
             keptPage = pageKeeper.page,

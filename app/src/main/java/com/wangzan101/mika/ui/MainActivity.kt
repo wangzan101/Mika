@@ -37,6 +37,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.AbstractSavedStateViewModelFactory
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.platform.LocalContext
 import com.wangzan101.mika.cap.web.WebHandover
 import com.wangzan101.mika.cap.web.WebSites
@@ -66,6 +73,7 @@ import com.wangzan101.mika.ui.theme.systemBarsFor
 class MainActivity : ComponentActivity() {
     private lateinit var monitor: SystemStatusMonitor
     private var requestedConversation by mutableStateOf<String?>(null)
+    private lateinit var shares: IncomingShareReceiver
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         // 用户选过「不再询问」时系统不再弹窗,只能去设置里打开
@@ -78,11 +86,26 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(AppLanguage.wrap(newBase))
     }
 
+    /** 主界面统一承接桌面、通知与外部分享;分享内容只放进新草稿,不自动发送。 */
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        requestedConversation = intent.getStringExtra(EXTRA_OPEN_CONVERSATION)
+        requestedConversation = if (isShare(intent)) null else intent.getStringExtra(EXTRA_OPEN_CONVERSATION)
         monitor = SystemStatusMonitor(this, PhoneServices.of(this).shellControl)
+        // 外部 Intent extras 不能成为内部恢复状态,会话编号只由接收器生成。
+        val shareFactory = object : AbstractSavedStateViewModelFactory(this, null) {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(key: String, modelClass: Class<T>, handle: SavedStateHandle): T =
+                IncomingShareReceiver(application, handle) as T
+        }
+        shares = ViewModelProvider(this, shareFactory)[IncomingShareReceiver::class.java]
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { for (id in shares.opened) requestedConversation = id }
+                launch { for (message in shares.notices) Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show() }
+            }
+        }
+        if (savedInstanceState == null) receiveShare(intent)
         val store = ProviderStore.get(this)
         setContent {
             // 外观按设置来,改了当场换;系统栏图标的深浅跟着界面
@@ -97,11 +120,23 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** App 已打开时也接收新的系统分享;同一 Activity 的配置重建不会重复填入内容。 */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        requestedConversation = intent.getStringExtra(EXTRA_OPEN_CONVERSATION)
+        requestedConversation = if (isShare(intent)) null else intent.getStringExtra(EXTRA_OPEN_CONVERSATION)
+        receiveShare(intent)
     }
+
+    /** 分享动作交接收器处理,普通桌面和通知 Intent 沿用原来的打开流程。 */
+    private fun receiveShare(intent: Intent) {
+        if (isShare(intent)) {
+            shares.receive(readIncomingShare(this, intent))
+        }
+    }
+
+    /** 外部分享只解释分享字段,忽略夹带的通知会话编号。 */
+    private fun isShare(intent: Intent) = intent.action in listOf(Intent.ACTION_SEND, Intent.ACTION_VIEW, Intent.ACTION_SEND_MULTIPLE)
 
     override fun onStart() {
         super.onStart()
@@ -235,7 +270,8 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
     val updateState by app.updates.state.collectAsState()
     LaunchedEffect(requestedConversation) {
         if (requestedConversation != null) {
-            app.chat.openConversation(requestedConversation)
+            // 分享接收器已选中新草稿,不要再次加载历史而清掉刚挂上的图片。
+            if (app.chat.ui.value.conversationId != requestedConversation) app.chat.openConversation(requestedConversation)
             nav.reset()
             onConversationOpened()
         }

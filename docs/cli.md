@@ -54,6 +54,33 @@ mika --url http://PHONE:8765 --token-file /path/to/private-token-file doctor --j
 
 令牌文件只包含访问令牌,由用户按私有文件保存。URL 使用服务器根地址或 `/api/v1`,不要填 `/mcp`;不允许 URL 内嵌凭据。CLI 不跟随 HTTP 重定向、不使用环境中的 HTTP 代理。服务器沿用私有网络限制;局域网 HTTP 的链路本身不加密,可使用 ADB 或可信私有组网。
 
+### 使用独立的 ADB 服务器端口
+
+厂商手机助手进程可能占用电脑默认的 ADB 服务器端口 5037。两者冲突时，可以为米卡选择独立端口。
+
+```bash
+mika --adb-server-port 5038 connect --device SERIAL --json
+mika --adb-server-port 5038 doctor --device SERIAL --json
+```
+
+后续的 `devices`、`screen`、`task`、`ui` 命令使用同一选项。这里设置的是电脑上的 ADB 服务器端口，与手机的 MCP/API 端口分别配置。如果厂商手机助手独占 USB 设备，已配对的无线 ADB 可以提供独立通道。用 `mika --adb-server-port 5038 devices --json` 查看无线设备编号，再通过 `--device` 明确选择。
+
+如果厂商特有的 ADB 响应还会导致 Google ADB 服务退出，使用米卡的局域网或私有网络模式。`--url` 和 `--token-file` 方式直接访问米卡的任务 API，可独立于电脑上的 ADB 服务工作。
+
+部分手机重新连接 USB 时会重启 `adbd`，由 USB 启动的手机助手可能随之退出。设备支持时，完成米卡的原生无线调试配对，可让手机端看门狗重新启动助手。恢复后核验 `helper_available`。
+
+## 经 ADB 只读检查屏幕
+
+```bash
+mika screen --device SERIAL --json
+# 并排安装的开发版
+mika screen --device SERIAL --package com.wangzan101.mika.dev --json
+```
+
+`screen` 通过 APK 提供的 shell 入口读取各显示屏可访问的窗口和控件树，包括米卡的虚拟屏。每个窗口带有 `display_id`。连接 `UiAutomation` 时使用 `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES`，米卡的无障碍服务可在读屏期间继续运行。系统自带的 `adb shell uiautomator dump` 使用会压制其他无障碍服务的连接，会让米卡暂时断开。
+
+此命令需要已授权的 ADB 设备，以及包含 `ScreenInspectMain` 的米卡 APK。设备选择规则与 `doctor` 相同，支持正式版和开发版包名。密码框的文字和描述会被省略。返回值含 `node_count` 和 `truncated`，空控件树不能证明应用已准备好。检查只读屏幕，使用独立的观察连接。纯网络连接继续使用高层任务 API。
+
 ## 任务命令
 
 ```bash

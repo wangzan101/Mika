@@ -9,6 +9,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -22,6 +23,7 @@ API = "/api/v1"
 PHONE_FILES = "/sdcard/Android/data/com.wangzan101.mika/files"
 INFO_FILE = PHONE_FILES + "/mcp-usb.json"
 CONNECT_SCRIPT = PHONE_FILES + "/connect-computer.sh"
+SCREEN_INSPECT = "com.wangzan101.mika.cap.phone.shell.ScreenInspectMain"
 MAX_RESPONSE = 4 * 1024 * 1024
 HANDOFF = {"waiting_for_answer", "waiting_on_phone"}
 TERMINAL = {"done", "failed", "cancelled"}
@@ -151,11 +153,13 @@ class Adb:
     _started = set()
     _start_lock = threading.Lock()
 
-    def __init__(self, executable="adb", device=None):
+    def __init__(self, executable="adb", device=None, server_port=5037):
         self.executable, self.device = executable, device
+        self.server_port = server_port
+        self.server_command = [executable] + (["-P", str(server_port)] if server_port != 5037 else [])
 
     def run(self, *args, timeout=20):
-        prefix = [self.executable] + (["-s", self.device] if self.device else [])
+        prefix = self.server_command + (["-s", self.device] if self.device else [])
         try:
             result = subprocess.run(prefix + list(args), stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
         except OSError:
@@ -171,14 +175,15 @@ class Adb:
         # Once per process and executable. Output is discarded so a daemon started here never holds the pipes
         # of a later captured call.
         with Adb._start_lock:
-            if self.executable in Adb._started:
+            endpoint = (self.executable, self.server_port)
+            if endpoint in Adb._started:
                 return
             self._start_server()
-            Adb._started.add(self.executable)
+            Adb._started.add(endpoint)
 
     def _start_server(self):
         try:
-            result = subprocess.run([self.executable, "start-server"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            result = subprocess.run(self.server_command + ["start-server"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, timeout=60)
         except OSError:
             raise adb_unavailable() from None
@@ -254,7 +259,7 @@ def connection(args, secrets):
         return
     if args.token_file:
         raise CliError("arguments", "--token-file requires --url; ADB reads the current token from the phone.")
-    adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"))
+    adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"), getattr(args, "adb_server_port", 5037))
     progress(args, "starting ADB server...")
     adb.start_server()
     adb.select()
@@ -334,6 +339,32 @@ def recent_tasks(client, limit):
     return result
 
 
+def inspect_screen(args):
+    if args.url or args.token_file:
+        raise CliError("arguments", "screen requires ADB access to the selected phone.")
+    adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"), getattr(args, "adb_server_port", 5037))
+    adb.start_server()
+    adb.select()
+    paths = adb.run("shell", "pm", "path", args.package).splitlines()
+    apk = next((line[len("package:"):] for line in paths
+                if line.startswith("package:") and line.endswith("/base.apk")), None)
+    if not apk:
+        raise CliError("screen_unavailable", "Could not locate the selected Mika APK.")
+    command = "CLASSPATH=" + shlex.quote(apk) + " app_process /system/bin " + SCREEN_INSPECT
+    try:
+        raw = adb.run("exec-out", command)
+        if len(raw.encode("utf-8")) > MAX_RESPONSE:
+            raise ValueError("response too large")
+        result = json.loads(raw)
+    except (CliError, ValueError):
+        raise CliError("screen_unavailable", "The installed Mika APK could not inspect the screen. Update it to a version with screen inspection support.") from None
+    if (not isinstance(result, dict) or result.get("status") != "ok"
+            or result.get("accessibility_services_suppressed") is not False
+            or not isinstance(result.get("windows"), list)):
+        raise CliError("screen_unavailable", "Screen inspection is unavailable. Close any other UI automation session and retry.")
+    return {**result, "device": adb.device, "package": args.package}
+
+
 def execute(args, secrets):
     # Validate inputs before opening a connection or invoking the bootstrap script.
     if args.command == "task":
@@ -349,10 +380,12 @@ def execute(args, secrets):
             args.text = text_input(args.text, args.text_file, args.action)
         if hasattr(args, "task_id") and not re.fullmatch(r"[A-Za-z0-9_-]+", args.task_id):
             raise CliError("arguments", "task_id must be an ID returned by Mika.")
+    if args.command == "screen":
+        return inspect_screen(args)
     if args.command == "devices":
         if args.url or args.token_file:
             raise CliError("arguments", "devices lists ADB devices; it does not use --url or --token-file.")
-        adb = Adb(args.adb)
+        adb = Adb(args.adb, server_port=getattr(args, "adb_server_port", 5037))
         progress(args, "starting ADB server...")
         adb.start_server()
         return {"devices": adb.devices()}
@@ -432,6 +465,8 @@ def parser():
     ]:
         common.add_argument(flag, help=help_text, default=argparse.SUPPRESS)
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Compact JSON output, including errors")
+    common.add_argument("--adb-server-port", type=bounded_int(1, 65535), default=argparse.SUPPRESS,
+                        help="Local ADB server port (default: 5037)")
     common.add_argument("--request-timeout", type=request_timeout, default=argparse.SUPPRESS, help="HTTP timeout in seconds (default: 15; bounded waits get at least timeout + 5)")
     p = Parser(prog="mika", description="Delegate tasks to Mika on Android using task API v1.", parents=[common])
     p.add_argument("--version", action="version", version="mika " + VERSION)
@@ -440,6 +475,9 @@ def parser():
                             ("doctor", "Read connection and phone state without starting a task"),
                             ("devices", "List ADB devices")]:
         sub.add_parser(name, help=help_text, parents=[common])
+    screen = sub.add_parser("screen", help="Read screen trees without suspending Mika's accessibility service", parents=[common])
+    screen.add_argument("--package", choices=["com.wangzan101.mika", "com.wangzan101.mika.dev"],
+                        default="com.wangzan101.mika", help="Installed Mika package (default: production)")
     ui = sub.add_parser("ui", help="Open the phone owner's local task desk", parents=[common])
     ui.add_argument("--no-open", action="store_true", help="Print the desk URL instead of opening a browser")
     task = sub.add_parser("task", help="Run and inspect phone tasks", parents=[common])
@@ -474,7 +512,7 @@ def main(argv=None):
     compact = "--json" in argv
     try:
         args = parser().parse_args(argv)
-        for key, default in {"device": None, "url": None, "token_file": None, "adb": "adb", "request_timeout": 15}.items():
+        for key, default in {"device": None, "url": None, "token_file": None, "adb": "adb", "adb_server_port": 5037, "request_timeout": 15}.items():
             if not hasattr(args, key):
                 setattr(args, key, default)
         if args.command == "ui":

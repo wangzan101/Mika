@@ -87,6 +87,33 @@ class ProviderStoreTest {
         assertNull(store().provider(first.id)!!.contextSettings["m1"])
     }
 
+    @Test fun perModelReadTimeoutFlowsIntoTheClientSetupAndPersists() {
+        // #295:慢速本地推理(如 Ollama 经隧道)一次生成可以超过全局默认的 120 秒读超时;
+        // 每模型配置的读超时随 ModelContextSettings 存取,并进到建模型用的 ClientSetup 里。
+        val s = store()
+        val first = connected(s)
+        s.use(ModelRole.Main, first.id, "m1", none)
+        val cfg = s.configFor(ModelRole.Main)!!
+        val saved = ModelContextSettings(readTimeoutSeconds = 600)
+        assertTrue(s.setModelContext(cfg.id, saved))
+        s.modelFor(ModelRole.Main)
+        assertEquals(600, setups.last().readTimeoutSeconds)
+        val reloaded = store()
+        reloaded.use(ModelRole.Main, first.id, "m1", none)
+        assertEquals(saved, reloaded.provider(first.id)!!.contextSettings["m1"])
+        reloaded.modelFor(ModelRole.Main)
+        assertEquals(600, setups.last().readTimeoutSeconds)
+    }
+
+    @Test fun aNonPositiveReadTimeoutIsRejected() {
+        val s = store()
+        val first = connected(s)
+        s.use(ModelRole.Main, first.id, "m1", none)
+        val cfg = s.configFor(ModelRole.Main)!!
+        assertFalse(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = 0)))
+        assertFalse(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = -5)))
+    }
+
     /** 预设改了默认上下文后,按旧默认存下的配置读入时跟上去;用户改过的和写了每模型窗口的不动(见 repairStaleContextDefaults)。 */
     @Test fun stalePresetWindowIsRepairedOnLoadButUserValuesAreNot() {
         val s = store()

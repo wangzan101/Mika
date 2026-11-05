@@ -157,12 +157,13 @@ data class Provider(
         kind != ProviderConfig.Kind.ChatGpt && kind != ProviderConfig.Kind.Xai && models?.isEmpty() == true && model !in verifiedModels
 }
 
-/** 留空的窗口沿用所选模型配置，留空的触发点交给核心自动计算。 */
-data class ModelContextSettings(val windowTokens: Int? = null, val triggerTokens: Int? = null) {
+/** 留空的窗口沿用所选模型配置，留空的触发点交给核心自动计算，留空的读超时用全局默认(120 秒)。 */
+data class ModelContextSettings(val windowTokens: Int? = null, val triggerTokens: Int? = null, val readTimeoutSeconds: Int? = null) {
     fun limits(modelWindow: Int): ContextLimits = ContextLimits.of(windowTokens ?: modelWindow, triggerTokens)
 
     fun validFor(modelWindow: Int): Boolean = (windowTokens == null || windowTokens > 0) &&
-        (triggerTokens == null || (triggerTokens > 0 && triggerTokens == limits(modelWindow).trigger))
+        (triggerTokens == null || (triggerTokens > 0 && triggerTokens == limits(modelWindow).trigger)) &&
+        (readTimeoutSeconds == null || readTimeoutSeconds > 0)
 }
 
 /** 一个用途选了什么:一个具体模型、用主模型,或不用(只有看图可以不用)。 */
@@ -237,13 +238,15 @@ data class RoleChoices(
 /**
  * 建一个模型客户端时额外给的:[headers] 每个请求都带(客户端标识、会话号,见 [ClientHeaders]);
  * [maxOutputTokens] 限制回复长度(连接测试用),null 按适配器默认;[reasoningEffort] 是这个用途选的思考强度;
- * [thinkingTypes] 是模型列表写明这个模型接受的思考方式(见 [ListedModel.thinkingTypes]),没说为 null。
+ * [thinkingTypes] 是模型列表写明这个模型接受的思考方式(见 [ListedModel.thinkingTypes]),没说为 null;
+ * [readTimeoutSeconds] 是这条配置单独的读超时,慢速本地推理(#295)可调大,null 用全局默认(120 秒)。
  */
 data class ClientSetup(
     val headers: Map<String, String> = emptyMap(),
     val maxOutputTokens: Int? = null,
     val reasoningEffort: String? = null,
     val thinkingTypes: List<String>? = null,
+    val readTimeoutSeconds: Int? = null,
 )
 
 /** 「测试并保存」试调用(见 [ProviderStore.probe])的结果。 */
@@ -565,7 +568,7 @@ class ProviderStore(
         ))
         modelFactory(configured, apiKey(cfg.id), listed?.endpoint, ClientSetup(
             headers(p?.sessionHeader, session), reasoningEffort = _roles.value.reasoningEffort(role),
-            thinkingTypes = listed?.thinkingTypes,
+            thinkingTypes = listed?.thinkingTypes, readTimeoutSeconds = settings?.readTimeoutSeconds,
         )).metered(source, usage)
     }
 
@@ -777,6 +780,8 @@ class ProviderStore(
      * 请求头四种协议一样带。回复上限([ClientSetup.maxOutputTokens])只给 Messages(本来就必填)和 generateContent;
      * Chat Completions 不给(有的模型只认 `max_tokens`、有的只认 `max_completion_tokens`,给错了整个请求被拒,
      * 连接测试就会误报),Responses 也不给(ChatGPT 套餐那条路不收 `max_output_tokens`)。
+     * 读超时([ClientSetup.readTimeoutSeconds])配置了的按它派生 client(共享连接池与代理),慢速本地推理可调大(#295);
+     * 没配置用全局默认(120 秒)。派生只在建模型时发生一次,不影响别的模型。
      */
     private fun buildModel(cfg: ProviderConfig, apiKey: String?, endpoint: ModelEndpoint?, setup: ClientSetup): ChatModel {
         val (kind, adapterBase) = adapterFor(cfg, endpoint)
@@ -784,6 +789,11 @@ class ProviderStore(
         val baseUrl = if (cfg.kind == ProviderConfig.Kind.Xai) {
             provider(cfg.providerId)?.baseUrl?.takeIf { it.isNotBlank() } ?: adapterBase
         } else adapterBase
+        val defaultHttp = http
+        val http = setup.readTimeoutSeconds
+            ?.takeIf { it > 0 }
+            ?.let { seconds -> defaultHttp.newBuilder().readTimeout(seconds.toLong(), TimeUnit.SECONDS).build() }
+            ?: defaultHttp
         return when (kind) {
             ProviderConfig.Kind.OpenAiCompat ->
                 OpenAiCompatModel(baseUrl, apiKey, cfg.model, cfg.capabilities, http, endpoint?.reasoningField, setup.headers,
@@ -924,7 +934,8 @@ class ProviderStore(
         verifiedModels = o["verifiedModels"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet().orEmpty(),
         contextSettings = (o["contextSettings"] as? JsonObject).orEmpty().mapNotNull { (model, raw) ->
             val entry = raw as? JsonObject ?: return@mapNotNull null
-            val settings = ModelContextSettings(entry.positiveInt("windowTokens"), entry.positiveInt("triggerTokens"))
+            val settings = ModelContextSettings(entry.positiveInt("windowTokens"), entry.positiveInt("triggerTokens"),
+                entry.positiveInt("readTimeoutSeconds"))
             if (settings == ModelContextSettings()) null else model to settings
         }.toMap(),
         visionOverrides = (o["visionOverrides"] as? JsonObject).orEmpty().mapNotNull { (model, raw) ->
@@ -1011,6 +1022,7 @@ class ProviderStore(
                             for ((model, settings) in p.contextSettings) putJsonObject(model) {
                                 settings.windowTokens?.let { put("windowTokens", it) }
                                 settings.triggerTokens?.let { put("triggerTokens", it) }
+                                settings.readTimeoutSeconds?.let { put("readTimeoutSeconds", it) }
                             }
                         }
                         if (p.visionOverrides.isNotEmpty()) putJsonObject("visionOverrides") {

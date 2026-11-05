@@ -22,7 +22,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.produceState
 import com.wangzan101.mika.confirm.ConfirmationNotifier
 import com.wangzan101.mika.memory.MemoryRuntime
 import androidx.compose.runtime.rememberCoroutineScope
@@ -38,6 +37,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.compose.ui.platform.LocalContext
+import com.wangzan101.mika.settings.FeatureFlags
 import com.wangzan101.mika.cap.web.WebHandover
 import com.wangzan101.mika.cap.web.WebSites
 import com.wangzan101.mika.browser.UserBrowser
@@ -50,7 +50,6 @@ import com.wangzan101.mika.chat.ConversationStore
 import com.wangzan101.mika.record.RunStore
 import com.wangzan101.mika.replay.FileRouteStore
 import com.wangzan101.mika.task.TaskService
-import com.wangzan101.mika.core.knowledge.GuideCatalog
 import com.wangzan101.mika.settings.Prerequisites
 import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.settings.SystemStatusMonitor
@@ -207,7 +206,9 @@ internal fun <T> firstThatStarts(candidates: List<T>, start: (T) -> Boolean): Bo
 @Composable
 private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activityFix: (Fix) -> Unit,
     requestedConversation: String?, onConversationOpened: () -> Unit) {
-    val nav = rememberNavStack()
+    val context = LocalContext.current
+    val personalStart = remember { FeatureFlags.get(context).personalStart() }
+    val nav = rememberNavStack(if (personalStart && requestedConversation == null) Route.Personal else Route.Chat)
     // 从设置页「重新配对」进来时先回到配对一步
     var setupRepair by rememberSaveable { mutableStateOf(false) }
     // 首次上手正在走哪一步;为空时不在上手流程里。配置模型页从哪儿来就回哪儿去
@@ -229,14 +230,16 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
     val roles by store.roles.collectAsState()
     val hasMain = roles.main != null
     val check = Prerequisites.check(status, hasMain)
-    val context = LocalContext.current
     val app = context.applicationContext as MikaApp
     // 查到的新版本:侧栏、设置首页、关于页的红点都看它
     val updateState by app.updates.state.collectAsState()
     LaunchedEffect(requestedConversation) {
         if (requestedConversation != null) {
-            app.chat.openConversation(requestedConversation)
-            nav.reset()
+            if (requestedConversation == "personal-main") nav.show(Route.Personal)
+            else {
+                app.chat.openConversation(requestedConversation)
+                nav.reset()
+            }
             onConversationOpened()
         }
     }
@@ -265,7 +268,9 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
         }
     }
     LaunchedEffect(Unit) {
-        if (onboarding == null) Onboarding.start(onboardingInputs())?.let(::goOnboarding)
+        if (onboarding == null && requestedConversation == null && nav.current != Route.Personal) {
+            Onboarding.start(onboardingInputs())?.let(::goOnboarding)
+        }
     }
     val phoneSetupNeeded by phoneSetup.needed.collectAsState()
     // 页面有自己的返回处理时(设置页里的子页、侧栏)由它们先接;这里只管退回上一页
@@ -292,7 +297,7 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
                 },
             )
         }
-        Route.Chat -> screenStates.SaveableStateProvider(Route.Chat.name) {
+        Route.Chat, Route.Personal -> screenStates.SaveableStateProvider(nav.current.name) {
             // 对话页重新看得见(回到前台、从别的页面回来):补上别处存进来的轮次,接上别处开始的任务
             LifecycleStartEffect(Unit) {
                 app.chat.refresh()
@@ -314,8 +319,18 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
                 updateAvailable = AboutCopy.drawerDot(updateState),
                 reopen = nav.reopenDrawer,
                 onReopened = nav::drawerReopened,
+                onPersonal = { nav.show(Route.Personal) },
+                onRegularChat = nav::reset,
             ) { openDrawer ->
-                ChatScreen(
+                if (nav.current == Route.Personal) PersonalAgentScreen(
+                    runtime = app.personal,
+                    voice = app.voice,
+                    onOpenDrawer = openDrawer,
+                    onOpenTask = { id -> app.chat.openPersonalTask(id); nav.reset() },
+                    memoryRuntime = memoryRuntime,
+                    onModels = { nav.push(Route.Models) },
+                    onPickSpeech = { nav.push(Route.SpeechModel) },
+                ) else ChatScreen(
                     vm = app.chat,
                     check = check,
                     frames = app.taskState.frames,
@@ -382,30 +397,16 @@ private fun MikaRoot(store: ProviderStore, monitor: SystemStatusMonitor, activit
             )
             val routeStore = remember { FileRouteStore.shared(context) }
             var routeCount by remember { mutableStateOf<Int?>(null) }
-            // 第一次取记忆要读盘解密,放到后台线程;页面的协程跟着这一屏走
-            val vmScope = rememberCoroutineScope()
+            val routeScope = rememberCoroutineScope()
             LaunchedEffect(Unit) { routeCount = withContext(Dispatchers.IO) { runCatching { routeStore.count() }.getOrNull() } }
-            val vm by produceState<MemoryViewModel?>(null) {
-                value = withContext(Dispatchers.IO) {
-                    val bundled = GuideCatalog.loadBundled()
-                    MemoryViewModel(
-                        memoryRuntime.store(), memoryRuntime.settings(), memoryRuntime.skills(),
-                        vmScope, memoryRuntime.file().brokenNotice,
-                        wipe = { memoryRuntime.scope.launch(Dispatchers.IO) { memoryRuntime.wipeAll() } },
-                        onForgotten = { id -> memoryRuntime.scope.launch(Dispatchers.IO) { memoryRuntime.stripMemory(setOf(id)) } },
-                        runnableScripts = bundled.runnableScripts(),
-                        appDrafts = memoryRuntime.appKnowledge(),
-                        builtinSkillNames = bundled.items.map { it.name }.toSet(),
-                    )
-                }
-            }
+            val vm by rememberMemoryViewModel(memoryRuntime)
             vm?.let { m ->
                 // 从结果卡片的「看看」进来:直接看技能分段
                 LaunchedEffect(m) { if (memoryRuntime.openRequest.value != null) m.select(Segment.Skills) }
                 MemoryDataScreen(
                     m, webSites, routeCount,
                     onClearRoutes = {
-                        vmScope.launch { routeCount = withContext(Dispatchers.IO) { routeStore.clear(); routeStore.count() } }
+                        routeScope.launch { routeCount = withContext(Dispatchers.IO) { routeStore.clear(); routeStore.count() } }
                     },
                     onBack = { memoryRuntime.requestOpen(null); nav.back() },
                 )

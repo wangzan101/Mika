@@ -216,6 +216,7 @@ fun ChatDrawer(
     aboutDot: Boolean = false,
     /** 长按一条存过的对话:在它原地弹出操作菜单(置顶、改名、删除);带上那一行在窗口里的位置和大小。 */
     onActions: (DrawerConversation, Rect) -> Unit = { _, _ -> },
+    onPersonal: () -> Unit = {},
 ) {
     val c = MikaTheme.colors
     Column(
@@ -240,6 +241,7 @@ fun ChatDrawer(
             }
         }
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            NavEntry(MikaIcons.Message, "个人助手", onClick = onPersonal)
             NavEntry(MikaIcons.New, stringResource(R.string.chat_new), enabled = canSwitch, onClick = onNew)
             NavEntry(MikaIcons.Clock, stringResource(R.string.drawer_plans), onClick = onPlans)
             NavEntry(MikaIcons.Heart, stringResource(R.string.memory_and_skills), onClick = onMemory)
@@ -494,6 +496,8 @@ fun ChatWithDrawer(
     /** 从侧栏进去的页面刚退回来:当场打开侧栏,回到进去之前的样子。 */
     reopen: Boolean = false,
     onReopened: () -> Unit = {},
+    onPersonal: () -> Unit = {},
+    onRegularChat: () -> Unit = {},
     content: @Composable (openDrawer: () -> Unit) -> Unit,
 ) {
     val drawer = rememberDrawerState(DrawerValue.Closed)
@@ -579,7 +583,8 @@ fun ChatWithDrawer(
                 }
                 ChatDrawer(
                     check, sections, canSwitch,
-                    onNew = { close { vm.newConversation() } },
+                    onNew = { close { vm.newConversation(); onRegularChat() } },
+                    onPersonal = { leave(onPersonal) },
                     onPlans = { leave(onPlans) },
                     onMemory = { leave(onMemory) },
                     onSettings = { leave(onSettings) },
@@ -590,6 +595,7 @@ fun ChatWithDrawer(
                     onActions = { item, bounds -> if (item.id != null) acting = item to bounds },
                     onOpen = { item ->
                         close {
+                            onRegularChat()
                             val id = item.id
                             when {
                                 id == null || id == ui.conversationId -> Unit

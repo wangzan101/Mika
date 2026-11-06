@@ -128,6 +128,14 @@ class AccuracyTest {
         assertEquals(Verification.MATCH, type(FakeField("", format = { "138 0013 8000" }), "13800138000"))
     }
 
+    @Test fun fieldLabelInFrontOfTheTextIsNotPartOfIt() {
+        assertEquals("AI创业项目", withoutFieldLabel("搜索, AI创业项目", "搜索,"))
+        assertEquals("A", withoutFieldLabel("搜索, A", "搜索,"))
+        // 只认「标签 + 空格」:文字恰好以提示语开头时不能吃掉
+        assertEquals("搜索引擎", withoutFieldLabel("搜索引擎", "搜索"))
+        assertEquals("AI创业项目", withoutFieldLabel("AI创业项目", null))
+    }
+
     @Test fun retriesOnlyOnceAndOnlyWhenTheTextDidNotLand() {
         val landed = FakeField("")
         assertEquals(Verification.MATCH, type(landed, "WLAN"))

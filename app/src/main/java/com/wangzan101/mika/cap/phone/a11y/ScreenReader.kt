@@ -10,6 +10,7 @@ import com.wangzan101.mika.core.uistate.UiStates
 import com.wangzan101.mika.core.uistate.UiTreeNode
 import com.wangzan101.mika.core.uistate.UiWindowTree
 import com.wangzan101.mika.core.uistate.normalize
+import com.wangzan101.mika.core.uistate.withoutFieldLabel
 
 /**
  * 读一次屏的结果。[hash] 覆盖所有可见节点(含标成「对无障碍不重要」的)的文字、类型、位置、勾选、
@@ -278,7 +279,7 @@ internal object ScreenReader {
         val shown = text.trim()
         if (typing != null && shown == typing.trim()) return text
         if (showingHint(n) || (placeholder != null && shown == placeholder)) return ""
-        return text
+        return withoutFieldLabel(text, placeholder)
     }
 
     /** 没名字的可点容器用子节点的文字当名字。 */

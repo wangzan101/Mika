@@ -1840,13 +1840,13 @@ class AndroidScreen(
     private fun inputText(node: AccessibilityNodeInfo, text: String): Boolean? {
         node.refresh()
         val before = node.text?.toString().orEmpty()
-        fun selectAll() {
-            if (before.isEmpty()) return
+        fun selectAll(): Boolean {
+            if (before.isEmpty()) return true
             val range = Bundle().apply {
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
                 putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, before.length)
             }
-            node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, range)
+            return node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, range)
         }
         if (text.isEmpty()) {
             selectAll()
@@ -1857,7 +1857,8 @@ class AndroidScreen(
         try {
             if (runCatching { shell.setClipText(text) }.getOrDefault(ShellService.CLIP_FAILED) != ShellService.CLIP_SET) return null
             runCatching { shell.savedClipText() }.getOrNull()?.let { clipSaved(it, text) }
-            selectAll()
+            // 原生框选不中原文时粘贴会接在后面,文字变成两遍;网页编辑区常不支持选择,照旧粘贴
+            if (!selectAll() && !inWebView(node)) return false
             if (!node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) return false
             // App 是异步去读剪贴板的:等字变了再还原,最多等一会儿
             val deadline = SystemClock.uptimeMillis() + PASTE_WAIT_MS

@@ -99,6 +99,10 @@ interface TextField {
     fun retry(text: String): Boolean = write(text)
 }
 
+/** 有的输入框(小红书搜索框)把提示语当标签放在文字前面报出来,如「搜索, AI创业项目」:去掉标签才是框里的字。 */
+fun withoutFieldLabel(text: String, label: String?): String =
+    if (label == null) text else text.removePrefix("$label ")
+
 /** 比较前去掉所有空白:输入框可能自动给号码分组加空格。 */
 private fun normText(s: String) = s.filterNot { it.isWhitespace() }
 

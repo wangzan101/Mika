@@ -131,6 +131,8 @@ class AgentLoop(
     router: ModelRouter? = null,
     /** UI 对话第一次要用工具时的独立意图判断；null 保留评测与其他入口的原行为。 */
     intentJudge: ChatModel? = null,
+    /** 可选的类型化意图判断;不确定或失败时仍问 intentJudge,不替代主模型与执行关卡。 */
+    intentDecision: com.wangzan101.mika.core.decision.DecisionModel? = null,
     /** 经验回放的路线匹配;只在 flags.replay 打开时用。 */
     routes: RouteMatcher? = null,
     /** 技能目录(含个人技能);任务开始时列出全部技能,并按目标给几条 App/站点知识的索引。为 null 或 [recommendSkills] 关着时不给索引。 */
@@ -174,7 +176,11 @@ class AgentLoop(
     }
 
     private val caller = ModelCaller(model, tools, router, flags, retry, ::emit, ::now, autonomous, trace)
-    private val intentGate = intentJudge?.let { IntentGate(it, model.takeUnless { main -> main === it }) }
+    private val intentGate = intentJudge?.let {
+        IntentGate(it, model.takeUnless { main -> main === it }, intentDecision) { detail ->
+            emit(RunEvent.State(now(), "jev_intent", detail))
+        }
+    }
     private val routeMatcher = routes
     /** 本任务的上下文生成器(外壳、预算、已给过的参考资料)。 */
     private var ctx = ContextBuilder()

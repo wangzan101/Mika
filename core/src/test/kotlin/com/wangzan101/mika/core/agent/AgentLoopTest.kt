@@ -103,6 +103,21 @@ class AgentLoopTest {
         assertTrue(events.filterIsInstance<RunEvent.State>().any { it.name == "intent_gate" && it.detail == "Discuss" })
     }
 
+    @Test fun typedIntentDecisionUsesExistingDiscussionGateAndIsRecorded() = runTest {
+        val main = FakeModel(tools(call("phone_list_apps")), finish("可以，先讨论具体流程。"))
+        val judge = FakeModel()
+        val events = mutableListOf<RunEvent>()
+        val end = AgentLoop(main, toolDispatcher(FakeScreen()), "BASE", intentJudge = judge,
+            intentDecision = com.wangzan101.mika.core.decision.DecisionModel { _, _, _, _ ->
+                com.wangzan101.mika.core.decision.DecisionChoice("DISCUSS", 0.98)
+            }, sink = object : RunSink { override fun event(e: RunEvent) { events += e } })
+            .run("以后可以帮我把内容同步到公众号并发送，对吧？")
+        assertTrue(end is TaskState.Succeeded)
+        assertTrue(judge.requests.isEmpty())
+        assertTrue(events.none { it is RunEvent.ToolResult })
+        assertTrue(events.filterIsInstance<RunEvent.State>().any { it.name == "jev_intent" && it.detail == "selected:Discuss" })
+    }
+
     // 判断不出意图(判断模型和兜底的主模型都没给出三个词之一)时照主模型原来的决定执行,不改成文字回答
     @Test fun unclearIntentKeepsProposedTool() = runTest {
         val main = FakeModel(tools(call("phone_list_apps")), finish("我觉得是要操作"), finish())

@@ -161,4 +161,6 @@
     <string name="mcp_servers_status_fail">Gagal terhubung: %1$s</string>
     <string name="mcp_servers_refresh_all">Uji semua</string>
     <string name="mcp_servers_allowlist">Alat yang diizinkan (dipisah koma, kosong = semua)</string>
+    <string name="settings_show_task_cost">Tampilkan biaya tugas</string>
+    <string name="settings_show_task_cost_sub">Perkirakan biaya API DeepSeek untuk tugas baru dalam yuan.</string>
 </resources>

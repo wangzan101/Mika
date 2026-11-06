@@ -193,6 +193,7 @@ fun DuringWorkScreen(
     operatingPace: OperatingPace = OperatingPace.DEFAULT, onOperatingPace: (OperatingPace) -> Unit = {},
     selfConfig: Boolean = false, onSelfConfig: (Boolean) -> Unit = {},
     stepLimit: Int? = null, onStepLimit: (Int?) -> Unit = {},
+    showTaskCost: Boolean = false, onShowTaskCost: (Boolean) -> Unit = {},
 ) {
     var editingLimit by remember { mutableStateOf(false) }
     var customLimit by remember { mutableStateOf("") }
@@ -217,6 +218,12 @@ fun DuringWorkScreen(
                 // 当前是自己填的数时,输入框里带着它
                 onClick = { customLimit = stepLimit?.takeIf { it !in STEP_LIMIT_PRESETS }?.toString().orEmpty(); editingLimit = true },
             )
+            ListRow(
+                null, stringResource(R.string.settings_show_task_cost), stringResource(R.string.settings_show_task_cost_sub),
+                onClick = { onShowTaskCost(!showTaskCost) },
+            ) {
+                MikaSwitch(showTaskCost, onShowTaskCost, Modifier.testTag("work-show-task-cost"))
+            }
             parallel?.let { ParallelRow(it, onParallelMax) }
         }
         if (editingLimit) StepLimitDialog(

@@ -33,6 +33,7 @@ import com.wangzan101.mika.core.model.PromptCaching
 import com.wangzan101.mika.core.model.ResponsesModel
 import com.wangzan101.mika.core.model.Role
 import com.wangzan101.mika.core.model.ToolSpec
+import com.wangzan101.mika.core.usage.DeepSeekPriceTable
 import com.wangzan101.mika.core.usage.UsagePurpose
 import com.wangzan101.mika.core.usage.UsageSink
 import com.wangzan101.mika.core.usage.UsageSource
@@ -561,8 +562,9 @@ class ProviderStore(
      */
     fun modelFor(role: ModelRole, session: ModelSession = ModelSession.fresh()): ChatModel? = configFor(role)?.let { cfg ->
         val p = provider(cfg.providerId)
-        val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, UsagePurpose.of(role))
         val listed = listedOf(cfg)
+        val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, UsagePurpose.of(role),
+            deepSeekDirect = DeepSeekPriceTable.isOfficialEndpoint(adapterFor(cfg, listed?.endpoint).second))
         val settings = p?.contextSettings?.get(cfg.model)
         val configured = if (settings == null) cfg else cfg.copy(capabilities = cfg.capabilities.copy(
             contextTokens = settings.windowTokens ?: cfg.capabilities.contextTokens,

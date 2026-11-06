@@ -9,6 +9,8 @@ import com.wangzan101.mika.core.uistate.PlacePace
 import kotlin.random.Random
 import com.wangzan101.mika.core.action.OutwardPacing
 import com.wangzan101.mika.core.cap.phone.OperatingPace
+import com.wangzan101.mika.core.usage.DeepSeekPriceCache
+import com.wangzan101.mika.core.usage.DeepSeekRunCost
 import com.wangzan101.mika.core.usage.RunUsageTally
 import com.wangzan101.mika.core.shell.AccessibilityRepair
 import com.wangzan101.mika.core.shell.HelperRestart
@@ -149,6 +151,8 @@ import com.wangzan101.mika.core.cap.web.WEB
 internal fun restorePipSound(takeover: Takeover?, restorePhone: () -> Unit) {
     if (takeover?.unmute() != true) restorePhone()
 }
+
+private val deepSeekPrices by lazy { DeepSeekPriceCache(ProviderStore.modelHttp) }
 
 /**
  * 一个任务的全部状态:虚拟屏、循环、关卡、接管、静音、监视。[TaskService] 只管服务生命周期、意图分发与通知。
@@ -508,7 +512,7 @@ class TaskRun(
         var record: RunHandle? = null
         var runStore: RunStore? = null
         // 这次运行里经计量的模型请求(含旁路调用),收尾时记进运行记录
-        val tally = RunUsageTally()
+        val tally = RunUsageTally(if (FeatureFlags.get(service).showTaskCost()) DeepSeekRunCost() else null)
         // 第一次打开网址时才建;没建过就不用关
         var webStack: WebStack? = null
         // 当前界面(手机/网页)要看分发器;画中画的画面来源随它切换
@@ -1019,7 +1023,15 @@ class TaskRun(
                     }
                     record?.let { r ->
                         apps?.let { r.event(RunEvent.State(System.currentTimeMillis(), "apps_after_task", it.detail)) }
-                        r.event(tally.event(System.currentTimeMillis()))
+                        val cost = tally.deepSeekCost?.let { usage ->
+                            val table = if (usage.hasUsage()) {
+                                withTimeoutOrNull(2_000L) { deepSeekPrices.prices() }.also {
+                                    if (it == null) Log.d(TAG, "DeepSeek 价目表暂不可用")
+                                }
+                            } else null
+                            usage.estimate(table)
+                        }
+                        r.event(tally.event(System.currentTimeMillis(), cost))
                         r.close()
                         if (BuildConfig.DEBUG) runStore?.mirrorToExternal(r.runId)
                     }

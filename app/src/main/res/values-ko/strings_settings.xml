@@ -161,4 +161,6 @@
     <string name="mcp_servers_status_fail">연결 실패: %1$s</string>
     <string name="mcp_servers_refresh_all">모두 테스트</string>
     <string name="mcp_servers_allowlist">허용할 도구(쉼표로 구분, 비우면 전체)</string>
+    <string name="settings_show_task_cost">작업 비용 표시</string>
+    <string name="settings_show_task_cost_sub">새 작업의 DeepSeek API 비용을 위안화로 추정합니다.</string>
 </resources>

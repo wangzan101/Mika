@@ -3,6 +3,8 @@ package com.wangzan101.mika.ui
 import androidx.compose.foundation.gestures.scrollBy
 import com.wangzan101.mika.core.agent.QuoteMessage
 import com.wangzan101.mika.core.record.ConversationTokens
+import com.wangzan101.mika.core.usage.DeepSeekCost
+import com.wangzan101.mika.settings.FeatureFlags
 import com.wangzan101.mika.core.cap.web.AttachedPage
 import com.wangzan101.mika.ui.components.DirectionalIcon
 import com.wangzan101.mika.ui.components.keepsKeyboard
@@ -264,10 +266,12 @@ fun ChatScreen(
     // 已结束各轮的运行小结:每轮结束那一行写这一轮的 token,顶栏闲着时写这个对话合起来的
     val endedRuns = ui.exchanges.filter { !it.status.isActive() }.mapNotNull { it.runId }
     val runMetrics = rememberRunMetrics(endedRuns)
+    val context = LocalContext.current
+    val flags = remember(context) { FeatureFlags.get(context) }
+    val showTaskCost by remember(flags) { flags.showTaskCostChanges() }.collectAsState(initial = flags.showTaskCost())
 
     val c = MikaTheme.colors
     val backdrop = rememberGlassBackdrop()
-    val context = LocalContext.current
     /** 长按了的那条消息;菜单开着(收起的动画放完才清掉)。 */
     var menu by remember { mutableStateOf<MessageTarget?>(null) }
     /** 选了「选择文字」的那条:它换回系统的长按选中;换对话时清掉。 */
@@ -305,9 +309,11 @@ fun ChatScreen(
                 }
                 ui.exchanges.forEachIndexed { i, ex ->
                     val backgroundNote = i == ui.exchanges.lastIndex && ui.operatingPhone
+                    val metrics = ex.runId?.let(runMetrics::get)
+                    val cost = metrics?.deepSeekCost?.takeIf { showTaskCost }
                     exchange(
                         i, ex, ui.conversationId, ui.takeoverStage, vm, reduceMotion, backgroundNote, openRun, loadSource, openSource, kept,
-                        tokens = ConversationTokens.turn(ex.runId?.let(runMetrics::get)),
+                        tokens = ConversationTokens.turn(metrics, includeSideCalls = cost != null), cost = cost,
                     )
                 }
                 if (phoneSetupNeeded && ui.exchanges.isNotEmpty()) item("phone-setup") { PhoneSetupLine(openPhoneSetup) }
@@ -526,6 +532,7 @@ private fun LazyListScope.exchange(
     kept: KeptPage? = null,
     /** 这一轮用了多少 token(结束后、读到运行小结时才有)。 */
     tokens: Long? = null,
+    cost: DeepSeekCost? = null,
 ) {
     if (ex.goal.isNotEmpty()) item("u$index") { UserBubble(ex.goal, conversationId, key = "u$index") }
     val active = ex.status.isActive()
@@ -533,7 +540,7 @@ private fun LazyListScope.exchange(
     if (active) {
         if (!answering) item("s$index") { WorkBlock(ex, reduceMotion, backgroundNote, openRun) }
     } else if (ex.steps.isNotEmpty() || ex.runId != null) {
-        item("s$index") { DoneLine(ex, reduceMotion, openRun, tokens) }
+        item("s$index") { DoneLine(ex, reduceMotion, openRun, tokens, cost) }
     }
     // 任务进行中插的话:用户的原话,下面一行小字说它的去向。
     // 插话之前已经说完的回复照常显示;插话打断的那段留在原处(淡色、标「被你的新消息打断」);接着才是插话。
@@ -882,8 +889,8 @@ internal fun Spinner(modifier: Modifier, spinning: Boolean, track: Color, head: 
  * 没做步骤的(只聊了几句)只写 token;[tokens] 为 null(还没读到小结、服务商没报用量)时不写。
  */
 @Composable
-private fun DoneLine(ex: Exchange, reduceMotion: Boolean, openRun: (String) -> Unit, tokens: Long? = null) {
-    val tokenText = tokens?.let(ChatTokensCopy::amount)
+private fun DoneLine(ex: Exchange, reduceMotion: Boolean, openRun: (String) -> Unit, tokens: Long?, cost: DeepSeekCost?) {
+    val usage = listOfNotNull(tokens?.let(ChatTokensCopy::amount), cost?.let(ChatTokensCopy::cost)).joinToString(" · ")
     val c = MikaTheme.colors
     var open by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
@@ -894,12 +901,12 @@ private fun DoneLine(ex: Exchange, reduceMotion: Boolean, openRun: (String) -> U
             if (ex.status is ExchangeStatus.Done) Icon(MikaIcons.Check, null, Modifier.size(16.dp), tint = c.ink3)
             if (ex.steps.isNotEmpty()) {
                 Text(
-                    stepsSummary(ex) + tokenText?.let { " · $it" }.orEmpty(),
+                    listOf(stepsSummary(ex), usage).filter(String::isNotEmpty).joinToString(" · "),
                     Modifier.clickable(onClickLabel = if (open) stringResource(R.string.chat_collapse_steps) else stringResource(R.string.chat_expand_steps)) { open = !open },
                     style = DoneText, color = c.ink3,
                 )
-            } else if (tokenText != null) {
-                Text(tokenText, style = DoneText, color = c.ink3)
+            } else if (usage.isNotEmpty()) {
+                Text(usage, style = DoneText, color = c.ink3)
             }
             ex.runId?.let { id ->
                 Text(

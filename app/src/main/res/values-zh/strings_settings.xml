@@ -161,4 +161,6 @@
     <string name="mcp_servers_status_fail">连接失败:%1$s</string>
     <string name="mcp_servers_refresh_all">测试全部</string>
     <string name="mcp_servers_allowlist">允许的工具(英文逗号分隔,留空为全部)</string>
+    <string name="settings_show_task_cost">显示任务费用</string>
+    <string name="settings_show_task_cost_sub">按人民币估算新任务的 DeepSeek API 费用。</string>
 </resources>

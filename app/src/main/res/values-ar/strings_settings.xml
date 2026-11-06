@@ -181,4 +181,6 @@
     <string name="mcp_servers_status_fail">فشل الاتصال: %1$s</string>
     <string name="mcp_servers_refresh_all">اختبار الكل</string>
     <string name="mcp_servers_allowlist">الأدوات المسموح بها (مفصولة بفواصل، فارغ = الكل)</string>
+    <string name="settings_show_task_cost">عرض تكلفة المهمة</string>
+    <string name="settings_show_task_cost_sub">تقدير رسوم DeepSeek API للمهام الجديدة باليوان الصيني.</string>
 </resources>

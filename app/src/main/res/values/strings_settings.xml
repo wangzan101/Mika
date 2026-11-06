@@ -175,4 +175,6 @@
     <string name="mcp_servers_status_fail">Connection failed: %1$s</string>
     <string name="mcp_servers_refresh_all">Test all</string>
     <string name="mcp_servers_allowlist">Allowed tools (comma separated, empty = all)</string>
+    <string name="settings_show_task_cost">Show task cost</string>
+    <string name="settings_show_task_cost_sub">Estimate DeepSeek API charges in Chinese yuan for new tasks.</string>
 </resources>

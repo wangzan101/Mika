@@ -169,4 +169,6 @@
     <string name="mcp_servers_status_fail">Falha na conexão: %1$s</string>
     <string name="mcp_servers_refresh_all">Testar tudo</string>
     <string name="mcp_servers_allowlist">Ferramentas permitidas (separadas por vírgulas, vazio = todas)</string>
+    <string name="settings_show_task_cost">Mostrar custo da tarefa</string>
+    <string name="settings_show_task_cost_sub">Estima em yuans o custo da API da DeepSeek para novas tarefas.</string>
 </resources>

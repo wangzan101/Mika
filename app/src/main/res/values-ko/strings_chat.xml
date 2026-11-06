@@ -154,4 +154,7 @@
     <string name="pip_closed_hint">이 작업에서는 닫았어요. 오른쪽 아래의 “화면 표시”를 누르거나 사이드 메뉴에서 “백그라운드 화면”을 여세요.</string>
     <string name="chat_conversation_tokens">이 대화: %1$s</string>
     <string name="chat_conversation_tokens_partial">이 대화: %1$s 이상</string>
+    <string name="chat_task_cost_estimate">약 %1$s</string>
+    <string name="chat_task_cost_partial">%1$s(일부)</string>
+    <string name="chat_task_cost_unavailable">비용을 추정할 수 없음</string>
 </resources>

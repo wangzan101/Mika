@@ -193,4 +193,22 @@
     <string name="speech_footer">Only models that look like speech models are listed. If yours is missing, type its name; a short clip is transcribed as a test when you pick it.</string>
     <string name="speech_pick_failed">That model couldn’t transcribe: %1$s</string>
     <string name="speech_pick_timeout">%1$s didn’t answer a test clip within %2$d seconds</string>
+
+    <string name="balance_title">Balance</string>
+    <string name="balance_checking">Checking the balance…</string>
+    <string name="balance_need_key">Enter an API key to check the balance.</string>
+    <string name="balance_unsupported">Mika can’t query a balance for this provider.</string>
+    <string name="balance_siliconflow">SiliconFlow retired its balance API.</string>
+    <string name="balance_console">Open console</string>
+    <string name="balance_auth">The API key was rejected.</string>
+    <string name="balance_http">The provider returned HTTP %1$d.</string>
+    <string name="balance_network">The provider couldn’t be reached.</string>
+    <string name="balance_unreadable">The balance response couldn’t be read.</string>
+    <string name="balance_experimental">Experimental. This provider doesn’t document this query.</string>
+    <string name="balance_refresh">Check again</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">%1$s%% left</string>
+    <string name="balance_window_5h">5-hour window</string>
+    <string name="balance_window_week">Weekly window</string>
+    <string name="balance_no_plan">This key has no Coding Plan.</string>
 </resources>

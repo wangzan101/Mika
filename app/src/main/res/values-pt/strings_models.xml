@@ -195,4 +195,22 @@
     <string name="speech_footer">Só aparecem modelos que parecem ser de fala. Se o seu não estiver na lista, digite o nome dele; um trecho curto é transcrito como teste quando você o escolhe.</string>
     <string name="speech_pick_failed">Esse modelo não conseguiu transcrever: %1$s</string>
     <string name="speech_pick_timeout">%1$s não respondeu a um trecho de teste em %2$d segundos</string>
+
+    <string name="balance_title">Saldo</string>
+    <string name="balance_checking">Consultando o saldo…</string>
+    <string name="balance_need_key">Informe uma chave de API para consultar o saldo.</string>
+    <string name="balance_unsupported">O Mika não consegue consultar o saldo deste provedor.</string>
+    <string name="balance_siliconflow">A SiliconFlow encerrou a API de saldo.</string>
+    <string name="balance_console">Abrir o console</string>
+    <string name="balance_auth">A chave de API foi recusada.</string>
+    <string name="balance_http">O provedor retornou HTTP %1$d.</string>
+    <string name="balance_network">Não foi possível contatar o provedor.</string>
+    <string name="balance_unreadable">Não foi possível ler a resposta do saldo.</string>
+    <string name="balance_experimental">Experimental. Este provedor não documenta esta consulta.</string>
+    <string name="balance_refresh">Consultar de novo</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">%1$s%% restante</string>
+    <string name="balance_window_5h">Janela de 5 horas</string>
+    <string name="balance_window_week">Janela semanal</string>
+    <string name="balance_no_plan">Esta chave não tem Coding Plan.</string>
 </resources>

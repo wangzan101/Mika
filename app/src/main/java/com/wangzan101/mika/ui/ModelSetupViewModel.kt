@@ -21,6 +21,14 @@ import com.wangzan101.mika.settings.ProviderPresets
 import com.wangzan101.mika.settings.ProbeResult
 import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.settings.ModelContextSettings
+import com.wangzan101.mika.settings.balance.BalanceCatalog
+import com.wangzan101.mika.settings.balance.BalanceLookup
+import com.wangzan101.mika.settings.balance.BalanceSnapshot
+import com.wangzan101.mika.settings.balance.BalanceView
+import com.wangzan101.mika.settings.balance.HttpBalanceLookup
+import com.wangzan101.mika.settings.balance.methodOrNull
+import com.wangzan101.mika.settings.balance.toView
+import com.wangzan101.mika.settings.balance.view
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.settings.RoleChoices
 import com.wangzan101.mika.settings.ChatGptSignIns
@@ -46,6 +54,8 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -235,6 +245,10 @@ data class ModelSetupUi(
     val systemSpeech: SystemCapability = SystemCapability(available = false, onDevice = false),
     /** 正在拿一小段录音试转的服务商 id;没有时为 null。 */
     val speechTesting: String? = null,
+    /** 添加表单上一次余额查询,和当时的预设、地址、Key 绑在一起。 */
+    val draftBalance: BalanceSnapshot? = null,
+    /** 各服务商详情上的余额(按服务商 id)。 */
+    val providerBalances: Map<String, BalanceView> = emptyMap(),
 ) {
     /** 还没有服务商时表单总是展开。 */
     val showForm: Boolean get() = formOpen || providers.isEmpty()
@@ -303,7 +317,7 @@ data class ModelSetupUi(
  * 看图还可以「用主模型」「不用」,轻量可以「用主模型」。连上第一家(还没有主模型)时自动选它的一个模型为主模型。
  * 首次上手和设置 › 模型共用。
  */
-class ModelSetupViewModel(
+class ModelSetupViewModel internal constructor(
     private val store: ProviderStore,
     private val scope: CoroutineScope,
     private val io: CoroutineDispatcher = Dispatchers.IO,
@@ -315,6 +329,8 @@ class ModelSetupViewModel(
     private val systemSpeech: () -> SystemCapability = { SystemCapability(available = false, onDevice = false) },
     /** 选语音模型时试转用的转写器,和按住说话用的是同一种建法(带客户端标识头)。 */
     private val transcriber: (Provider) -> Transcriber = { p -> Transcriber(ProviderStore.modelHttp, store.clientHeaders(p)) },
+    /** 查 API Key 余额。测试里换成不联网的。 */
+    private val balanceLookup: BalanceLookup = HttpBalanceLookup(),
 ) {
     private val _state = MutableStateFlow(snapshot(ModelSetupUi(AddForm.of(ProviderPresets.all.first()))))
     val state: StateFlow<ModelSetupUi> = _state.asStateFlow()
@@ -326,6 +342,8 @@ class ModelSetupViewModel(
 
     private var testJob: Job? = null
     private val refreshJobs = mutableMapOf<String, Job>()
+    private var draftBalanceJob: Job? = null
+    private val balanceJobs = mutableMapOf<String, Job>()
 
     init {
         // 别处(开发者选项等)改了存储时跟着更新
@@ -408,7 +426,8 @@ class ModelSetupViewModel(
 
     fun closeForm() {
         testJob?.cancel()
-        _state.update { it.copy(formOpen = false, form = AddForm.of(ProviderPresets.all.first())) }
+        draftBalanceJob?.cancel()
+        _state.update { it.copy(formOpen = false, form = AddForm.of(ProviderPresets.all.first()), draftBalance = null) }
     }
 
     fun selectPreset(label: String) {
@@ -1089,7 +1108,7 @@ class ModelSetupViewModel(
         else -> true
     }
 
-    /** 换 Key,然后用新 Key 重新列一次模型。 */
+    /** 换 Key,然后用新 Key 重新列一次模型,并再查一次余额。 */
     fun changeKey(providerId: String, apiKey: String) {
         val k = apiKey.trim()
         if (k.isEmpty()) return
@@ -1097,6 +1116,7 @@ class ModelSetupViewModel(
             withContext(io) { store.updateProviderKey(providerId, k) }
             refreshJobs.remove(providerId)?.cancel()
             refresh(providerId)
+            loadBalance(providerId)
         }
     }
 
@@ -1113,7 +1133,59 @@ class ModelSetupViewModel(
                 // OpenRouter 授权来的 Key 随服务商一起删;OpenRouter 那边的 Key 要用户自己到 Keys 页面删
                 store.removeProvider(providerId)
             }
-            _state.update { snapshot(it.copy(listing = it.listing - providerId)) }
+            balanceJobs.remove(providerId)?.cancel()
+            _state.update { snapshot(it.copy(listing = it.listing - providerId, providerBalances = it.providerBalances - providerId)) }
+        }
+    }
+
+    /**
+     * 添加表单上的余额。Key 还在往里填时稍等再查,免得每打一个字就请求一次;点「再查一次」不等。
+     * 本机预设、没有查询方法的,不发请求。
+     */
+    fun watchDraftBalance() = queryDraft(wait = true)
+
+    fun refreshDraftBalance() = queryDraft(wait = false)
+
+    private fun queryDraft(wait: Boolean) {
+        draftBalanceJob?.cancel()
+        val form = _state.value.form
+        val token = BalanceCatalog.token(form.preset, form.baseUrl, form.apiKey)
+        val method = BalanceCatalog.resolve(form.preset, form.baseUrl).methodOrNull
+        if (method == null || form.apiKey.isBlank()) {
+            _state.update { it.copy(draftBalance = BalanceSnapshot(token, BalanceCatalog.preview(form.preset, form.baseUrl, form.apiKey))) }
+            return
+        }
+        _state.update { it.copy(draftBalance = BalanceSnapshot(token, BalanceView.Loading(method.experimental))) }
+        val key = form.apiKey.trim()
+        draftBalanceJob = scope.launch {
+            if (wait) delay(DRAFT_BALANCE_DELAY_MS)
+            val outcome = withContext(io) { balanceLookup.query(method, key) }
+            if (!isActive || _state.value.form.let { BalanceCatalog.token(it.preset, it.baseUrl, it.apiKey) } != token) return@launch
+            _state.update { it.copy(draftBalance = BalanceSnapshot(token, outcome.toView())) }
+        }
+    }
+
+    /** 服务商详情上的余额。没有 Key、或这家不支持时只改状态,不发请求。 */
+    fun loadBalance(providerId: String) {
+        val p = store.provider(providerId) ?: return
+        balanceJobs.remove(providerId)?.cancel()
+        val target = BalanceCatalog.resolve(p.name, p.baseUrl, p.kind)
+        val method = target.methodOrNull
+        if (method == null) {
+            _state.update { it.copy(providerBalances = it.providerBalances + (providerId to target.view())) }
+            return
+        }
+        val key = store.providerKey(providerId)?.trim().orEmpty()
+        if (key.isEmpty()) {
+            _state.update { it.copy(providerBalances = it.providerBalances + (providerId to BalanceView.NeedKey(method.experimental))) }
+            return
+        }
+        _state.update { it.copy(providerBalances = it.providerBalances + (providerId to BalanceView.Loading(method.experimental))) }
+        balanceJobs[providerId] = scope.launch {
+            val outcome = withContext(io) { balanceLookup.query(method, key) }
+            if (!isActive) return@launch
+            if (store.providerKey(providerId)?.trim().orEmpty() != key) return@launch
+            _state.update { it.copy(providerBalances = it.providerBalances + (providerId to outcome.toView())) }
         }
     }
 
@@ -1126,5 +1198,8 @@ class ModelSetupViewModel(
 
         /** 自定义服务商的名字最多几个字(服务商列表一行放得下)。 */
         const val MAX_NAME = 32
+
+        /** 添加页里 Key 还在输入时,停这么久再查余额。 */
+        const val DRAFT_BALANCE_DELAY_MS = 400L
     }
 }

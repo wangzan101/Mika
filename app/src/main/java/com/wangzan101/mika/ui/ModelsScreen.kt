@@ -63,6 +63,7 @@ import com.wangzan101.mika.settings.Provider
 import com.wangzan101.mika.settings.ProviderConfig
 import com.wangzan101.mika.settings.ProviderPresets
 import com.wangzan101.mika.settings.ProviderStore
+import com.wangzan101.mika.settings.balance.BalanceCatalog
 import com.wangzan101.mika.settings.RoleChoice
 import com.wangzan101.mika.ui.components.BarIconButton
 import com.wangzan101.mika.ui.components.ButtonKind
@@ -296,6 +297,8 @@ class ProviderDetailActions(
     val manageUsage: () -> Unit = {},
     /** 把这家默认的模型设为主模型(账号登录的详情里那一行)。 */
     val useAsMain: () -> Unit = {},
+    /** 再查一次这把 Key 的余额。 */
+    val refreshBalance: () -> Unit = {},
 )
 
 /**
@@ -334,6 +337,11 @@ fun ProviderDetailContent(ui: ModelSetupUi, p: Provider, actions: ProviderDetail
             }
         }
         (state as? ListState.Failed)?.let { FooterNote(ModelSetupCopy.failed(it.message), color = c.bad) }
+        BalanceSection(
+            BalanceCatalog.shownProvider(ui.providerBalances[p.id], p.name, p.baseUrl, p.kind, p.id in ui.keyed),
+            actions.refreshBalance,
+            Modifier.testTag("provider-balance"),
+        )
 
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             GroupLabel(ModelsCopy.MODELS, Modifier.weight(1f))

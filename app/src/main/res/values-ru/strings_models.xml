@@ -201,4 +201,22 @@
     <string name="speech_footer">В списке только модели, похожие на речевые. Если вашей нет, введите её название; при выборе короткий фрагмент будет расшифрован для проверки.</string>
     <string name="speech_pick_failed">Эта модель не смогла расшифровать речь: %1$s</string>
     <string name="speech_pick_timeout">Модель %1$s не ответила на тестовый фрагмент за %2$d с</string>
+
+    <string name="balance_title">Баланс</string>
+    <string name="balance_checking">Проверяем баланс…</string>
+    <string name="balance_need_key">Введите ключ API, чтобы проверить баланс.</string>
+    <string name="balance_unsupported">Mika не может запросить баланс этого провайдера.</string>
+    <string name="balance_siliconflow">SiliconFlow отключил API баланса.</string>
+    <string name="balance_console">Открыть консоль</string>
+    <string name="balance_auth">Ключ API отклонён.</string>
+    <string name="balance_http">Провайдер вернул HTTP %1$d.</string>
+    <string name="balance_network">Не удалось связаться с провайдером.</string>
+    <string name="balance_unreadable">Не удалось прочитать ответ баланса.</string>
+    <string name="balance_experimental">Экспериментально. Провайдер не документирует этот запрос.</string>
+    <string name="balance_refresh">Проверить снова</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">Осталось %1$s%%</string>
+    <string name="balance_window_5h">Окно 5 часов</string>
+    <string name="balance_window_week">Недельное окно</string>
+    <string name="balance_no_plan">У этого ключа нет Coding Plan.</string>
 </resources>

@@ -209,4 +209,22 @@
     <string name="speech_footer">تُدرج النماذج التي تبدو مخصصة للكلام فقط. إذا لم يظهر نموذجك، فاكتب اسمه؛ وسيُفرّغ مقطع قصير للاختبار عند اختياره.</string>
     <string name="speech_pick_failed">تعذّر على هذا النموذج تفريغ التسجيل: %1$s</string>
     <string name="speech_pick_timeout">لم يستجب %1$s لمقطع الاختبار خلال %2$d ثانية</string>
+
+    <string name="balance_title">الرصيد</string>
+    <string name="balance_checking">جارٍ التحقق من الرصيد…</string>
+    <string name="balance_need_key">أدخل مفتاح API للتحقق من الرصيد.</string>
+    <string name="balance_unsupported">لا يستطيع Mika الاستعلام عن رصيد هذا المزود.</string>
+    <string name="balance_siliconflow">أوقفت SiliconFlow واجهة رصيدها.</string>
+    <string name="balance_console">فتح وحدة التحكم</string>
+    <string name="balance_auth">تم رفض مفتاح API.</string>
+    <string name="balance_http">أعاد المزود HTTP %1$d.</string>
+    <string name="balance_network">تعذر الوصول إلى المزود.</string>
+    <string name="balance_unreadable">تعذر قراءة استجابة الرصيد.</string>
+    <string name="balance_experimental">تجريبي. لا يوثّق هذا المزود هذا الاستعلام.</string>
+    <string name="balance_refresh">تحقق مرة أخرى</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">متبقٍ %1$s%%</string>
+    <string name="balance_window_5h">نافذة 5 ساعات</string>
+    <string name="balance_window_week">نافذة أسبوعية</string>
+    <string name="balance_no_plan">لا توجد Coding Plan لهذا المفتاح.</string>
 </resources>

@@ -187,4 +187,22 @@
     <string name="speech_footer">Hanya model yang tampak seperti model ucapan yang dicantumkan. Jika model Anda tidak ada, ketik namanya; klip pendek akan disalin sebagai uji saat Anda memilihnya.</string>
     <string name="speech_pick_failed">Model itu tidak bisa menyalin: %1$s</string>
     <string name="speech_pick_timeout">%1$s tidak menjawab klip uji dalam %2$d detik</string>
+
+    <string name="balance_title">Saldo</string>
+    <string name="balance_checking">Memeriksa saldo…</string>
+    <string name="balance_need_key">Masukkan kunci API untuk memeriksa saldo.</string>
+    <string name="balance_unsupported">Mika tidak dapat menanyakan saldo penyedia ini.</string>
+    <string name="balance_siliconflow">SiliconFlow menghentikan API saldonya.</string>
+    <string name="balance_console">Buka konsol</string>
+    <string name="balance_auth">Kunci API ditolak.</string>
+    <string name="balance_http">Penyedia mengembalikan HTTP %1$d.</string>
+    <string name="balance_network">Penyedia tidak dapat dihubungi.</string>
+    <string name="balance_unreadable">Respons saldo tidak dapat dibaca.</string>
+    <string name="balance_experimental">Eksperimental. Penyedia ini tidak mendokumentasikan kueri ini.</string>
+    <string name="balance_refresh">Periksa lagi</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">Sisa %1$s%%</string>
+    <string name="balance_window_5h">Jendela 5 jam</string>
+    <string name="balance_window_week">Jendela mingguan</string>
+    <string name="balance_no_plan">Kunci ini tidak punya Coding Plan.</string>
 </resources>

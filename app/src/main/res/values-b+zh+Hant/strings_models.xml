@@ -189,4 +189,22 @@
     <string name="speech_footer">只列像語音模型的；列表裡沒有的可以手填模型名稱，選的時候先試轉一小段。</string>
     <string name="speech_pick_failed">這個模型沒能轉寫：%1$s</string>
     <string name="speech_pick_timeout">%1$s 試轉一小段，%2$d 秒沒有回應</string>
+
+    <string name="balance_title">餘額</string>
+    <string name="balance_checking">正在查詢餘額…</string>
+    <string name="balance_need_key">填入 API Key 後可以查詢餘額。</string>
+    <string name="balance_unsupported">這家沒有 Mika 能查詢的餘額介面。</string>
+    <string name="balance_siliconflow">矽基流動已經停用餘額介面。</string>
+    <string name="balance_console">打開控制台</string>
+    <string name="balance_auth">API Key 被拒絕。</string>
+    <string name="balance_http">服務商返回 HTTP %1$d。</string>
+    <string name="balance_network">連不上這家服務商。</string>
+    <string name="balance_unreadable">餘額返回的內容無法讀取。</string>
+    <string name="balance_experimental">實驗功能。這家沒有公開這個查詢介面。</string>
+    <string name="balance_refresh">再查一次</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">剩餘 %1$s%%</string>
+    <string name="balance_window_5h">5 小時額度</string>
+    <string name="balance_window_week">每週額度</string>
+    <string name="balance_no_plan">這把 Key 沒有 Coding Plan。</string>
 </resources>

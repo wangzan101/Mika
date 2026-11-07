@@ -189,4 +189,22 @@
     <string name="speech_footer">音声モデルらしいものだけを表示しています。お使いのモデルが見当たらない場合は、名前を入力してください。選ぶと、短い音声をテストとして文字に変換します。</string>
     <string name="speech_pick_failed">そのモデルでは文字に変換できませんでした: %1$s</string>
     <string name="speech_pick_timeout">%1$s はテスト用の音声に %2$d 秒以内に応答しませんでした</string>
+
+    <string name="balance_title">残高</string>
+    <string name="balance_checking">残高を確認しています…</string>
+    <string name="balance_need_key">APIキーを入力すると残高を確認できます。</string>
+    <string name="balance_unsupported">このプロバイダの残高は Mika から確認できません。</string>
+    <string name="balance_siliconflow">SiliconFlow は残高 API を終了しました。</string>
+    <string name="balance_console">コンソールを開く</string>
+    <string name="balance_auth">APIキーが拒否されました。</string>
+    <string name="balance_http">プロバイダが HTTP %1$d を返しました。</string>
+    <string name="balance_network">プロバイダに接続できませんでした。</string>
+    <string name="balance_unreadable">残高の応答を読み取れませんでした。</string>
+    <string name="balance_experimental">実験的です。このプロバイダはこの照会を公開していません。</string>
+    <string name="balance_refresh">再確認</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">残り %1$s%%</string>
+    <string name="balance_window_5h">5時間枠</string>
+    <string name="balance_window_week">週間枠</string>
+    <string name="balance_no_plan">このキーに Coding Plan はありません。</string>
 </resources>

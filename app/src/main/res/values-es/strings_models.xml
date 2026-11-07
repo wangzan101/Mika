@@ -197,4 +197,22 @@
     <string name="speech_footer">Solo se listan los modelos que parecen modelos de voz. Si falta el tuyo, escribe su nombre; al elegirlo se transcribe un clip corto como prueba.</string>
     <string name="speech_pick_failed">Ese modelo no pudo transcribir: %1$s</string>
     <string name="speech_pick_timeout">%1$s no respondió a un clip de prueba en %2$d segundos</string>
+
+    <string name="balance_title">Saldo</string>
+    <string name="balance_checking">Comprobando el saldo…</string>
+    <string name="balance_need_key">Introduce una clave de API para consultar el saldo.</string>
+    <string name="balance_unsupported">Mika no puede consultar el saldo de este proveedor.</string>
+    <string name="balance_siliconflow">SiliconFlow retiró su API de saldo.</string>
+    <string name="balance_console">Abrir la consola</string>
+    <string name="balance_auth">La clave de API fue rechazada.</string>
+    <string name="balance_http">El proveedor respondió HTTP %1$d.</string>
+    <string name="balance_network">No se pudo contactar al proveedor.</string>
+    <string name="balance_unreadable">No se pudo leer la respuesta del saldo.</string>
+    <string name="balance_experimental">Experimental. Este proveedor no documenta esta consulta.</string>
+    <string name="balance_refresh">Consultar de nuevo</string>
+    <string name="balance_money">%1$s %2$s</string>
+    <string name="balance_percent_left">Queda %1$s%%</string>
+    <string name="balance_window_5h">Ventana de 5 horas</string>
+    <string name="balance_window_week">Ventana semanal</string>
+    <string name="balance_no_plan">Esta clave no tiene Coding Plan.</string>
 </resources>

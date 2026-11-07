@@ -144,6 +144,12 @@
     <string name="settings_step_limit_custom">Custom (1–500)</string>
     <string name="settings_step_limit_custom_apply">Use</string>
     <string name="settings_step_limit_invalid">Enter a whole number from 1 to 500.</string>
+    <string name="settings_token_budget">Token budget per task</string>
+    <string name="settings_token_budget_sub">Off means no limit. Counts input, output and cached tokens reported by the provider; at the budget the task stops and reports its progress.</string>
+    <string name="settings_token_budget_off">No limit</string>
+    <string name="settings_token_budget_custom">Custom (10K–100M)</string>
+    <string name="settings_token_budget_custom_apply">Use</string>
+    <string name="settings_token_budget_invalid">Enter a whole number from 10,000 to 100,000,000.</string>
     <string name="mcp_servers_title">MCP servers</string>
     <string name="mcp_servers_empty">No MCP server added</string>
     <string name="mcp_servers_empty_sub">Add an external MCP server to expose its tools to Mika.</string>

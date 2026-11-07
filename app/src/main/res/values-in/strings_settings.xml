@@ -130,6 +130,12 @@
     <string name="settings_step_limit_custom">Kustom (1–500)</string>
     <string name="settings_step_limit_custom_apply">Pakai</string>
     <string name="settings_step_limit_invalid">Masukkan bilangan bulat 1 sampai 500.</string>
+    <string name="settings_token_budget">Anggaran token per tugas</string>
+    <string name="settings_token_budget_sub">Nonaktif berarti tanpa batas. Menghitung token input, output, dan cache yang dilaporkan penyedia; tugas berhenti saat anggaran tercapai dan melaporkan kemajuannya.</string>
+    <string name="settings_token_budget_off">Tanpa batas</string>
+    <string name="settings_token_budget_custom">Kustom (10 rb–100 jt)</string>
+    <string name="settings_token_budget_custom_apply">Pakai</string>
+    <string name="settings_token_budget_invalid">Masukkan angka bulat dari 10000 sampai 100000000.</string>
     <string name="mcp_servers_title">Server MCP</string>
     <string name="mcp_servers_empty">Belum ada server MCP</string>
     <string name="mcp_servers_empty_sub">Tambahkan server MCP eksternal agar Mika dapat memakai alatnya.</string>

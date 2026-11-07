@@ -138,6 +138,12 @@
     <string name="settings_step_limit_custom">Personalizado (1–500)</string>
     <string name="settings_step_limit_custom_apply">Usar</string>
     <string name="settings_step_limit_invalid">Digite um número inteiro de 1 a 500.</string>
+    <string name="settings_token_budget">Orçamento de tokens por tarefa</string>
+    <string name="settings_token_budget_sub">Desligado significa sem limite. Conta os tokens de entrada, saída e cache informados pelo provedor; a tarefa para ao atingir o orçamento e relata o progresso.</string>
+    <string name="settings_token_budget_off">Sem limite</string>
+    <string name="settings_token_budget_custom">Personalizado (10 mil–100 mi)</string>
+    <string name="settings_token_budget_custom_apply">Usar</string>
+    <string name="settings_token_budget_invalid">Insira um número inteiro de 10000 a 100000000.</string>
     <string name="mcp_servers_title">Servidores MCP</string>
     <string name="mcp_servers_empty">Ainda não há servidores MCP</string>
     <string name="mcp_servers_empty_sub">Adicione um servidor MCP externo para que o Mika use as ferramentas dele.</string>

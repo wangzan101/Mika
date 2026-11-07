@@ -1,6 +1,7 @@
 package com.wangzan101.mika.core.agent
 
 import com.wangzan101.mika.core.trace.RunTrace
+import com.wangzan101.mika.core.usage.RunUsageTally
 import com.wangzan101.mika.core.guard.OperationGuards
 import com.wangzan101.mika.core.guard.GuardVerdict
 import com.wangzan101.mika.core.observation.Place
@@ -67,6 +68,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.selects.select
 import kotlinx.serialization.json.JsonArray
@@ -233,16 +235,20 @@ class AgentLoop(
     /** 本任务的回答已因核对没对上退回过一次;再没对上就标成未确认交出,不再退回。 */
     private var gapsNudged = false
     private var provenance = RunProvenance()
+    /** 本次运行每任务 token 预算(input+output+cached 合计);null 不限。每步开头按运行名下的 [RunUsageTally] 检查。 */
+    private var tokenBudget: Long? = null
     val activeAsk: Delivery.Ask? get() = user.activeAsk
 
     /** 新入口:同一对话里的插话和控制经 [inbox] 进入;旧入口继续使用相同的执行路径。 */
-    suspend fun run(spec: RunSpec, inbox: RunInbox): TaskState = runInternal(spec.goal, spec.priorTurns, inbox, spec.provenance, spec.threadId)
+    suspend fun run(spec: RunSpec, inbox: RunInbox): TaskState =
+        runInternal(spec.goal, spec.priorTurns, inbox, spec.provenance, spec.threadId, spec.tokenBudget)
 
     suspend fun run(task: String, priorTurns: List<Turn> = emptyList()): TaskState = runInternal(task, priorTurns, null, RunProvenance(), "local")
 
-    private suspend fun runInternal(task: String, priorTurns: List<Turn>, inbox: RunInbox?, runProvenance: RunProvenance, threadId: String): TaskState {
+    private suspend fun runInternal(task: String, priorTurns: List<Turn>, inbox: RunInbox?, runProvenance: RunProvenance, threadId: String, budget: Long? = null): TaskState {
         cancelRequested = false
         provenance = runProvenance
+        tokenBudget = budget
         user.begin(threadId, runProvenance, interaction)
         inbox?.bind(object : RunInbox.Handler {
             override suspend fun answer(text: String, askId: String?) = user.answerInput(text, askId)
@@ -256,7 +262,7 @@ class AgentLoop(
         utterances?.clear()
         emit(RunEvent.TaskStarted(now(), Redactor.text(task), model.name,
             origin = runProvenance.origin.takeIf { it != RunOrigin.Ui }?.name?.lowercase(),
-            stepLimit = maxSteps.takeIf { it != Int.MAX_VALUE }))
+            stepLimit = maxSteps.takeIf { it != Int.MAX_VALUE }, tokenBudget = tokenBudget))
         var end: TaskState? = null
         replay?.reset()
         lastEnd = null
@@ -487,6 +493,10 @@ class AgentLoop(
         }
 
         for (step in 1..maxSteps) {
+            // token 预算用完:不再调模型,照步数用完的样子收尾。累计含旁路调用与失败重试,没报用量的不算。
+            if (tokenBudget?.let { b -> currentCoroutineContext()[RunUsageTally]?.let { it.total() >= b } } == true) {
+                return finalTurn(task, history, specs, step, labels, place, recorder, facts(), inbox, Closeout.TokenLimit)
+            }
             appendSteers(history, inbox)
             if (maxSteps != Int.MAX_VALUE) TurnPolicy.beforeStep(TurnSnapshot(step, maxSteps))?.let { history += ctx.notice(it.source, it.text) }
             appendRuntimeState(history, place, labels, step)
@@ -999,7 +1009,7 @@ class AgentLoop(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                return StopRules.closeoutFailed(closeout, maxSteps)
+                return StopRules.closeoutFailed(closeout, maxSteps, tokenBudget)
             }
             val text = CompletionPlanBlock.extract(reply.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }.trim()).text
             history += Message(Role.Assistant, cleanReplyParts(reply.parts, text), Author.Mika)
@@ -1016,16 +1026,16 @@ class AgentLoop(
             // 收尾模型也可能正在生成时收到插话。最多重答两次，其余交给下一任务。
             if (attempt < 2 && keepFinished(history, inbox)) return@repeat
             if (call == null) {
-                if (calls.isNotEmpty() || text.isEmpty() || reply.stopReason == StopReason.MaxTokens) return StopRules.closeoutFailed(closeout, maxSteps)
+                if (calls.isNotEmpty() || text.isEmpty() || reply.stopReason == StopReason.MaxTokens) return StopRules.closeoutFailed(closeout, maxSteps, tokenBudget)
                 return conclude(task, text, step, facts, history = null)!!
             }
             val started = now()
             // 只剩放弃,不改变手机
             val exec = tools.executeRead(call)
             recorder.result(step, call.name, tools.verb(call.name), exec.content, exec.record, null, null, now() - started, "model", call.id)
-            return StopRules.afterFinalTurn(exec.outcome, maxSteps)
+            return StopRules.afterFinalTurn(exec.outcome, maxSteps, closeout, tokenBudget)
         }
-        return StopRules.closeoutFailed(closeout, maxSteps)
+        return StopRules.closeoutFailed(closeout, maxSteps, tokenBudget)
     }
 
     companion object {

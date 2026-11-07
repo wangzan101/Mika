@@ -130,6 +130,12 @@
     <string name="settings_step_limit_custom">自定义（1–500）</string>
     <string name="settings_step_limit_custom_apply">使用</string>
     <string name="settings_step_limit_invalid">请输入 1 到 500 的整数。</string>
+    <string name="settings_token_budget">每个任务的 Token 预算</string>
+    <string name="settings_token_budget_sub">关着表示不限制。按服务商报告的输入、输出与缓存命中 token 合计；到达预算时任务停下并交代进度。</string>
+    <string name="settings_token_budget_off">不限制</string>
+    <string name="settings_token_budget_custom">自定义（1 万–1 亿）</string>
+    <string name="settings_token_budget_custom_apply">使用</string>
+    <string name="settings_token_budget_invalid">请输入 1 万到 1 亿的整数。</string>
     <string name="mcp_servers_title">MCP 服务器</string>
     <string name="mcp_servers_empty">还没有 MCP 服务器</string>
     <string name="mcp_servers_empty_sub">添加外部 MCP 服务器，把它的工具交给 Mika。</string>

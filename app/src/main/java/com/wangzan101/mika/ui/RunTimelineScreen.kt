@@ -161,6 +161,11 @@ private fun HeaderGroup(h: TimelineHeader, onExport: () -> Unit) {
                 RowValue(stringResource(R.string.timeline_step_limit_value, h.stepsUsed, limit))
             }
         }
+        h.tokenBudget?.let { budget ->
+            ListRow(null, stringResource(R.string.timeline_token_budget)) {
+                RowValue(stringResource(R.string.timeline_token_budget_value, UsageCopy.tokens(h.tokensUsed), UsageCopy.tokens(budget)))
+            }
+        }
         // 还没跑完:这里说「进行中」,下面这些小结(核查、结局)等结束了才有
         if (h.running) {
             ListRow(null, stringResource(R.string.timeline_outcome)) { RowValue(stringResource(R.string.timeline_running), ValueTone.Plain) }

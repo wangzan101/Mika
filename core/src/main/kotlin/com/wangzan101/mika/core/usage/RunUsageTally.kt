@@ -37,6 +37,9 @@ class RunUsageTally : AbstractCoroutineContextElement(Key) {
         cached.addAndGet(usage.cachedInputTokens.toLong())
     }
 
+    /** input+output+cached 的合计;预算上限按它检查。没报用量的调用不在这里(也估不出)。 */
+    fun total(): Long = input.get() + output.get() + cached.get()
+
     /** 此刻的合计,作为运行记录里的一条 [RunEvent.ModelCalls]。 */
     fun event(atMs: Long) = RunEvent.ModelCalls(
         atMs, logicalCalls.get(), unreported.get(), input.get(), output.get(), cached.get(), calls.get(), httpUnreported.get(),

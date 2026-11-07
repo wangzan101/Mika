@@ -62,7 +62,7 @@ object SkillOutcomes {
         }
         is TaskState.Failed -> when {
             VERIFIER_REJECTED_MARK in end.reason -> SkillResult.verifier_rejected
-            end.kind == FailKind.GaveUp || end.kind == FailKind.StepLimit -> SkillResult.failed
+            end.kind == FailKind.GaveUp || end.kind == FailKind.StepLimit || end.kind == FailKind.TokenLimit -> SkillResult.failed
             // 模型出错、运行环境出问题、操作保护停下、进程中断:和照着做灵不灵无关
             else -> SkillResult.unreviewed
         }

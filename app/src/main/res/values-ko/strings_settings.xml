@@ -130,6 +130,12 @@
     <string name="settings_step_limit_custom">사용자 지정(1–500)</string>
     <string name="settings_step_limit_custom_apply">사용</string>
     <string name="settings_step_limit_invalid">1~500 사이의 정수를 입력하세요.</string>
+    <string name="settings_token_budget">작업당 Token 예산</string>
+    <string name="settings_token_budget_sub">꺼져 있으면 무제한입니다. 공급자가 보고한 입력·출력·캐시 token 합계로 계산하며, 예산에 도달하면 작업이 멈추고 경과를 알립니다.</string>
+    <string name="settings_token_budget_off">무제한</string>
+    <string name="settings_token_budget_custom">직접 입력(1만–1억)</string>
+    <string name="settings_token_budget_custom_apply">사용</string>
+    <string name="settings_token_budget_invalid">1만에서 1억 사이의 정수를 입력하세요.</string>
     <string name="mcp_servers_title">MCP 서버</string>
     <string name="mcp_servers_empty">아직 MCP 서버가 없습니다</string>
     <string name="mcp_servers_empty_sub">외부 MCP 서버를 추가하면 그 도구를 Mika에서 사용할 수 있습니다.</string>

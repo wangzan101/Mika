@@ -23,10 +23,12 @@ data class TriggerDefinition(
     val lastConditionMet: Boolean? = null,
     /** 固定提醒原文；非空时到点直接送达，不启动模型。 */
     val reminderText: String? = null,
-    /** 按指定时区的当地钟点重复；空表示使用固定毫秒间隔或只运行一次。 */
+    /** 按指定时区的当地钟点重复；空表示使用固定毫秒间隔或只运行一次。恰好一个钟点时写这里，旧版本也能读。 */
     val calendarTime: String? = null,
     val calendarZone: String? = null,
     val calendarDays: List<Int> = emptyList(),
+    /** 多个当地钟点(HH:mm)；与 [calendarTime] 互斥，且只落在 sidecar，不进旧版主文件。 */
+    val calendarTimes: List<String> = emptyList(),
     /** 有条件时:只在条件刚满足时执行(默认),或每次检查满足都执行。 */
     val notifyWhen: ConditionNotify = ConditionNotify.BecomesMet,
     /** 两次派发动作之间至少隔这么久;冷却期内满足的推迟到冷却结束后再算。 */
@@ -42,9 +44,14 @@ data class TriggerDefinition(
     init {
         require(id.isNotBlank() && threadId.isNotBlank() && goal.isNotBlank())
         require(nextAtMs >= 0 && (intervalMs == null || intervalMs > 0))
-        require(calendarTime == null || (intervalMs == null && calendarZone != null && calendarDays.all { it in 1..7 }))
+        require(calendarTime == null || calendarTimes.isEmpty())
+        require(calendarTime == null && calendarTimes.isEmpty() ||
+            (intervalMs == null && calendarZone != null && calendarDays.all { it in 1..7 }))
         require(cooldownMs == null || cooldownMs > 0)
     }
+
+    /** 到点重复的当地钟点；旧版本只写了 [calendarTime] 的单钟点计划同样适用。 */
+    val clockTimes: List<String> get() = calendarTimes.ifEmpty { listOfNotNull(calendarTime) }
 }
 
 @Serializable
@@ -112,7 +119,7 @@ class MemoryTriggerStore(initial: TriggerSnapshot = TriggerSnapshot(emptyList(),
             val window = TriggerWindow(t.id, t.nextAtMs, nowMs, missed)
             ledger[window.key] = window
             triggers[t.id] = when {
-                t.calendarTime != null -> t.copy(nextAtMs = nextCalendarAt(t.calendarTime, t.calendarZone!!,
+                t.clockTimes.isNotEmpty() -> t.copy(nextAtMs = nextCalendarAt(t.clockTimes, t.calendarZone!!,
                     t.calendarDays, nowMs))
                 interval != null -> t.copy(nextAtMs = t.nextAtMs + (missed + 1) * interval)
                 else -> t.copy(enabled = false)
@@ -146,7 +153,7 @@ class MemoryTriggerStore(initial: TriggerSnapshot = TriggerSnapshot(emptyList(),
     }
 
     @Synchronized override fun retireDeliveredOneShots() {
-        val retired = triggers.values.filter { it.intervalMs == null && it.calendarTime == null && ledger.values.any { w ->
+        val retired = triggers.values.filter { it.intervalMs == null && it.clockTimes.isEmpty() && ledger.values.any { w ->
             w.triggerId == it.id && w.dueAtMs == it.nextAtMs && w.state == TriggerWindowState.Delivered } }
             .map { it.id }
         retired.forEach { id -> triggers.remove(id); ledger.entries.removeAll { it.value.triggerId == id } }
@@ -175,8 +182,16 @@ fun nextCalendarAt(time: String, zone: String, days: List<Int>, afterMs: Long): 
 
 private val CALENDAR_CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-/** 修改下次时间时,日历计划也改用新钟点重复;保存与预览必须共用这份转换。 */
+/** 多个钟点里最早的下一次；空表调用方已在外面挡掉。 */
+fun nextCalendarAt(times: List<String>, zone: String, days: List<Int>, afterMs: Long): Long =
+    times.minOf { nextCalendarAt(it, zone, days, afterMs) }
+
+/**
+ * 修改下次时间时,日历计划也改用新钟点重复;保存与预览必须共用这份转换。
+ * 多钟点计划只挪这一次,钟点表原样保留:改一个时刻不该把另外几个钟点一起抹掉。
+ */
 fun TriggerDefinition.rescheduledTo(nextAtMs: Long): TriggerDefinition {
+    if (calendarTimes.isNotEmpty()) return copy(nextAtMs = nextAtMs, enabled = true)
     val local = calendarZone?.let { zone ->
         CALENDAR_CLOCK.format(Instant.ofEpochMilli(nextAtMs).atZone(ZoneId.of(zone)))
     }
@@ -187,13 +202,14 @@ fun TriggerDefinition.rescheduledTo(nextAtMs: Long): TriggerDefinition {
 fun upcoming(def: TriggerDefinition, afterMs: Long, count: Int): List<Long> {
     if (count <= 0) return emptyList()
     val out = ArrayList<Long>(count)
+    val times = def.clockTimes
     when {
-        def.calendarTime != null -> {
+        times.isNotEmpty() -> {
             var at = if (def.nextAtMs >= afterMs) def.nextAtMs
-            else nextCalendarAt(def.calendarTime, def.calendarZone!!, def.calendarDays, afterMs)
+            else nextCalendarAt(times, def.calendarZone!!, def.calendarDays, afterMs)
             repeat(count) {
                 out += at
-                at = nextCalendarAt(def.calendarTime, def.calendarZone!!, def.calendarDays, at)
+                at = nextCalendarAt(times, def.calendarZone!!, def.calendarDays, at)
             }
         }
         def.intervalMs != null && def.intervalMs > 0 -> {
@@ -240,12 +256,12 @@ class TriggerEngine(private val store: TriggerStore, private val scheduleAlarm: 
     /** 时区变化后,跟随设备旧时区的当地时间计划重算到新时区;显式钉了其他时区的计划不动。 */
     fun rezone(nowMs: Long, fromZone: String, toZone: ZoneId) {
         if (fromZone == toZone.id) return
-        store.all().filter { it.enabled && it.calendarTime != null && it.calendarZone == fromZone }
+        store.all().filter { it.enabled && it.clockTimes.isNotEmpty() && it.calendarZone == fromZone }
             .forEach { t ->
                 store.upsert(
                     t.copy(
                         calendarZone = toZone.id,
-                        nextAtMs = nextCalendarAt(t.calendarTime!!, toZone.id, t.calendarDays, nowMs),
+                        nextAtMs = nextCalendarAt(t.clockTimes, toZone.id, t.calendarDays, nowMs),
                     )
                 )
             }

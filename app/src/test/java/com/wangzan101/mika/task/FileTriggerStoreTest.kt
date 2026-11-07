@@ -49,6 +49,35 @@ class FileTriggerStoreTest {
         assertEquals(10L, restored.lastFiredAtMs)
     }
 
+    @Test fun severalClockTimesSurviveStoreReopenInSidecar() {
+        val file = Files.createTempDirectory("trigger-test").resolve("triggers.json").toFile()
+        FileTriggerStore(file).upsert(TriggerDefinition("daily", "thread", "remind", 1_000,
+            calendarTimes = listOf("08:00", "12:30", "20:00"), calendarZone = "Asia/Shanghai"))
+
+        // 完整钟点表在 sidecar；主文件只留首个钟点给旧版本
+        val restored = FileTriggerStore(file).get("daily")!!
+        assertEquals(listOf("08:00", "12:30", "20:00"), restored.calendarTimes)
+        assertEquals(null, restored.calendarTime)
+        assertEquals(listOf("08:00", "12:30", "20:00"), restored.clockTimes)
+
+        val main = Json.decodeFromString<TriggerSnapshot>(file.readText())
+        assertEquals("08:00", main.triggers.single().calendarTime)
+        assertEquals(false, file.readText().contains("calendarTimes"))
+    }
+
+    @Test fun losingTheSidecarKeepsThePlanRunningAtItsFirstClock() {
+        val file = Files.createTempDirectory("trigger-test").resolve("triggers.json").toFile()
+        FileTriggerStore(file).upsert(TriggerDefinition("daily", "thread", "remind", 1_000,
+            calendarTimes = listOf("08:00", "20:00"), calendarZone = "Asia/Shanghai"))
+        // sidecar 丢了也不该降级成一次性任务：主文件里的首个钟点继续按天重复
+        File(file.parentFile, file.name + ".conditions").delete()
+
+        val restored = FileTriggerStore(file).get("daily")!!
+        assertEquals("08:00", restored.calendarTime)
+        assertEquals(emptyList<String>(), restored.calendarTimes)
+        assertEquals(listOf("08:00"), restored.clockTimes)
+    }
+
     // 升级前存下的计划文件没有新字段:照常读,按默认值算
     @Test fun planFileFromBeforeConditionStateStillLoads() {
         val file = Files.createTempDirectory("trigger-test").resolve("triggers.json").toFile()

@@ -34,6 +34,7 @@
     <string name="plans_repeat_weekly">毎週</string>
     <string name="plans_interval_minutes">繰り返し間隔（分）</string>
     <string name="plans_clock">現地時刻: HH:mm</string>
+    <string name="plans_clocks">現地時刻: HH:mm、HH:mm</string>
     <string name="plans_zone">タイムゾーン ID</string>
     <string name="plans_condition_optional">条件（任意）</string>
     <string name="plans_notify_change">条件が変化した時</string>

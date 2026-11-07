@@ -34,6 +34,7 @@
     <string name="plans_repeat_weekly">Semanal</string>
     <string name="plans_interval_minutes">Repetir cada (minutos)</string>
     <string name="plans_clock">Hora local: HH:mm</string>
+    <string name="plans_clocks">Horas locales: HH:mm, HH:mm</string>
     <string name="plans_zone">ID de zona horaria</string>
     <string name="plans_condition_optional">Condición (opcional)</string>
     <string name="plans_notify_change">Al cambiar</string>

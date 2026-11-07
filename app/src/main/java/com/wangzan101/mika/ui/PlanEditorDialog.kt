@@ -135,8 +135,8 @@ fun PlanEditorDialog(
                     }
                     if (draft.repeat in setOf(PlanRepeat.Daily, PlanRepeat.Weekly)) {
                         PlanField(
-                            draft.clock, { draft = draft.copy(clock = it) },
-                            tr(R.string.plans_clock), "plan-editor-clock",
+                            draft.clocks, { draft = draft.copy(clocks = it) },
+                            tr(R.string.plans_clocks), "plan-editor-clock",
                         )
                         Spacer(Modifier.height(10.dp))
                     }

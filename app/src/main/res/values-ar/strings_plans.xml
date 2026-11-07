@@ -34,6 +34,7 @@
     <string name="plans_repeat_weekly">أسبوعيًا</string>
     <string name="plans_interval_minutes">التكرار كل (بالدقائق)</string>
     <string name="plans_clock">التوقيت المحلي: HH:mm</string>
+    <string name="plans_clocks">الأوقات المحلية: HH:mm، HH:mm</string>
     <string name="plans_zone">معرّف المنطقة الزمنية</string>
     <string name="plans_condition_optional">الشرط (اختياري)</string>
     <string name="plans_notify_change">عند التغيّر</string>

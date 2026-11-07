@@ -41,7 +41,7 @@ class PlanEditorTest {
 
         val weekly = editedTrigger(draft().copy(
             repeat = PlanRepeat.Weekly,
-            clock = "09:15",
+            clocks = "09:15",
             weekdays = setOf(1, 5),
             zone = "America/New_York",
         ), null, "weekly", "thread", now)
@@ -121,7 +121,7 @@ class PlanEditorTest {
         assertInvalid(draft().copy(firstAt = "2026-11-05 08:30"), PlanValidation.TimeNotFuture)
         assertInvalid(draft().copy(zone = "not/a zone"), PlanValidation.InvalidZone)
         assertInvalid(draft().copy(repeat = PlanRepeat.Interval, intervalMinutes = "0"), PlanValidation.InvalidInterval)
-        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clock = "25:00"), PlanValidation.InvalidClock)
+        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clocks = "25:00"), PlanValidation.InvalidClock)
         assertInvalid(draft().copy(repeat = PlanRepeat.Weekly, weekdays = emptySet()), PlanValidation.InvalidWeekdays)
         assertInvalid(draft().copy(condition = "ready", cooldownMinutes = "-1"), PlanValidation.InvalidCooldown)
     }
@@ -139,6 +139,48 @@ class PlanEditorTest {
         assertNull(edited.conditionGoal)
         assertNull(edited.cooldownMs)
         assertNull(edited.lastValue)
+    }
+
+    @Test fun severalClocksAreParsedSortedAndDeduped() {
+        val plan = editedTrigger(draft().copy(
+            repeat = PlanRepeat.Daily,
+            clocks = "20:00, 08:00，12:30 08:00",
+        ), null, "multi", "thread", now)
+
+        assertEquals(listOf("08:00", "12:30", "20:00"), plan.calendarTimes)
+        // 多个钟点不能同时写旧字段，两者互斥
+        assertNull(plan.calendarTime)
+        assertEquals(listOf("08:00", "12:30", "20:00"), plan.clockTimes)
+        // now 是当地 08:00，当天 08:00 已过：12:30、20:00、次日 08:00
+        assertEquals(listOf(12, 20, 8), upcoming(plan, now, 5).take(3).map {
+            Instant.ofEpochMilli(it).atZone(java.time.ZoneId.of(zone)).hour
+        })
+    }
+
+    @Test fun oneClockStillUsesTheLegacyFieldForOldReaders() {
+        val plan = editedTrigger(draft().copy(repeat = PlanRepeat.Daily, clocks = "09:15"),
+            null, "single", "thread", now)
+        assertEquals("09:15", plan.calendarTime)
+        assertEquals(emptyList<String>(), plan.calendarTimes)
+        assertEquals(listOf("09:15"), plan.clockTimes)
+    }
+
+    @Test fun clockInputRoundTripsThroughTheDraft() {
+        val original = TriggerDefinition("multi", "thread", "goal", now + 60_000,
+            calendarTimes = listOf("08:00", "20:00"), calendarZone = zone)
+        val back = editedTrigger(original.toPlanDraft(), original, "x", "y", now)
+        assertEquals(listOf("08:00", "20:00"), back.calendarTimes)
+        assertNull(back.calendarTime)
+    }
+
+    @Test fun rejectsMalformedAndTooManyClocks() {
+        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clocks = ""), PlanValidation.InvalidClock)
+        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clocks = "9:00"), PlanValidation.InvalidClock)
+        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clocks = "08:00, nope"), PlanValidation.InvalidClock)
+        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clocks = "24:00"), PlanValidation.InvalidClock)
+        // 上限 12 个，超过就该改用间隔计划
+        val tooMany = (0..12).joinToString(", ") { String.format("%02d:00", it + 1) }
+        assertInvalid(draft().copy(repeat = PlanRepeat.Daily, clocks = tooMany), PlanValidation.InvalidClock)
     }
 
     private fun assertInvalid(input: PlanDraft, expected: PlanValidation) {

@@ -9,12 +9,14 @@ import com.wangzan101.mika.core.trigger.TriggerWindow
 import com.wangzan101.mika.core.trigger.TriggerWindowState
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
-/** 条件计划的扩展状态单独落盘；旧版只读主文件，不会因为它不认识这些字段而把全部计划当成坏文件。 */
+/** 扩展状态单独落盘；旧版只读主文件，不会因为它不认识这些字段而把全部计划当成坏文件。 */
 @Serializable
 private data class ConditionPlanState(
     val notifyWhen: ConditionNotify = ConditionNotify.BecomesMet,
@@ -23,6 +25,7 @@ private data class ConditionPlanState(
     val baselineValue: String? = null,
     val baselineAtMs: Long? = null,
     val lastFiredAtMs: Long? = null,
+    val calendarTimes: List<String> = emptyList(),
 )
 
 @Serializable
@@ -31,11 +34,16 @@ private data class ConditionPlanSnapshot(val states: Map<String, ConditionPlanSt
 private val CONDITION_JSON = Json { ignoreUnknownKeys = true }
 
 private fun TriggerDefinition.conditionState() = ConditionPlanState(
-    notifyWhen, cooldownMs, lastValue, baselineValue, baselineAtMs, lastFiredAtMs,
+    notifyWhen, cooldownMs, lastValue, baselineValue, baselineAtMs, lastFiredAtMs, calendarTimes,
 )
 
-/** 主文件保持旧版 schema；新增字段只能进 sidecar。 */
+/**
+ * 主文件保持旧版 schema；新增字段只能进 sidecar。
+ * 多钟点计划在主文件里退化成首个钟点的单钟点计划：旧版能照常重复，sidecar 丢失也只是少了几个钟点。
+ */
 private fun TriggerDefinition.legacy() = copy(
+    calendarTime = calendarTimes.firstOrNull() ?: calendarTime,
+    calendarTimes = emptyList(),
     notifyWhen = ConditionNotify.BecomesMet,
     cooldownMs = null,
     lastValue = null,
@@ -45,14 +53,18 @@ private fun TriggerDefinition.legacy() = copy(
 )
 
 private fun TriggerDefinition.withConditionState(state: ConditionPlanState?): TriggerDefinition {
-    if (state == null || conditionGoal == null) return this
+    if (state == null) return this
+    val times = state.calendarTimes
     return copy(
-        notifyWhen = state.notifyWhen,
-        cooldownMs = state.cooldownMs,
-        lastValue = state.lastValue,
-        baselineValue = state.baselineValue,
-        baselineAtMs = state.baselineAtMs,
-        lastFiredAtMs = state.lastFiredAtMs,
+        // 主文件里记的是首个钟点；sidecar 恢复出完整钟点表后要让位，两者互斥
+        calendarTime = if (times.isEmpty()) calendarTime else null,
+        calendarTimes = times,
+        notifyWhen = if (conditionGoal != null) state.notifyWhen else notifyWhen,
+        cooldownMs = if (conditionGoal != null) state.cooldownMs else cooldownMs,
+        lastValue = if (conditionGoal != null) state.lastValue else lastValue,
+        baselineValue = if (conditionGoal != null) state.baselineValue else baselineValue,
+        baselineAtMs = if (conditionGoal != null) state.baselineAtMs else baselineAtMs,
+        lastFiredAtMs = if (conditionGoal != null) state.lastFiredAtMs else lastFiredAtMs,
     )
 }
 
@@ -101,7 +113,9 @@ class FileTriggerStore(
         val snapshot = memory.snapshot()
         writeAtomic(file, Json.encodeToString(snapshot.copy(triggers = snapshot.triggers.map { it.legacy() })))
         conditionStates.clear()
-        snapshot.triggers.filter { it.conditionGoal != null }.forEach { conditionStates[it.id] = it.conditionState() }
+        // 有条件的计划要存观测值；多钟点计划要存完整钟点表。两者都不占的话不必写 sidecar
+        snapshot.triggers.filter { it.conditionGoal != null || it.calendarTimes.isNotEmpty() }
+            .forEach { conditionStates[it.id] = it.conditionState() }
         writeAtomic(conditionFile, CONDITION_JSON.encodeToString(ConditionPlanSnapshot(conditionStates.toMap())))
     }
 
@@ -109,6 +123,7 @@ class FileTriggerStore(
         target.parentFile?.mkdirs()
         val temp = File(target.parentFile, target.name + ".tmp")
         FileOutputStream(temp).use { out -> out.write(text.toByteArray(Charsets.UTF_8)); out.fd.sync() }
-        check(temp.renameTo(target)) { "trigger store rename failed" }
+        // renameTo 在 Windows 上不能覆盖已有文件，第二轮保存就会失败
+        Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
     }
 }

@@ -218,4 +218,64 @@ class TriggerEngineTest {
         val once = TriggerDefinition("once", "t", "do", 9_000)
         assertEquals(listOf(9_000L), upcoming(once, 8_000, 3))
     }
+
+    @Test fun severalClocksFireThroughTheDayInOrder() {
+        val created = Instant.parse("2026-11-01T01:00:00Z").toEpochMilli()
+        val times = listOf("08:00", "12:30", "20:00")
+        val def = TriggerDefinition(
+            "daily", "t", "do",
+            nextCalendarAt(times, "Asia/Shanghai", emptyList(), created),
+            calendarTimes = times, calendarZone = "Asia/Shanghai",
+        )
+        assertEquals(listOf("08:00", "12:30", "20:00"), def.clockTimes)
+        // created 是当地 09:00，当天只剩 12:30 和 20:00
+        assertEquals(nextCalendarAt(times, "Asia/Shanghai", emptyList(), created), def.nextAtMs)
+
+        // 从当天 09:00 往后：12:30、20:00、次日 08:00、次日 12:30
+        val upcoming3 = upcoming(def, created, 4).map {
+            Instant.ofEpochMilli(it).atZone(ZoneId.of("Asia/Shanghai"))
+        }
+        assertEquals(listOf("12:30", "20:00", "08:00", "12:30"), upcoming3.map {
+            String.format("%02d:%02d", it.hour, it.minute)
+        })
+        assertEquals(upcoming3[0].toLocalDate(), upcoming3[1].toLocalDate())
+        assertEquals(upcoming3[0].toLocalDate().plusDays(1), upcoming3[2].toLocalDate())
+        assertEquals(upcoming3[2].toLocalDate(), upcoming3[3].toLocalDate())
+    }
+
+    @Test fun claimingASeveralClockPlanAdvancesToTheNextClock() {
+        val store = MemoryTriggerStore()
+        val times = listOf("08:00", "20:00")
+        val first = nextCalendarAt(times, "Asia/Shanghai", emptyList(), 0)
+        store.upsert(TriggerDefinition("daily", "t", "do", first,
+            calendarTimes = times, calendarZone = "Asia/Shanghai"))
+        store.claimDue(first)
+        // 认领后就该是当天或次日那个还没到的钟点，不能停在同一时刻
+        assertEquals(nextCalendarAt(times, "Asia/Shanghai", emptyList(), first), store.get("daily")!!.nextAtMs)
+    }
+
+    @Test fun severalClockPlanKeepsItsTimetableWhenOnlyThisRunIsMoved() {
+        val edited = Instant.parse("2026-11-04T02:30:00Z").toEpochMilli()
+        val def = TriggerDefinition("daily", "t", "do", 0,
+            calendarTimes = listOf("08:00", "20:00"), calendarZone = "Asia/Shanghai", enabled = false,
+        ).rescheduledTo(edited)
+        // 只挪这一次，钟点表不能被改成一个钟点
+        assertEquals(listOf("08:00", "20:00"), def.calendarTimes)
+        assertEquals(null, def.calendarTime)
+        assertTrue(def.enabled)
+        assertEquals(edited, def.nextAtMs)
+    }
+
+    @Test fun rezoneMovesSeveralClockPlansTogether() {
+        val store = MemoryTriggerStore()
+        val times = listOf("08:00", "20:00")
+        store.upsert(TriggerDefinition("local", "t", "do",
+            nextCalendarAt(times, "Asia/Shanghai", emptyList(), 0),
+            calendarTimes = times, calendarZone = "Asia/Shanghai"))
+        val now = Instant.parse("2026-11-01T02:00:00Z").toEpochMilli()
+        TriggerEngine(store, {}) { _, _ -> }.rezone(now, "Asia/Shanghai", ZoneId.of("America/New_York"))
+        val zoned = store.get("local")!!
+        assertEquals("America/New_York", zoned.calendarZone)
+        assertEquals(nextCalendarAt(times, "America/New_York", emptyList(), now), zoned.nextAtMs)
+    }
 }

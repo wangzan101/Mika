@@ -173,11 +173,11 @@ private fun PlanRow(plan: TriggerDefinition, last: TriggerWindow?, first: Boolea
         else -> tr(R.string.chat_paused)
     }
     val repeat = when {
-        plan.calendarTime != null -> {
+        plan.clockTimes.isNotEmpty() -> {
             val days = if (plan.calendarDays.isEmpty()) tr(R.string.plans_every_day) else plan.calendarDays.joinToString(tr(R.string.list_sep)) {
                 if (it in 1..7) java.time.DayOfWeek.of(it).getDisplayName(java.time.format.TextStyle.SHORT, uiLocale()) else "?"
             }
-            "$days ${plan.calendarTime} (${plan.calendarZone})"
+            "$days ${plan.clockTimes.joinToString(", ")} (${plan.calendarZone})"
         }
         plan.intervalMs != null -> trPlural(R.plurals.plans_every_minutes, (plan.intervalMs!! / 60_000).toInt())
         else -> tr(R.string.plans_once)
@@ -189,7 +189,7 @@ private fun PlanRow(plan: TriggerDefinition, last: TriggerWindow?, first: Boolea
     val c = MikaTheme.colors
     val delivered = last?.state == TriggerWindowState.Delivered
     // 一次性的任务做完后不能再打开;循环的和从没跑过的可以
-    val canToggle = plan.enabled || plan.intervalMs != null || plan.calendarTime != null || last == null
+    val canToggle = plan.enabled || plan.intervalMs != null || plan.clockTimes.isNotEmpty() || last == null
     ListRow(
         null, plan.reminderText ?: plan.goal, subtitle, first = first,
         detail = last?.let { lastResult(plan, it) } ?: tr(R.string.plans_never_run),

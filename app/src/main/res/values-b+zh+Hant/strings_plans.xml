@@ -34,6 +34,7 @@
     <string name="plans_repeat_weekly">每週</string>
     <string name="plans_interval_minutes">每隔多少分鐘重複</string>
     <string name="plans_clock">當地時間：HH:mm</string>
+    <string name="plans_clocks">當地鐘點：HH:mm，可填多個</string>
     <string name="plans_zone">時區 ID</string>
     <string name="plans_condition_optional">執行條件（可選）</string>
     <string name="plans_notify_change">條件剛滿足時</string>

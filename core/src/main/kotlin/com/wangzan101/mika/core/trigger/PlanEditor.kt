@@ -2,9 +2,12 @@ package com.wangzan101.mika.core.trigger
 
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.ResolverStyle
+
+private val CLOCK_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 /** 手动编辑器支持的重复方式；更复杂的多钟点规则仍由后续数据模型扩展承接。 */
 enum class PlanRepeat { Once, Interval, Daily, Weekly }
@@ -33,7 +36,8 @@ data class PlanDraft(
     val repeat: PlanRepeat = PlanRepeat.Once,
     val firstAt: String,
     val intervalMinutes: String = "60",
-    val clock: String = "09:00",
+    /** 一个或多个当地钟点，用逗号或空格分隔；实际解析在 [editedTrigger] 里。 */
+    val clocks: String = "09:00",
     val zone: String,
     val weekdays: Set<Int> = emptySet(),
     val whenIdle: Boolean = false,
@@ -41,6 +45,23 @@ data class PlanDraft(
     val notifyWhen: ConditionNotify = ConditionNotify.BecomesMet,
     val cooldownMinutes: String = "",
 )
+
+/** 每天的钟点上限；再多就该用间隔计划。 */
+const val MAX_CLOCK_TIMES = 12
+
+/** 把「08:00, 12:30」这类输入拆成钟点表：去空白、去重、按时间排序；有任何一项不合法就返回 null。 */
+fun parseClockTimes(raw: String): List<String>? {
+    val out = LinkedHashSet<String>()
+    for (part in raw.split(',', '，', ' ', '\t').filter { it.isNotBlank() }) {
+        val text = part.trim()
+        val time = try { LocalTime.parse(text) } catch (e: Exception) { return null }
+        // 只认 HH:mm，别让 9:00 这类写法在比较和排序里变成另一种形状
+        if (CLOCK_FORMAT.format(time) != text) return null
+        out += text
+    }
+    if (out.isEmpty() || out.size > MAX_CLOCK_TIMES) return null
+    return out.sorted()
+}
 
 private val EDIT_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm")
     .withResolverStyle(ResolverStyle.STRICT)
@@ -60,19 +81,20 @@ fun newPlanDraft(nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): PlanDraft 
 
 fun TriggerDefinition.toPlanDraft(): PlanDraft {
     val zone = calendarZone ?: ZoneId.systemDefault().id
+    val times = clockTimes
     return PlanDraft(
         content = reminderText ?: goal,
         reminder = reminderText != null,
         condition = conditionGoal.orEmpty(),
         repeat = when {
-            calendarTime != null && calendarDays.isEmpty() -> PlanRepeat.Daily
-            calendarTime != null -> PlanRepeat.Weekly
+            times.isNotEmpty() && calendarDays.isEmpty() -> PlanRepeat.Daily
+            times.isNotEmpty() -> PlanRepeat.Weekly
             intervalMs != null -> PlanRepeat.Interval
             else -> PlanRepeat.Once
         },
         firstAt = formatPlanEditorTime(nextAtMs, zone),
         intervalMinutes = intervalMs?.let { (it / 60_000).toString() } ?: "60",
-        clock = calendarTime ?: "09:00",
+        clocks = times.joinToString(", ").ifEmpty { "09:00" },
         zone = zone,
         weekdays = calendarDays.toSet(),
         whenIdle = idleOnly,
@@ -105,6 +127,7 @@ fun editedTrigger(
     val nextAt: Long
     var intervalMs: Long? = null
     var calendarTime: String? = null
+    var calendarTimes: List<String> = emptyList()
     var calendarZone: String? = null
     var calendarDays: List<Int> = emptyList()
     when (draft.repeat) {
@@ -126,12 +149,14 @@ fun editedTrigger(
             if (draft.repeat == PlanRepeat.Weekly && (days.isEmpty() || days.any { it !in 1..7 })) {
                 invalid(PlanValidation.InvalidWeekdays)
             }
+            val times = parseClockTimes(draft.clocks) ?: invalid(PlanValidation.InvalidClock)
             nextAt = try {
-                nextCalendarAt(draft.clock.trim(), zone.id, days, nowMs)
+                nextCalendarAt(times, zone.id, days, nowMs)
             } catch (e: Exception) {
                 invalid(PlanValidation.InvalidClock)
             }
-            calendarTime = draft.clock.trim()
+            // 只有一个钟点时写旧字段，旧版本也能读；多个才进 sidecar
+            if (times.size == 1) calendarTime = times.single() else calendarTimes = times
             calendarZone = zone.id
             calendarDays = days
         }
@@ -156,6 +181,7 @@ fun editedTrigger(
         idleOnly = draft.whenIdle,
         reminderText = reminderText,
         calendarTime = calendarTime,
+        calendarTimes = calendarTimes,
         calendarZone = calendarZone,
         calendarDays = calendarDays,
         notifyWhen = draft.notifyWhen,

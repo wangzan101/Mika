@@ -19,8 +19,8 @@ import com.wangzan101.mika.core.tool.strArray
 import com.wangzan101.mika.core.trigger.ConditionNotify
 import com.wangzan101.mika.core.trigger.TriggerDefinition
 import com.wangzan101.mika.core.trigger.nextCalendarAt
+import com.wangzan101.mika.core.trigger.parseClockTimes
 import java.time.Instant
-import java.time.LocalTime
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.serialization.json.buildJsonArray
@@ -40,7 +40,7 @@ internal object ScheduleTask : AgentTool {
         "goal" to str("What to do when the time arrives."),
         "at" to str("Optional first time as ISO 8601 with timezone. Required unless repeatAt is given."),
         "intervalMinutes" to int("Optional repeat interval in minutes; omit for one time.", 1, 525600),
-        "repeatAt" to str("Optional daily local clock time HH:mm, e.g. 09:00. Use for 'every day at 9' rather than a 1440-minute interval."),
+        "repeatAt" to str("Optional daily local clock time HH:mm, e.g. 09:00. Use for 'every day at 9' rather than a 1440-minute interval. Accepts several comma-separated times, e.g. 08:00, 12:30, 20:00, when the user wants the same task at multiple times a day; at most 12."),
         "repeatZone" to str("IANA time zone for repeatAt, e.g. Asia/Shanghai; defaults to this device's zone."),
         "weekdays" to strArray("Optional days for repeatAt: MON,TUE,WED,THU,FRI,SAT,SUN. Omit for every day.", 7),
         "condition" to str("Optional read only condition to check using web or sandbox before running the goal."),
@@ -65,7 +65,7 @@ internal object ScheduleTask : AgentTool {
                         put("nextAtMs", plan.nextAtMs); put("nextAt", Instant.ofEpochMilli(plan.nextAtMs).toString())
                         plan.reminderText?.let { put("reminder", it) }
                         plan.intervalMs?.let { put("intervalMinutes", it / 60_000) }
-                        plan.calendarTime?.let { put("repeatAt", it) }
+                        plan.clockTimes.takeIf { it.isNotEmpty() }?.let { put("repeatAt", it.joinToString(", ")) }
                         plan.calendarZone?.let { put("repeatZone", it) }
                         plan.conditionGoal?.let { put("condition", it); put("notifyWhen", plan.notifyWhen.wire) }
                         plan.cooldownMs?.let { put("cooldownMinutes", it / 60_000) }
@@ -108,13 +108,15 @@ internal object ScheduleTask : AgentTool {
         if (days.any { it == 0 } || (repeatAt == null && days.isNotEmpty())) return ToolExecution(okObj {
             put("scheduled", false); put("reason", "invalid_weekdays")
         })
+        // repeatAt 也接受逗号分隔的多个钟点(如 "08:00, 20:00")，与编辑面板的输入语法一致
+        val clockTimes = repeatAt?.let { parseClockTimes(it) }
         val at = runCatching {
             val firstMs = first?.let { Instant.parse(it).toEpochMilli() }
             if (repeatAt == null) firstMs ?: error("missing time")
             else {
-                LocalTime.parse(repeatAt)
+                clockTimes ?: error("invalid clock")
                 ZoneId.of(zone)
-                nextCalendarAt(repeatAt, zone, days, maxOf(System.currentTimeMillis(), (firstMs ?: 0) - 1))
+                nextCalendarAt(clockTimes, zone, days, maxOf(System.currentTimeMillis(), (firstMs ?: 0) - 1))
             }
         }.getOrElse { return ToolExecution(okObj { put("scheduled", false); put("reason", "invalid_time") }) }
         val condition = a.str("condition", max = 2000)
@@ -131,7 +133,9 @@ internal object ScheduleTask : AgentTool {
             ?: return ToolExecution(okObj { put("scheduled", false); put("reason", "invalid_notify_when") })
         val trigger = TriggerDefinition(UUID.randomUUID().toString(), thread, goal, at, interval, condition,
             idleOnly = a.bool("whenIdle", false), reminderText = reminder,
-            calendarTime = repeatAt, calendarZone = if (repeatAt != null) zone else null, calendarDays = days,
+            calendarTime = clockTimes?.singleOrNull(),
+            calendarTimes = clockTimes?.takeIf { it.size > 1 }.orEmpty(),
+            calendarZone = if (clockTimes != null) zone else null, calendarDays = days,
             notifyWhen = notifyWhen, cooldownMs = cooldown)
         val create = ctx.config.scheduleTrigger ?: return ToolExecution(okObj {
             put("scheduled", false); put("reason", "unavailable")

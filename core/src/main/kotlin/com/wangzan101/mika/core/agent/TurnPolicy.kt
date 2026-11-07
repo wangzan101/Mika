@@ -14,7 +14,7 @@ internal data class TurnSnapshot(val step: Int, val maxSteps: Int)
 internal val ANSWER_OR_FAILURE: String get() = Feedback["answer_or_failure"]
 
 /** 为什么禁止继续操作、只给最后一次收尾机会。 */
-internal enum class Closeout { StepLimit, Completed, NoNewData }
+internal enum class Closeout { StepLimit, TokenLimit, Completed, NoNewData }
 
 /**
  * 回合策略:每步开头要不要先提醒(中途自查)、回复是空的(或被输出上限截断)时提醒还是结束、核对没对上时怎么提醒、
@@ -74,6 +74,7 @@ internal object TurnPolicy {
         val confirmed = progress?.display?.takeIf { it.isNotBlank() }?.let { "\nLatest confirmed progress: $it" }.orEmpty()
         return when (reason) {
             Closeout.StepLimit -> finalTurn()
+            Closeout.TokenLimit -> Notice(Feedback["token_limit_source"], Feedback["token_limit_closeout"])
             Closeout.Completed -> Notice(Feedback["closeout_source"], Feedback.format("completed_closeout", "progress" to confirmed))
             Closeout.NoNewData -> Notice(Feedback["closeout_source"],
                 Feedback.format("no_new_data_closeout", "count" to NewDataTracker.LIMIT, "progress" to confirmed))

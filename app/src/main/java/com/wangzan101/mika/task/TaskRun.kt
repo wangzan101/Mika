@@ -770,10 +770,11 @@ class TaskRun(
             // 这个对话里用户发来的屏幕(跟着对话存在工作区里)
             val userScreens = (service.application as MikaApp).userScreens.source(conversationId)
             val stepLimit = if (conditionCheck) null else FeatureFlags.get(service).taskStepLimit()
+            val tokenBudget = if (conditionCheck) null else FeatureFlags.get(service).taskTokenBudget()
             val runSpec = RunSpec(RunId(key), goal, conversationId,
                 priorTurns,
                 provenance, if (conditionCheck) setOf("web", "sandbox") else null, readOnly = conditionCheck,
-                stepBudget = stepLimit)
+                stepBudget = stepLimit, tokenBudget = tokenBudget)
             // 外部 MCP server 只在主任务接;子任务/条件检查/评测不接,避免绕过父任务审批、影响评测可复现
             if (!conditionCheck) {
                 // 连上的当场归 resources:收尾(含取消、失败、连到一半被停)关作用域时一起关,stdio server 的进程和沙箱租约跟着放掉

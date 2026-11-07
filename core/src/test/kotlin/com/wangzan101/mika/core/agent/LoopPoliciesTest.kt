@@ -77,6 +77,26 @@ class LoopPoliciesTest {
         assertEquals(FailKind.StepLimit, StopRules.stepLimit(3).kind)
     }
 
+    @Test fun tokenLimitCloseoutEndsAsTokenLimit() {
+        val end = StopRules.tokenLimit(500_000)
+        assertEquals(FailKind.TokenLimit, end.kind)
+        assertTrue(end.reason, "50 万" in end.reason)
+        assertEquals(FailKind.TokenLimit, StopRules.closeoutFailed(Closeout.TokenLimit, 60, 500_000).kind)
+        assertEquals(FailKind.TokenLimit, (StopRules.afterFinalTurn(null, 60, Closeout.TokenLimit, 500_000) as TaskState.Failed).kind)
+        // 步数收尾不带上预算也不会说成 token 到限
+        assertEquals(FailKind.StepLimit, (StopRules.afterFinalTurn(null, 60) as TaskState.Failed).kind)
+        val n = TurnPolicy.closeout(Closeout.TokenLimit)
+        assertEquals(Feedback["token_limit_source"], n.source)
+        assertEquals(Feedback["token_limit_closeout"], n.text)
+        assertTrue(n.text, "token budget" in n.text)
+    }
+
+    @Test fun tokenBudgetTextRoundsToWanAndYi() {
+        assertEquals("50 万", tokenBudgetText(500_000))
+        assertEquals("1 亿", tokenBudgetText(100_000_000))
+        assertEquals("12345", tokenBudgetText(12345))
+    }
+
     @Test fun modelFailureReasons() {
         assertTrue("503" in StopRules.modelFailed(ModelError.Server(503)).reason)
         assertEquals("模型调用异常:boom", StopRules.modelFailed(IllegalStateException("boom")).reason)

@@ -17,17 +17,24 @@ internal object StopRules {
         else -> stop?.let(::guard)
     }
 
-    /** 步数用完后的最后一轮调了工具(只给了 end_not_done):放弃按它结束,否则算步数用完。 */
-    fun afterFinalTurn(outcome: Outcome?, maxSteps: Int): TaskState = when (outcome) {
+    /** 步数用完后的最后一轮调了工具(只给了 end_not_done):放弃按它结束,否则按触发收尾的原因落结局。 */
+    fun afterFinalTurn(outcome: Outcome?, maxSteps: Int, closeout: Closeout = Closeout.StepLimit, tokenBudget: Long? = null): TaskState = when (outcome) {
         is Outcome.Failure -> TaskState.Failed(outcome.message, FailKind.GaveUp)
-        else -> stepLimit(maxSteps)
+        else -> when (closeout) {
+            Closeout.TokenLimit -> tokenLimit(tokenBudget ?: 0)
+            else -> stepLimit(maxSteps)
+        }
     }
 
     fun stepLimit(maxSteps: Int) = TaskState.Failed("已达到 $maxSteps 步上限,任务没有完成。", FailKind.StepLimit)
 
+    /** 每任务 token 预算用完;[budget] 是用户设的预算(说明里带上,方便对账)。 */
+    fun tokenLimit(budget: Long) = TaskState.Failed("已达到本任务 ${tokenBudgetText(budget)} token 的预算上限,任务没有完成。", FailKind.TokenLimit)
+
     /** 收尾请求本身失败或仍没交出结果时，按触发收尾的原因落结局，不谎报步数用完。 */
-    fun closeoutFailed(reason: Closeout, maxSteps: Int): TaskState.Failed = when (reason) {
+    fun closeoutFailed(reason: Closeout, maxSteps: Int, tokenBudget: Long? = null): TaskState.Failed = when (reason) {
         Closeout.StepLimit -> stepLimit(maxSteps)
+        Closeout.TokenLimit -> tokenLimit(tokenBudget ?: 0)
         Closeout.Completed -> TaskState.Failed("任务进度已经完成,但模型没有给出结果。", FailKind.Model)
         Closeout.NoNewData -> TaskState.Failed("连续 ${NewDataTracker.LIMIT} 次没有读到新数据,任务已停止。", FailKind.Guard)
     }
@@ -108,3 +115,10 @@ private fun quoted(detail: String): String =
         detail.endsWith(".") || detail.endsWith("。") -> detail.dropLast(1)
         else -> detail
     }
+
+/** 预算值给用户看的写法:整万的写「N 万」(整亿「N 亿」),零头原样写数字。 */
+internal fun tokenBudgetText(budget: Long): String = when {
+    budget != 0L && budget % 100_000_000 == 0L -> "${budget / 100_000_000} 亿"
+    budget >= 10_000 && budget % 10_000 == 0L -> "${budget / 10_000} 万"
+    else -> budget.toString()
+}

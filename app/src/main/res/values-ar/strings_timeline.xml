@@ -72,6 +72,8 @@
     <string name="timeline_duration">الوقت المستغرق</string>
     <string name="timeline_step_limit">الخطوات</string>
     <string name="timeline_step_limit_value">%1$d / %2$d</string>
+    <string name="timeline_token_budget">الرموز</string>
+    <string name="timeline_token_budget_value">%1$s / %2$s</string>
     <string name="timeline_more">مزيد من التفاصيل</string>
     <string name="expand">توسيع</string>
     <string name="timeline_model_calls">استدعاءات النموذج</string>

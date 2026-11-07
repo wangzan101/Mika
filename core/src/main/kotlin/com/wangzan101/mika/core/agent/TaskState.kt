@@ -101,11 +101,13 @@ enum class FailKind {
     /** 操作保护触发,安全停止。 */
     Guard,
     StepLimit,
+    /** 每任务 token 预算用完,按步数用完同款收尾停住。 */
+    TokenLimit,
     /** 运行环境不满足或出错(手机操作助手、无障碍、没配模型、虚拟屏断开等)。 */
     Environment,
     /**
      * 已受理,执行它的任务服务或进程中途没了(被系统停掉、进程被杀)。
-     * 打分和运行环境出错一样不算 Agent 的错;学东西、技能试用都不当成做不成(只有 [GaveUp]、[StepLimit] 算)。
+     * 打分和运行环境出错一样不算 Agent 的错;学东西、技能试用都不当成做不成(只有 [GaveUp]、[StepLimit]、[TokenLimit] 算)。
      */
     Interrupted,
 }

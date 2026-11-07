@@ -10,7 +10,7 @@
     <string name="settings_not_set">Не задано</string>
     <string name="settings_phone_ops">Управление телефоном</string>
     <string name="settings_during_work">Выполнение задач</string>
-    <string name="settings_during_work_sub">Автономный режим, темп, лимит шагов и звук</string>
+    <string name="settings_during_work_sub">Автономный режим, темп, лимиты шагов и токенов, звук</string>
     <string name="settings_notif_sub">Когда они всплывают; меняется в системных настройках</string>
     <string name="settings_privacy">Мои данные</string>
     <string name="settings_memory_data">Память и данные</string>
@@ -142,6 +142,12 @@
     <string name="settings_step_limit_custom">Свой (1–500)</string>
     <string name="settings_step_limit_custom_apply">Использовать</string>
     <string name="settings_step_limit_invalid">Введите целое число от 1 до 500.</string>
+    <string name="settings_token_budget">Лимит токенов на задачу</string>
+    <string name="settings_token_budget_sub">Выключено — без ограничения. Считаются входные, выходные и кэшированные токены по отчёту провайдера; при достижении лимита задача останавливается и сообщает о прогрессе.</string>
+    <string name="settings_token_budget_off">Без ограничения</string>
+    <string name="settings_token_budget_custom">Своё (10 тыс.–100 млн)</string>
+    <string name="settings_token_budget_custom_apply">Использовать</string>
+    <string name="settings_token_budget_invalid">Введите целое число от 10 000 до 100 000 000.</string>
     <string name="mcp_servers_title">MCP-серверы</string>
     <string name="mcp_servers_empty">MCP-серверов пока нет</string>
     <string name="mcp_servers_empty_sub">Добавьте внешний MCP-сервер, чтобы Mika могла использовать его инструменты.</string>

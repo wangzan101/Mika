@@ -21,6 +21,8 @@ data class RunSpec(
     val readOnly: Boolean = false,
     val parent: RunId? = null,
     val stepBudget: Int? = null,
+    /** 每任务 token 预算(input+output+cached 合计);null 表示不限制。主循环在每步开头按 [com.wangzan101.mika.core.usage.RunUsageTally] 检查。 */
+    val tokenBudget: Long? = null,
 ) {
     init { require(goal.isNotBlank() && threadId.isNotBlank()) }
 }

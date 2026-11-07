@@ -10,7 +10,7 @@
     <string name="settings_not_set">غير مُعدّ</string>
     <string name="settings_phone_ops">التحكم بالهاتف</string>
     <string name="settings_during_work">تشغيل المهام</string>
-    <string name="settings_during_work_sub">الوضع المستقل، والسرعة، وحد الخطوات، والصوت</string>
+    <string name="settings_during_work_sub">الوضع المستقل، والسرعة، وحدّا الخطوات والرموز، والصوت</string>
     <string name="settings_notif_sub">لتغيير طريقة ظهورها، انتقل إلى إعدادات النظام</string>
     <string name="settings_privacy">بياناتي</string>
     <string name="settings_memory_data">الذاكرة والبيانات</string>
@@ -150,6 +150,12 @@
     <string name="settings_step_limit_custom">مخصص (1–500)</string>
     <string name="settings_step_limit_custom_apply">استخدام</string>
     <string name="settings_step_limit_invalid">أدخل عددًا صحيحًا من 1 إلى 500.</string>
+    <string name="settings_token_budget">ميزانية الرموز لكل مهمة</string>
+    <string name="settings_token_budget_sub">الإيقاف يعني بلا حد. تُحتسب رموز الإدخال والإخراج وذاكرة التخزين المؤقت التي يُبلغ عنها المزوّد؛ تتوقف المهمة عند بلوغ الميزانية وتوضّح ما تم.</string>
+    <string name="settings_token_budget_off">بلا حد</string>
+    <string name="settings_token_budget_custom">مخصص (10 آلاف–100 مليون)</string>
+    <string name="settings_token_budget_custom_apply">استخدام</string>
+    <string name="settings_token_budget_invalid">أدخل رقمًا صحيحًا من 10000 إلى 100000000.</string>
     <string name="mcp_servers_title">خوادم MCP</string>
     <string name="mcp_servers_empty">لم يُضف أي خادم MCP</string>
     <string name="mcp_servers_empty_sub">أضف خادم MCP خارجيًا لإتاحة أدواته لـ Mika.</string>

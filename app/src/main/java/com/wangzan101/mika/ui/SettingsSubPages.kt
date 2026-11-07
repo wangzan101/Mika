@@ -196,9 +196,12 @@ fun DuringWorkScreen(
     operatingPace: OperatingPace = OperatingPace.DEFAULT, onOperatingPace: (OperatingPace) -> Unit = {},
     selfConfig: Boolean = false, onSelfConfig: (Boolean) -> Unit = {},
     stepLimit: Int? = null, onStepLimit: (Int?) -> Unit = {},
+    tokenBudget: Long? = null, onTokenBudget: (Long?) -> Unit = {},
 ) {
     var editingLimit by remember { mutableStateOf(false) }
     var customLimit by remember { mutableStateOf("") }
+    var editingBudget by remember { mutableStateOf(false) }
+    var customBudget by remember { mutableStateOf("") }
     PageScaffold(stringResource(R.string.settings_during_work), onBack) {
         GroupLabel(AutonomyCopy.GROUP)
         GroupCard {
@@ -220,6 +223,12 @@ fun DuringWorkScreen(
                 // 当前是自己填的数时,输入框里带着它
                 onClick = { customLimit = stepLimit?.takeIf { it !in STEP_LIMIT_PRESETS }?.toString().orEmpty(); editingLimit = true },
             )
+            ListRow(
+                MikaIcons.Chart, stringResource(R.string.settings_token_budget),
+                tokenBudget?.let { "${UsageCopy.tokens(it)} ${UsageCopy.UNIT}" }
+                    ?: stringResource(R.string.settings_token_budget_off),
+                onClick = { customBudget = tokenBudget?.takeIf { it !in TOKEN_BUDGET_PRESETS }?.toString().orEmpty(); editingBudget = true },
+            )
             parallel?.let { ParallelRow(it, onParallelMax) }
         }
         if (editingLimit) StepLimitDialog(
@@ -228,6 +237,13 @@ fun DuringWorkScreen(
             onCustom = { customLimit = it.filter(Char::isDigit).take(3) },
             onPick = { onStepLimit(it); editingLimit = false },
             onDismiss = { editingLimit = false },
+        )
+        if (editingBudget) TokenBudgetDialog(
+            current = tokenBudget,
+            custom = customBudget,
+            onCustom = { customBudget = it.filter(Char::isDigit).take(9) },
+            onPick = { onTokenBudget(it); editingBudget = false },
+            onDismiss = { editingBudget = false },
         )
         // 允许 Mika 改自己的设置:默认关,打开后任务里才有 settings_list、settings_set
         GroupCard {
@@ -252,6 +268,9 @@ fun DuringWorkScreen(
 
 /** 步数上限的几个现成选项;别的数在输入框里填。 */
 private val STEP_LIMIT_PRESETS = listOf(30, 60, 120, 240)
+
+/** token 预算的几个现成选项(单位 token);别的数在输入框里填。 */
+private val TOKEN_BUDGET_PRESETS = listOf(500_000L, 1_000_000L, 5_000_000L, 10_000_000L)
 
 @Composable
 private fun StepLimitDialog(
@@ -286,6 +305,45 @@ private fun StepLimitDialog(
         confirmButton = {
             TextButton(onClick = { customValue?.let(onPick) }, enabled = customValue != null) {
                 Text(stringResource(R.string.settings_step_limit_custom_apply))
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun TokenBudgetDialog(
+    current: Long?,
+    custom: String,
+    onCustom: (String) -> Unit,
+    onPick: (Long?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val customValue = custom.toLongOrNull()?.takeIf { it in 10_000..FeatureFlags.MAX_TASK_TOKEN_BUDGET }
+    MikaDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_token_budget)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.settings_token_budget_sub), Modifier.padding(bottom = 8.dp))
+                RadioRow(stringResource(R.string.settings_token_budget_off), selected = current == null, onClick = { onPick(null) }, first = true)
+                TOKEN_BUDGET_PRESETS.forEach { n ->
+                    RadioRow("${UsageCopy.tokens(n)} ${UsageCopy.UNIT}", selected = current == n, onClick = { onPick(n) })
+                }
+                OutlinedTextField(
+                    value = custom, onValueChange = onCustom, singleLine = true,
+                    label = { Text(stringResource(R.string.settings_token_budget_custom)) },
+                    isError = custom.isNotEmpty() && customValue == null,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+                if (custom.isNotEmpty() && customValue == null) {
+                    Text(stringResource(R.string.settings_token_budget_invalid), Modifier.padding(top = 4.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { customValue?.let(onPick) }, enabled = customValue != null) {
+                Text(stringResource(R.string.settings_token_budget_custom_apply))
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },

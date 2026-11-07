@@ -49,6 +49,12 @@ Progress check: {{used}} of {{max}} steps used and the task is not finished. If 
 ## final_turn
 You are out of steps; no more phone actions are possible. If the task is done, reply to the user with the result in text, stating only what you read. If it is not done or only partly done, call end_not_done with the confirmed partial result, what you checked and what is missing.
 
+## token_limit_closeout
+You have used the token budget for this task; no more model calls or actions are possible. If the task is done, reply to the user with the result in text, stating only what you read. If it is not done or only partly done, call end_not_done with the confirmed partial result, what you checked and what is missing.
+
+## token_limit_source
+out of token budget
+
 ## completed_closeout
 Your acceptance criteria are satisfied or the confirmed count has reached its total. Do not do more work, repeat checks or prove the result again. Reply to the user now with the confirmed result. If the progress report was wrong, call end_not_done with what is actually missing; do not call any other tool.{{progress}}
 

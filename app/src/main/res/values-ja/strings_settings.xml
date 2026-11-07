@@ -10,7 +10,7 @@
     <string name="settings_not_set">未設定</string>
     <string name="settings_phone_ops">スマホの操作</string>
     <string name="settings_during_work">タスクの実行</string>
-    <string name="settings_during_work_sub">自律モード、操作ペース、ステップ上限、音声</string>
+    <string name="settings_during_work_sub">自律モード、操作ペース、ステップとトークンの上限、音声</string>
     <string name="settings_notif_sub">ポップアップ表示の変更はシステム設定で行います</string>
     <string name="settings_privacy">自分のデータ</string>
     <string name="settings_memory_data">メモリとデータ</string>
@@ -130,6 +130,12 @@
     <string name="settings_step_limit_custom">カスタム（1〜500）</string>
     <string name="settings_step_limit_custom_apply">使用</string>
     <string name="settings_step_limit_invalid">1〜500 の整数を入力してください。</string>
+    <string name="settings_token_budget">タスクごとの Token 予算</string>
+    <string name="settings_token_budget_sub">オフは無制限。プロバイダが報告する入力・出力・キャッシュ token の合計で数え、予算に達するとタスクは停止して経過を報告します。</string>
+    <string name="settings_token_budget_off">無制限</string>
+    <string name="settings_token_budget_custom">カスタム（1万～1億）</string>
+    <string name="settings_token_budget_custom_apply">使う</string>
+    <string name="settings_token_budget_invalid">1万～1億の整数を入力してください。</string>
     <string name="mcp_servers_title">MCP サーバー</string>
     <string name="mcp_servers_empty">MCP サーバーはまだありません</string>
     <string name="mcp_servers_empty_sub">外部 MCP サーバーを追加すると、そのツールを Mika から使えます。</string>

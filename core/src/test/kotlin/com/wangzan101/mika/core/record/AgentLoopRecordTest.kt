@@ -203,6 +203,14 @@ class AgentLoopRecordTest {
         assertTrue(RunEvent.encode(all[0]).contains("\"type\":\"task_started\""))
     }
 
+    // 预算字段加入前的旧记录没有 tokenBudget,读成 null;新记录往返不丢
+    @Test fun taskStartedTokenBudgetIsOptionalAndRoundTrips() {
+        val legacy = RunEvent.decode("{\"type\":\"task_started\",\"atMs\":1,\"goal\":\"查\",\"model\":\"m\",\"origin\":\"mcp\",\"stepLimit\":30}")
+        assertEquals(RunEvent.TaskStarted(1, "查", "m", "mcp", 30, null), legacy)
+        val fresh = RunEvent.TaskStarted(2, "查", "m", tokenBudget = 500_000)
+        assertEquals(fresh, RunEvent.decode(RunEvent.encode(fresh)))
+    }
+
     @Test fun oldScreenEventsDecodeAsObservationAndMedia() {
         val read = RunEvent.decode("""{"type":"screen_text","atMs":7,"step":2,"app":"com.x","names":["搜索","结果"],"inputs":["关键字"],"focused":"关键字"}""")
         assertEquals(RunEvent.Observed(7, 2, "搜索\n结果", source = "phone", place = Place.app("com.x"), inputs = listOf("关键字"), focused = "关键字"), read)

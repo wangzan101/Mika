@@ -65,6 +65,10 @@ data class TimelineHeader(
     val modelCalls: Int,
     /** 这次运行的步数上限;不限制或旧记录为 null。 */
     val stepLimit: Int? = null,
+    /** 这次运行的 token 预算;不限制或旧记录为 null。 */
+    val tokenBudget: Long? = null,
+    /** 按预算同一口径(input+output+cached)算的已用 token。 */
+    val tokensUsed: Long = 0,
     /** 用了几步(和 [stepLimit] 一起显示);步数用完后的最后一轮收尾记作第上限加一步,不算一步,所以不超过上限。 */
     val stepsUsed: Int = 0,
     val usedMemory: List<String> = emptyList(),
@@ -116,6 +120,8 @@ class RunTimelineViewModel(
             modelCalls = events.count { it is RunEvent.ModelReply },
             stepLimit = started?.stepLimit,
             stepsUsed = metrics?.steps?.let { n -> started?.stepLimit?.let { minOf(n, it) } ?: n } ?: 0,
+            tokenBudget = started?.tokenBudget,
+            tokensUsed = metrics?.let { it.inputTokens + it.outputTokens + it.cachedTokens } ?: 0,
             usedMemory = resolveMemory(events.filterIsInstance<RunEvent.MemoryUsed>().lastOrNull()?.ids.orEmpty()),
             metrics = metrics,
         )

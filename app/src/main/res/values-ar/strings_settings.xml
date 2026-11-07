@@ -10,7 +10,7 @@
     <string name="settings_not_set">غير مُعدّ</string>
     <string name="settings_phone_ops">التحكم بالهاتف</string>
     <string name="settings_during_work">تشغيل المهام</string>
-    <string name="settings_during_work_sub">الوضع المستقل، والسرعة، وحد الخطوات، والصوت</string>
+    <string name="settings_during_work_sub">الوضع المستقل، والسرعة، وحدّا الخطوات والرموز، والصوت</string>
     <string name="settings_notif_sub">لتغيير طريقة ظهورها، انتقل إلى إعدادات النظام</string>
     <string name="settings_privacy">بياناتي</string>
     <string name="settings_memory_data">الذاكرة والبيانات</string>

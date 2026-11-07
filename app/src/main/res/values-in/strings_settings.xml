@@ -10,7 +10,7 @@
     <string name="settings_not_set">Belum diatur</string>
     <string name="settings_phone_ops">Kontrol ponsel</string>
     <string name="settings_during_work">Menjalankan tugas</string>
-    <string name="settings_during_work_sub">Mode mandiri, kecepatan, batas langkah &amp; suara</string>
+    <string name="settings_during_work_sub">Mode mandiri, kecepatan, batas langkah &amp; token, suara</string>
     <string name="settings_notif_sub">Saat muncul, ubah di setelan sistem</string>
     <string name="settings_privacy">Data saya</string>
     <string name="settings_memory_data">Memori &amp; data</string>

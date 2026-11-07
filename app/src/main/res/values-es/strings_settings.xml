@@ -10,7 +10,7 @@
     <string name="settings_not_set">Sin configurar</string>
     <string name="settings_phone_ops">Control del teléfono</string>
     <string name="settings_during_work">Ejecución de tareas</string>
-    <string name="settings_during_work_sub">Modo autónomo, ritmo, límite de pasos y sonido</string>
+    <string name="settings_during_work_sub">Modo autónomo, ritmo, límites de pasos y tokens, sonido</string>
     <string name="settings_notif_sub">Si aparecen en pantalla, se cambia en los ajustes del sistema</string>
     <string name="settings_privacy">Mis datos</string>
     <string name="settings_memory_data">Memoria y datos</string>

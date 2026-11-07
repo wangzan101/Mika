@@ -10,7 +10,7 @@
     <string name="settings_not_set">未设置</string>
     <string name="settings_phone_ops">手机操作</string>
     <string name="settings_during_work">任务运行</string>
-    <string name="settings_during_work_sub">自主模式、操作节奏、步数上限与声音</string>
+    <string name="settings_during_work_sub">自主模式、操作节奏、步数与 token 预算、声音</string>
     <string name="settings_notif_sub">什么时候弹出、去系统里改</string>
     <string name="settings_privacy">我的数据</string>
     <string name="settings_memory_data">记忆与数据</string>

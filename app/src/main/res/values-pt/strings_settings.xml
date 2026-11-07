@@ -10,7 +10,7 @@
     <string name="settings_not_set">Não definido</string>
     <string name="settings_phone_ops">Controle do celular</string>
     <string name="settings_during_work">Execução de tarefas</string>
-    <string name="settings_during_work_sub">Modo autônomo, ritmo, limite de etapas e som</string>
+    <string name="settings_during_work_sub">Modo autônomo, ritmo, limites de etapas e tokens, som</string>
     <string name="settings_notif_sub">Quando elas aparecem, mude nas configurações do sistema</string>
     <string name="settings_privacy">Meus dados</string>
     <string name="settings_memory_data">Memória e dados</string>

@@ -10,7 +10,7 @@
     <string name="settings_not_set">설정 안 됨</string>
     <string name="settings_phone_ops">휴대전화 제어</string>
     <string name="settings_during_work">작업 실행</string>
-    <string name="settings_during_work_sub">자율 모드, 조작 속도, 단계 제한, 소리</string>
+    <string name="settings_during_work_sub">자율 모드, 조작 속도, 단계 및 토큰 제한, 소리</string>
     <string name="settings_notif_sub">팝업 표시 여부는 시스템 설정에서 바꿔요</string>
     <string name="settings_privacy">내 데이터</string>
     <string name="settings_memory_data">메모리 및 데이터</string>

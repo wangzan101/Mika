@@ -22,5 +22,5 @@
 ## 4. 验证
 
 - [x] 4.1 `./gradlew :core:test :core:cliTest :app:testDebugUnitTest` 全绿
-- [ ] 4.2 真机验证：设小预算跑一个任务到限收尾、改回不限正常跑、时间线显示两行；截图与时间线取证到 `evidence/`
-- [ ] 4.3 `updateReadme`（若 README generated 段涉及）＋提交 PR 关联 #158
+- [x] 4.2 真机验证：设小预算跑一个任务到限收尾、改回不限正常跑、时间线显示两行；截图与时间线取证到 `evidence/`
+- [x] 4.3 `updateReadme`（若 README generated 段涉及）＋提交 PR 关联 #158

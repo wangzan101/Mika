@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="a11y_service_description">這項系統權限能讓 Mika 讀取和操作螢幕上的任何內容。Mika 只會在自己的虛擬螢幕上使用這項權限來完成你交給它的任務；只有你把主螢幕上的任務交給它時，它才會在主螢幕上操作。</string>
-    <string name="channel_attention">需要你處理</string>
-    <string name="takeover_title">需要你處理</string>
-    <string name="takeover_title_reason">需要你處理：%1$s</string>
+    <string name="channel_attention">請你處理</string>
+    <string name="takeover_title">請你處理</string>
+    <string name="takeover_title_reason">請你處理：%1$s</string>
     <string name="takeover_reason_captcha">驗證碼</string>
     <string name="takeover_reason_login">登入</string>
     <string name="takeover_reason_access_blocked">安全性檢查</string>
     <string name="takeover_reason_payment">付款</string>
-    <string name="takeover_reason_decision">需要你決定</string>
+    <string name="takeover_reason_decision">請你決定</string>
     <string name="takeover_handed_over_hint">這個 App 已移至主螢幕。處理完畢後，點選「處理好了」；如果你已自行完成，點選「我自己做完了」。</string>
     <string name="takeover_web_busy">設定中有網站登入畫面。請先在該畫面點選「完成」，再點選「我來處理」。</string>
     <string name="takeover_move_to_main_failed">無法將 App 移至主螢幕。請再次點選「我來處理」重試。</string>
@@ -18,7 +18,7 @@
     <string name="action_finished_myself">我自己做完了</string>
     <string name="action_skip">跳過</string>
     <string name="action_cancel_task">取消任務</string>
-    <string name="input_title">需要你回答</string>
+    <string name="input_title">請你回答</string>
     <string name="no_answer_note">如果 %1$d 分鐘內沒有收到回答，Mika 將繼續執行。</string>
     <string name="input_too_late">回答已逾時：已過 %1$d 分鐘，Mika 已在沒有收到回答的情況下繼續執行。</string>
     <string name="action_approve">同意</string>
@@ -55,8 +55,8 @@
     <string name="speech_doubao_legacy">舊版主控台</string>
     <string name="speech_doubao_enter_app">語音應用程式 ID</string>
     <string name="speech_doubao_enter_key">輸入語音服務憑證</string>
-    <string name="speech_doubao_duration">依時數計費</string>
-    <string name="speech_doubao_concurrent">依同時連線數計費</string>
+    <string name="speech_doubao_duration">時數方案</string>
+    <string name="speech_doubao_concurrent">同時連線方案</string>
     <string name="speech_doubao_privacy">儲存時不會連線，也不會驗證是否可用；按住說話時，音訊會傳送至火山引擎，可能產生費用。憑證會加密儲存在這部手機上。</string>
     <string name="speech_doubao_save">儲存並使用</string>
     <string name="speech_doubao_remove">移除已儲存的憑證</string>

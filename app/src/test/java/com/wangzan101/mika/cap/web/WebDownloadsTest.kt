@@ -14,6 +14,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okio.Buffer
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -195,6 +196,39 @@ class WebDownloadsTest {
         val refused = big.save("blob:x", null, null, ByteArray(10))
         assertEquals("too_large", big.list().single { it.file == refused }.error)
     }
+    /** data: 的百分号载荷按字节解码:字面量 + 不是表单编码的空格,#401。 */
+    @Test
+    fun dataUrlKeepsLiteralPlusAndBytes() {
+        val d = downloads()
+        val plus = d.dataUrl("data:text/plain,a+b", "attachment; filename=\"plus.txt\"")
+        assertEquals("a+b", File(ws, plus.removePrefix("/workspace")).readText())
+
+        val encoded = d.dataUrl("data:text/plain,a%2Bb", "attachment; filename=\"encoded.txt\"")
+        assertEquals("a+b", File(ws, encoded.removePrefix("/workspace")).readText())
+
+        val space = d.dataUrl("data:text/plain,a%20b", "attachment; filename=\"space.txt\"")
+        assertEquals("a b", File(ws, space.removePrefix("/workspace")).readText())
+    }
+
+    /** 非 UTF-8 字节按字节落盘,不走字符串转码(#401)。 */
+    @Test
+    fun dataUrlKeepsNonUtf8Bytes() {
+        val d = downloads()
+        val raw = d.dataUrl("data:application/octet-stream,%FF%FE", "attachment; filename=\"raw.bin\"")
+        assertArrayEquals(
+            byteArrayOf(0xFF.toByte(), 0xFE.toByte()),
+            File(ws, raw.removePrefix("/workspace")).readBytes(),
+        )
+    }
+
+    /** 不合法的 % 序列原样保留为字面字节,不吞不猜。 */
+    @Test
+    fun dataUrlKeepsMalformedPercentLiteral() {
+        val d = downloads()
+        val literal = d.dataUrl("data:text/plain,100% of", "attachment; filename=\"literal.txt\"")
+        assertEquals("100% of", File(ws, literal.removePrefix("/workspace")).readText())
+    }
+
 
     /** 页面在链接上给的名字(<a download>)对每种下载都用上,清洗规则照旧;响应头里的名字优先,网址最后。 */
     @Test

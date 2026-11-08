@@ -226,7 +226,7 @@ class WebDownloads(
         if (payloadLength > limit) return failed(fileName(contentDisposition, "", mime, suggested), mime, TOO_LARGE)
         val payload = if (comma < 0) "" else url.substring(comma + 1)
         val bytes = runCatching {
-            if (base64) Base64.getDecoder().decode(payload) else URLDecoder.decode(payload, "UTF-8").toByteArray()
+            if (base64) Base64.getDecoder().decode(payload) else percentDecodeBytes(payload)
         }.getOrNull() ?: return failed(fileName(contentDisposition, "", mime, suggested), mime, "bad_data_url")
         return save(url, contentDisposition, mime, bytes, suggested)
     }
@@ -411,6 +411,38 @@ class WebDownloads(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" to "docx",
             "application/vnd.ms-excel" to "xls", "application/msword" to "doc", "text/html" to "html",
         )
+
+        /**
+         * data: 载荷按 RFC 3986 百分号解码到字节:字面量 `+` 保留为 0x2B(不是表单编码的
+         * 空格,#401),`%XX` 解为对应字节,不合法的 `%` 序列按字面字节原样保留。
+         * 与 URLDecoder 不同,不走字符串转码,非 UTF-8 字节(如 `%FF`)原样落盘。
+         */
+        fun percentDecodeBytes(payload: String): ByteArray {
+            fun hexValue(c: Char): Int = when (c) {
+                in '0'..'9' -> c - '0'
+                in 'a'..'f' -> c - 'a' + 10
+                in 'A'..'F' -> c - 'A' + 10
+                else -> -1
+            }
+            val out = java.io.ByteArrayOutputStream(payload.length)
+            var i = 0
+            while (i < payload.length) {
+                val c = payload[i]
+                val escaped = c == '%' && i + 2 < payload.length
+                if (escaped) {
+                    val high = hexValue(payload[i + 1])
+                    val low = hexValue(payload[i + 2])
+                    if (high >= 0 && low >= 0) {
+                        out.write((high shl 4) or low)
+                        i += 3
+                        continue
+                    }
+                }
+                out.write(c.code)
+                i += 1
+            }
+            return out.toByteArray()
+        }
 
         /** 下载的文件名:见类说明。[suggested] 是页面给的名字(`<a download>`),排在响应头之后、网址之前。 */
         fun fileName(contentDisposition: String?, url: String, mime: String?, suggested: String? = null): String {

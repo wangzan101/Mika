@@ -269,6 +269,27 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
     /** 浮在别的 App 上的悬浮胶囊。 */
     val capsule: CapsuleController by lazy { CapsuleController(this, taskState, foreground, resources.takeoverQueue) }
 
+    /** Mika 自己的朗读播放器:全进程一个,聊天里的「朗读」和设置页的测试共用。 */
+    val voicePlayer by lazy { com.wangzan101.mika.voice.VoicePlayer(this) }
+    private val voiceSettings by lazy { com.wangzan101.mika.settings.VoiceSettings.get(this) }
+
+    /** 合成一句话并在本机播放;没配置声音模型或合成失败时什么都不做。 */
+    private suspend fun speak(text: String) {
+        val state = voiceSettings.state.value
+        val choice = state.choice ?: return
+        val caps = voiceSettings.capabilities() ?: return
+        val tts = ProviderStore.get(this).ttsModel(choice, caps) ?: return
+        val response = tts.synthesize(
+            com.wangzan101.mika.core.model.TtsRequest(
+                text.take(state.maxCharsPerSpeak),
+                choice.voice.ifBlank { null },
+                choice.speed,
+                "wav",
+            ),
+        )
+        voicePlayer.play(response.bytes, response.mime)
+    }
+
     /** 人工示范。onCreate 里建好；在那之前的无障碍事件不采集。 */
     lateinit var teach: TeachRuntime
         private set
@@ -363,6 +384,11 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
             onTeachingBlocked = {
                 android.widget.Toast.makeText(app, tr(R.string.teach_blocked_task), android.widget.Toast.LENGTH_LONG).show()
             },
+            voiceReady = voiceSettings.state.map { it.enabled && it.choice != null }
+                .stateIn(scope, SharingStarted.Eagerly, voiceSettings.state.value.enabled && voiceSettings.state.value.choice != null),
+            voicePlayback = voicePlayer.state,
+            speakText = { text -> speak(text) },
+            stopVoice = { voicePlayer.stop() },
         )
     }
 
@@ -407,6 +433,9 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         scope.launch(Dispatchers.IO) { runCatching { mcp.writeUsbScript() }.onFailure { Log.w("MikaMcp", "cannot write USB script", it) } }
         // 上次导出写到一半被杀留下的空壳条目
         scope.launch { runCatching { ShareExporter(this@MikaApp).cleanPending() } }
+        // 上次存音乐库写到一半被杀留下的空壳条目
+        scope.launch { runCatching { com.wangzan101.mika.cap.audio.AudioExporter(this@MikaApp).cleanPending() } }
+        scope.launch { runCatching { com.wangzan101.mika.media.AudioShareExporter(this@MikaApp).cleanPending() } }
         // 上次进程留下的网页上传副本
         scope.launch { runCatching { WebFiles.clearStale(this@MikaApp, SandboxDirs(this@MikaApp).gate) } }
         // 更新已经装上后,关于页下好的安装包

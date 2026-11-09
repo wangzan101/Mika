@@ -61,6 +61,13 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         prefs.edit().putBoolean(MUTE_TARGET, on).commit()
     }
 
+    /** 任务结束后保留被操作的 App(正在出声的也留,静音还原后声音继续);默认关,下一个任务起生效。 */
+    fun keepAppsAfterTask(): Boolean = prefs.getBoolean(KEEP_APPS_AFTER_TASK, false)
+
+    fun setKeepAppsAfterTask(on: Boolean) {
+        prefs.edit().putBoolean(KEEP_APPS_AFTER_TASK, on).commit()
+    }
+
     /** 在 App 里操作的节奏:快、标准(默认)、像人(见 [OperatingPace])。 */
     fun operatingPace(): OperatingPace = OperatingPace.parse(prefs.getString(OPERATING_PACE, null)) ?: OperatingPace.DEFAULT
 
@@ -185,6 +192,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val PARALLEL_MAX = "parallel_max"
         private const val TASK_STEP_LIMIT = "task_step_limit"
         private const val KEEP_SCREEN_ON = "keep_screen_on"
+        private const val KEEP_APPS_AFTER_TASK = "keep_apps_after_task"
         private const val MUTE_TARGET = "mute_target"
         private const val OPERATING_PACE = "operating_pace"
         private const val SELF_CONFIG = "self_config"

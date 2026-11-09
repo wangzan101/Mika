@@ -66,6 +66,8 @@
     <string name="settings_keep_on_sub">تبقى الشاشة قيد التشغيل أثناء تنفيذ المهمة (وقد تخفت عند عدم استخدامها)، ثم تعود إلى وضعها المعتاد</string>
     <string name="settings_mute">كتم التطبيق المستخدم</string>
     <string name="settings_mute_sub">تظل التطبيقات التي تستخدمها Mika صامتة؛ ويعود الصوت عندما تستلم التحكم</string>
+    <string name="settings_keep_apps">إبقاء التطبيقات بعد المهام</string>
+    <string name="settings_keep_apps_sub">تبقى التطبيقات التي استخدمها Mika مفتوحة بعد انتهاء المهمة، حتى التي تشغّل صوتًا؛ يستمر الصوت بعد المهمة.</string>
     <string name="settings_pace">سرعة التشغيل</string>
     <string name="settings_pace_fast">سريع</string>
     <string name="settings_pace_fast_detail">دون توقف بين الخطوات؛ يُملأ النص دفعة واحدة</string>

@@ -743,10 +743,16 @@ class ShellService(
      * 挪和收尾在 [launchLock] 里做;中间等过渡(最多 [SettleBehind.TIMEOUT_MS])不占着锁,别的任务照常能打开 App。
      * 这段时间里被别的任务拿到它屏上的不再管;留下的任务也要等收尾时才记进 [kept],等的时候 [resumeKept] 不会拿它。
      */
-    override fun finishDisplay(displayId: Int, keep: Array<String>?, close: Array<String>?): Bundle? {
+    override fun finishDisplay(displayId: Int, keep: Array<String>?, close: Array<String>?): Bundle? =
+        finishDisplay(displayId, keep, close, keepPlaying = false)
+
+    override fun finishDisplayKeepPlaying(displayId: Int, keep: Array<String>?, close: Array<String>?): Bundle? =
+        finishDisplay(displayId, keep, close, keepPlaying = true)
+
+    private fun finishDisplay(displayId: Int, keep: Array<String>?, close: Array<String>?, keepPlaying: Boolean): Bundle? {
         val sorting = synchronized(launchLock) {
             if (!ownDisplay(displayId)) return null
-            sortAndMove(displayId, keep, close)
+            sortAndMove(displayId, keep, close, keepPlaying)
         }
         val settled = settleBehind(sorting.moved.mapTo(LinkedHashSet()) { it.task.id })
         return synchronized(launchLock) { closeOut(displayId, sorting, settled) }
@@ -760,7 +766,7 @@ class ShellService(
         val hidden: Set<Int>,
     )
 
-    private fun sortAndMove(displayId: Int, keep: Array<String>?, close: Array<String>?): Sorting {
+    private fun sortAndMove(displayId: Int, keep: Array<String>?, close: Array<String>?, keepPlaying: Boolean = false): Sorting {
         val closed = ArrayList<String>()
         val notes = LinkedHashSet<String>()
         // 已挪到主屏后面的;中途出错也照记,下次打开接得上
@@ -773,7 +779,7 @@ class ShellService(
             val idField = TASK_INFO.getField("taskId")
             val byId = rows.associateBy { idField.getInt(it) }
             val fates = AppsAfterTask.decide(rows.map { afterTaskRow(it, playing) },
-                AppsAfterTask.normalize(keep, myUser), AppsAfterTask.normalize(close, myUser))
+                AppsAfterTask.normalize(keep, myUser), AppsAfterTask.normalize(close, myUser), keepPlaying)
             var supported = true
             for (f in fates) {
                 if (!f.keep) { closed += AppsAfterTask.closedEntry(f); continue }

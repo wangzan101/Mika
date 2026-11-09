@@ -60,6 +60,8 @@
     <string name="settings_keep_on_sub">A tela fica ligada enquanto uma tarefa roda (escurece como sempre quando você não está usando) e depois volta ao normal</string>
     <string name="settings_mute">Silenciar o app em uso</string>
     <string name="settings_mute_sub">Os apps que o Mika usa ficam em silêncio; o som volta quando você assume o controle</string>
+    <string name="settings_keep_apps">Manter apps após as tarefas</string>
+    <string name="settings_keep_apps_sub">Os apps que o Mika usou permanecem abertos ao fim da tarefa, mesmo os tocando áudio; o som continua após a tarefa.</string>
     <string name="settings_pace">Ritmo de operação</string>
     <string name="settings_pace_fast">Rápido</string>
     <string name="settings_pace_fast_detail">Sem pausas entre os passos; o texto é preenchido de uma vez</string>

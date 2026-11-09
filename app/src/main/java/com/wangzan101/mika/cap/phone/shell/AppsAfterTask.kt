@@ -18,6 +18,8 @@ object AppsAfterTask {
         PlaybackUnknown("playback_unknown"),
         /** 默认:留下。 */
         Default("default"),
+        /** 用户在设置里开了「任务结束后保留被操作的 App」:正在出声的也留下。 */
+        UserSetting("user_setting"),
         /** Mika 自己的页面。 */
         Own("mika"),
         /** 不是普通 App 的页面。 */
@@ -47,24 +49,29 @@ object AppsAfterTask {
         AppAudioKey.parse(k)?.let { (pkg, user) -> AppAudioKey.of(pkg, user?.takeIf { it != myUser }) }
     }.toSet()
 
-    fun decide(tasks: List<Task>, keep: Set<String>, close: Set<String>): List<Fate> = tasks.map { t ->
+    /**
+     * [keepPlaying]:用户开了「任务结束后保留被操作的 App」——正在出声的(和读不到出声状态又被静着的)也留下,
+     * 记成 [Why.UserSetting];模型标的 close、自家页面这些规则不受它影响。
+     */
+    fun decide(tasks: List<Task>, keep: Set<String>, close: Set<String>, keepPlaying: Boolean = false): List<Fate> = tasks.map { t ->
         when {
             t.own -> Fate(t, false, Why.Own)
             !t.standard -> Fate(t, false, Why.NotApp)
             t.keys.any { it in close } -> Fate(t, false, Why.Marked)
             t.keys.any { it in keep } -> Fate(t, true, Why.Marked)
-            t.playing == true -> Fate(t, false, Why.Playing)
+            t.playing == true -> if (keepPlaying) Fate(t, true, Why.UserSetting) else Fate(t, false, Why.Playing)
             // 读不到在不在出声:没被静着的留下(它要出声早就有声了,收尾不改变什么);静着的按出声算,免得还原时突然响
-            t.playing == null && t.muted -> Fate(t, false, Why.PlaybackUnknown)
+            t.playing == null && t.muted -> if (keepPlaying) Fate(t, true, Why.UserSetting) else Fate(t, false, Why.PlaybackUnknown)
             else -> Fate(t, true, Why.Default)
         }
     }
 
     /**
-     * 挪过去之后再看一眼:没标过 keep、这会儿开始出声的,改成关掉(静音一还原就会响)。标过 keep 的照留。
+     * 挪过去之后再看一眼:没标过 keep、这会儿开始出声的,改成关掉(静音一还原就会响)。标过 keep 的照留;
+     * 用户开了「保留被操作的 App」留下的([Why.UserSetting])同样照留——出声保留正是用户选的。
      */
     fun recheck(fate: Fate, playingNow: Boolean?): Fate =
-        if (fate.keep && fate.why != Why.Marked && playingNow == true) fate.copy(keep = false, why = Why.Playing) else fate
+        if (fate.keep && fate.why != Why.Marked && fate.why != Why.UserSetting && playingNow == true) fate.copy(keep = false, why = Why.Playing) else fate
 
     /**
      * `dumpsys audio` 里正在播放的那些 uid:每个播放器一行 `AudioPlaybackConfiguration piid:.. u/pid:<uid>/<pid> state:started ..`。

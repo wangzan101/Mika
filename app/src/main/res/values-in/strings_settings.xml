@@ -56,6 +56,8 @@
     <string name="settings_keep_on_sub">Layar tetap menyala selama tugas berjalan (tetap meredup seperti biasa saat tidak dipakai), lalu kembali normal</string>
     <string name="settings_mute">Bisukan aplikasi yang dipakai</string>
     <string name="settings_mute_sub">Aplikasi yang dipakai Mika tetap senyap; suara kembali saat Anda mengambil alih</string>
+    <string name="settings_keep_apps">Simpan aplikasi setelah tugas</string>
+    <string name="settings_keep_apps_sub">Aplikasi yang dioperasikan Mika tetap terbuka setelah tugas, termasuk yang memutar audio; suara berlanjut setelah tugas.</string>
     <string name="settings_pace">Kecepatan pengoperasian</string>
     <string name="settings_pace_fast">Cepat</string>
     <string name="settings_pace_fast_detail">Tanpa jeda antarlangkah; teks langsung diisi sekaligus</string>

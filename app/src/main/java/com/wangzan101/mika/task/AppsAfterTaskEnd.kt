@@ -29,11 +29,13 @@ internal object AppsAfterTaskEnd {
         val diagnostics: String get() = AppsAfterTask.diagnosticsLine(kept.size, closed, note)
     }
 
-    fun finish(shell: IMikaShell, displayId: Int, marks: AfterTaskMarks?): Outcome {
+    /** [keepPlaying]:用户开了「任务结束后保留被操作的 App」,正在出声的也走保留那条路(见 [finishDisplayKeepPlaying])。 */
+    fun finish(shell: IMikaShell, displayId: Int, marks: AfterTaskMarks?, keepPlaying: Boolean = false): Outcome {
         val keep = marks?.keepKeys().orEmpty().toTypedArray()
         val close = marks?.closeKeys().orEmpty().toTypedArray()
         val result = try {
-            shell.finishDisplay(displayId, keep, close)
+            if (keepPlaying) shell.finishDisplayKeepPlaying(displayId, keep, close)
+            else shell.finishDisplay(displayId, keep, close)
         } catch (t: Throwable) {
             Log.w(TAG, "finishDisplay failed; apps close with the display", t)
             null

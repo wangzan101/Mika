@@ -56,6 +56,8 @@
     <string name="settings_keep_on_sub">タスクの実行中は画面をオンのままにし(操作していないときは通常どおり暗くなります)、終わると通常に戻します</string>
     <string name="settings_mute">使用中のアプリをミュート</string>
     <string name="settings_mute_sub">Mika が使っているアプリは無音になり、あなたが操作を引き継ぐと音が戻ります</string>
+    <string name="settings_keep_apps">タスク後に操作したアプリを残す</string>
+    <string name="settings_keep_apps_sub">タスク終了時に Mika が操作したアプリを残します。音を出しているものも残り、終了後も音は続きます。</string>
     <string name="settings_pace">操作のペース</string>
     <string name="settings_pace_fast">速い</string>
     <string name="settings_pace_fast_detail">ステップの間に間を置かず、テキストは一度に入力します</string>

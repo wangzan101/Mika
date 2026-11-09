@@ -3,6 +3,7 @@ package com.wangzan101.mika.cap.phone.shell
 import com.wangzan101.mika.cap.phone.shell.AppsAfterTask.Why
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppsAfterTaskTest {
@@ -11,8 +12,8 @@ class AppsAfterTaskTest {
     private fun task(id: Int, key: String, playing: Boolean? = false, standard: Boolean = true, own: Boolean = false) =
         AppsAfterTask.Task(id, listOf(key), standard, own, playing)
 
-    private fun fates(vararg t: AppsAfterTask.Task, keep: Set<String> = emptySet(), close: Set<String> = emptySet()) =
-        AppsAfterTask.decide(t.toList(), keep, close).associate { it.task.id to (it.keep to it.why) }
+    private fun fates(vararg t: AppsAfterTask.Task, keep: Set<String> = emptySet(), close: Set<String> = emptySet(), keepPlaying: Boolean = false) =
+        AppsAfterTask.decide(t.toList(), keep, close, keepPlaying).associate { it.task.id to (it.keep to it.why) }
 
     @Test fun keepsQuietAppsAndClosesPlayingOnesByDefault() {
         val f = fates(task(1, "a.quiet"), task(2, "a.music", playing = true))
@@ -27,6 +28,27 @@ class AppsAfterTaskTest {
         assertEquals(true to Why.Marked, fates(muted, keep = setOf("a.music"))[2])
         // 读得到、没在出声的,静着也留下
         assertEquals(true to Why.Default, fates(muted.copy(playing = false))[2])
+    }
+
+    // 用户开了「任务结束后保留被操作的 App」:出声的和读不到出声状态又被静着的也留下,记 user_setting
+    @Test fun keepPlayingKeepsLoudAppsAsUserAsked() {
+        val muted = AppsAfterTask.Task(2, listOf("a.music"), standard = true, own = false, playing = null, muted = true)
+        val f = fates(task(1, "a.game", playing = true), muted, keepPlaying = true)
+        assertEquals(true to Why.UserSetting, f[1])
+        assertEquals(true to Why.UserSetting, f[2])
+        // 模型标 close 的照样关;自家页面、非普通 App 页面不受影响
+        val still = fates(task(3, "a.login"), task(4, "mika", own = true), close = setOf("a.login"), keepPlaying = true)
+        assertEquals(false to Why.Marked, still[3])
+        assertEquals(false to Why.Own, still[4])
+    }
+
+    @Test fun keepPlayingSparesLoudAppsFromTheRecheck() {
+        val fate = AppsAfterTask.decide(listOf(task(1, "a.game", playing = false)), emptySet(), emptySet(), true).single()
+        val kept = AppsAfterTask.recheck(fate.copy(why = Why.UserSetting), playingNow = true)
+        assertTrue(kept.keep)
+        // 默认口径不变:没标过又出声的还是挪回关掉
+        val ordinary = AppsAfterTask.decide(listOf(task(2, "a.game")), emptySet(), emptySet(), false).single()
+        assertEquals(false to Why.Playing, AppsAfterTask.recheck(ordinary, playingNow = true).let { it.keep to it.why })
     }
 
     @Test fun marksOverrideTheDefault() {

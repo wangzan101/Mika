@@ -195,6 +195,7 @@ fun DuringWorkScreen(
     autonomous: Boolean = false, onAutonomous: (Boolean) -> Unit = {},
     operatingPace: OperatingPace = OperatingPace.DEFAULT, onOperatingPace: (OperatingPace) -> Unit = {},
     selfConfig: Boolean = false, onSelfConfig: (Boolean) -> Unit = {},
+    keepApps: Boolean = false, onKeepApps: (Boolean) -> Unit = {},
     stepLimit: Int? = null, onStepLimit: (Int?) -> Unit = {},
 ) {
     var editingLimit by remember { mutableStateOf(false) }
@@ -212,6 +213,13 @@ fun DuringWorkScreen(
             }
             ListRow(MikaIcons.Mute, stringResource(R.string.settings_mute), stringResource(R.string.settings_mute_sub), onClick = { onMuteTarget(!muteTarget) }) {
                 MikaSwitch(muteTarget, onMuteTarget, Modifier.testTag("work-mute-target"))
+            }
+            ListRow(
+                MikaIcons.Apps, stringResource(R.string.settings_keep_apps), stringResource(R.string.settings_keep_apps_sub),
+                // 接管接着玩的一类场景:任务结束也别把被操作的 App 关掉,正在出声的也留
+                onClick = { onKeepApps(!keepApps) },
+            ) {
+                MikaSwitch(keepApps, onKeepApps, Modifier.testTag("work-keep-apps"))
             }
             ListRow(
                 MikaIcons.Clock, stringResource(R.string.settings_step_limit),

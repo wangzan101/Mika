@@ -60,6 +60,8 @@
     <string name="settings_keep_on_sub">La pantalla se queda encendida mientras se ejecuta una tarea (se atenúa como siempre si no la usas) y luego vuelve a la normalidad</string>
     <string name="settings_mute">Silenciar la app en uso</string>
     <string name="settings_mute_sub">Las apps que Mika usa se quedan en silencio; el sonido vuelve cuando tomas el control</string>
+    <string name="settings_keep_apps">Conservar apps tras las tareas</string>
+    <string name="settings_keep_apps_sub">Las apps que Mika usó permanecen abiertas al terminar la tarea, incluso si reproducen audio; el sonido sigue al terminar.</string>
     <string name="settings_pace">Ritmo de manejo</string>
     <string name="settings_pace_fast">Rápido</string>
     <string name="settings_pace_fast_detail">Sin pausas entre pasos; el texto se rellena de golpe</string>

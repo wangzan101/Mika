@@ -56,6 +56,8 @@
     <string name="settings_keep_on_sub">작업이 실행되는 동안 화면이 켜져 있고(사용하지 않을 때는 평소처럼 어두워져요), 끝나면 원래대로 돌아가요</string>
     <string name="settings_mute">사용 중인 앱 음소거</string>
     <string name="settings_mute_sub">Mika가 쓰는 앱은 소리가 나지 않고, 내가 직접 처리하면 소리가 돌아와요</string>
+    <string name="settings_keep_apps">작업 후 조작한 앱 유지</string>
+    <string name="settings_keep_apps_sub">작업이 끝나도 Mika가 조작한 앱을 남겨 둡니다. 소리 나는 앱도 유지되며 작업 후에도 소리가 계속됩니다.</string>
     <string name="settings_pace">조작 속도</string>
     <string name="settings_pace_fast">빠르게</string>
     <string name="settings_pace_fast_detail">단계 사이에 쉬지 않고 텍스트를 한 번에 입력해요</string>

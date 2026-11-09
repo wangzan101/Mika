@@ -62,6 +62,8 @@
     <string name="settings_keep_on_sub">Пока выполняется задача, экран не гаснет (без действий он, как обычно, затемняется), а потом всё возвращается как было</string>
     <string name="settings_mute">Отключать звук используемого приложения</string>
     <string name="settings_mute_sub">Приложения, с которыми работает Mika, молчат; звук возвращается, когда вы берёте управление на себя</string>
+    <string name="settings_keep_apps">Оставлять приложения после задач</string>
+    <string name="settings_keep_apps_sub">Приложения, которыми пользовался Mika, остаются открытыми после задачи, даже воспроизводящие звук; звук продолжится после задачи.</string>
     <string name="settings_pace">Темп работы</string>
     <string name="settings_pace_fast">Быстрый</string>
     <string name="settings_pace_fast_detail">Без пауз между шагами; текст вводится сразу</string>

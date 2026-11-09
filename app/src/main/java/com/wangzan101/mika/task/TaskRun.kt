@@ -526,6 +526,8 @@ class TaskRun(
                 CoroutineExceptionHandler { _, e -> Log.w(TAG, "task side job failed", e) },
         )
         sideScope = side
+        // 任务结束后保留被操作的 App(连出声的):开工时读一次(收尾在 finally 里也看得到),下一个任务起生效
+        val keepAppsAfterTask = FeatureFlags.get(service).keepAppsAfterTask()
         try {
             // 用户在「干活时」关掉了常亮就不拿唤醒锁;开跑就按此刻的状态(准备中)拿上:
             // 开模型、读知识、选路线、判断意图这些第一步之前的准备和推理期间屏幕也不熄
@@ -1027,7 +1029,7 @@ class TaskRun(
                 try {
                     // 先定 Mika 屏上 App 的去留(留下的挪到主屏后面、正在出声的关掉)并释放屏,再还原静音:留下的不会突然出声
                     val apps = phone?.takeIf { !shellDied }?.let { p ->
-                        p.display.current?.let { d -> AppsAfterTaskEnd.finish(p.shell, d.displayId, afterTask) }
+                        p.display.current?.let { d -> AppsAfterTaskEnd.finish(p.shell, d.displayId, afterTask, keepAppsAfterTask) }
                     }
                     record?.let { r ->
                         apps?.let { r.event(RunEvent.State(System.currentTimeMillis(), "apps_after_task", it.detail)) }

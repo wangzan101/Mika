@@ -56,6 +56,8 @@
     <string name="settings_keep_on_sub">任務進行時螢幕不熄滅(沒在用時照常變暗),結束後恢復</string>
     <string name="settings_mute">被操作的 App 靜音</string>
     <string name="settings_mute_sub">Mika 操作的 App 不出聲,你接手時恢復聲音</string>
+    <string name="settings_keep_apps">任務結束後保留被操作的 App</string>
+    <string name="settings_keep_apps_sub">任務結束時被 Mika 操作的 App 留在背景，正在出聲的也保留，任務結束後聲音繼續。</string>
     <string name="settings_pace">操作節奏</string>
     <string name="settings_pace_fast">快</string>
     <string name="settings_pace_fast_detail">步與步之間不停，文字一次填好</string>

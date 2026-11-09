@@ -449,9 +449,26 @@ class ChatViewModel(
     /** 正在跟用户学习时不另开任务，也不把这句话记成已经开始。 */
     private val teaching: () -> Boolean = { false },
     private val onTeachingBlocked: () -> Unit = {},
+    /** 朗读一条回答;没配置声音模型时不做。 */
+    private val speakText: suspend (String) -> Unit = {},
+    private val stopVoice: () -> Unit = {},
+    private val voicePlayback: StateFlow<com.wangzan101.mika.voice.VoicePlayback> =
+        MutableStateFlow(com.wangzan101.mika.voice.VoicePlayback.Idle),
+    private val voiceReady: StateFlow<Boolean> = MutableStateFlow(false),
 ) {
     /** 用户在对话页上关掉留在后台的那一页。 */
     fun closeKeptPage() = closeKept()
+
+    /** 说话状态;回答下面的「朗读/停止」按它显示。 */
+    val voice: StateFlow<com.wangzan101.mika.voice.VoicePlayback> get() = voicePlayback
+    /** 有没有可用的声音模型;没有时不显示朗读入口。 */
+    val canSpeak: StateFlow<Boolean> get() = voiceReady
+
+    fun speak(text: String) {
+        scope.launch { speakText(text) }
+    }
+
+    fun stopSpeaking() = stopVoice()
 
     private val _ui = MutableStateFlow(ChatUi())
     val ui: StateFlow<ChatUi> = _ui.asStateFlow()
@@ -1813,6 +1830,9 @@ class ToolLabels(private val tools: ToolIndex, private val legacy: LegacyNames =
             "查看已装的 App" to R.string.tool_list_apps,
             "打开 App" to R.string.tool_open_app,
             "分享文字到 App" to R.string.tool_share_text,
+            "分享音频到 App" to R.string.tool_share_audio,
+            "生成语音" to R.string.tool_audio_generate,
+            "保存音频" to R.string.tool_audio_save,
             "设闹钟" to R.string.tool_set_alarm,
             "设计时器" to R.string.tool_set_timer,
             "查看闹钟" to R.string.tool_show_alarms,

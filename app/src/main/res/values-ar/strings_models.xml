@@ -4,6 +4,7 @@
     <string name="model_context_note">تُستخدم القيم التلقائية للحقول الفارغة. تُطبّق الإعدادات في المهمة التالية على جميع الأدوار التي تستخدم هذا المزوّد وهذا النموذج.</string>
     <string name="model_context_window">نافذة السياق (رموز)</string>
     <string name="model_context_trigger">حد بدء ضغط السياق (رموز)</string>
+    <string name="model_context_read_timeout">مهلة القراءة (بالثواني)</string>
     <string name="model_context_auto">تلقائي · %1$d</string>
     <string name="model_context_integer">أدخل عددًا صحيحًا موجبًا.</string>
     <string name="model_context_range">النطاق المسموح (رموز) · %1$d–%2$d</string>
@@ -208,4 +209,7 @@
     <string name="speech_footer">تُدرج النماذج التي تبدو مخصصة للكلام فقط. إذا لم يظهر نموذجك، فاكتب اسمه؛ وسيُفرّغ مقطع قصير للاختبار عند اختياره.</string>
     <string name="speech_pick_failed">تعذّر على هذا النموذج تفريغ التسجيل: %1$s</string>
     <string name="speech_pick_timeout">لم يستجب %1$s لمقطع الاختبار خلال %2$d ثانية</string>
+    <string name="models_daily_token_budget">ميزانية Token اليومية للمزود</string>
+    <string name="models_daily_token_budget_sub">تُحسب رموز الإدخال والإخراج المُبلغ عنها لجميع نماذج هذا المزود وأغراضه خلال اليوم المحلي. عند بلوغ الحد يُحظر الطلب التالي، وقد تتجاوزه الطلبات الجارية. الاستخدام غير المُبلغ عنه يساوي صفرًا، وتُستأنف الطلبات عند تغير التاريخ المحلي.</string>
+    <string name="models_daily_token_budget_save_failed">تعذر حفظ الميزانية. ما زال الإعداد السابق ساريًا.</string>
 </resources>

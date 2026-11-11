@@ -4,6 +4,7 @@
     <string name="model_context_note">Пустые поля заполняются автоматически. Настройки применяются со следующей задачи для всех ролей, использующих этого провайдера и эту модель.</string>
     <string name="model_context_window">Контекстное окно (токены)</string>
     <string name="model_context_trigger">Порог сжатия (токены)</string>
+    <string name="model_context_read_timeout">Таймаут чтения (секунды)</string>
     <string name="model_context_auto">Авто · %1$d</string>
     <string name="model_context_integer">Введите положительное целое число.</string>
     <string name="model_context_range">Допустимый диапазон (токены) · %1$d–%2$d</string>
@@ -200,4 +201,7 @@
     <string name="speech_footer">В списке только модели, похожие на речевые. Если вашей нет, введите её название; при выборе короткий фрагмент будет расшифрован для проверки.</string>
     <string name="speech_pick_failed">Эта модель не смогла расшифровать речь: %1$s</string>
     <string name="speech_pick_timeout">Модель %1$s не ответила на тестовый фрагмент за %2$d с</string>
+    <string name="models_daily_token_budget">Дневной бюджет токенов провайдера</string>
+    <string name="models_daily_token_budget_sub">Учитываются сообщённые входные и выходные токены всех моделей и назначений провайдера за локальный календарный день. При достижении лимита следующий запрос блокируется; выполняемые запросы могут превысить его. Несообщённое использование считается равным 0. Учёт начинается заново при смене локальной даты.</string>
+    <string name="models_daily_token_budget_save_failed">Не удалось сохранить бюджет. Прежняя настройка остаётся в силе.</string>
 </resources>

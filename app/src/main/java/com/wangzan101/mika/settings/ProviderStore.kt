@@ -33,6 +33,7 @@ import com.wangzan101.mika.core.model.PromptCaching
 import com.wangzan101.mika.core.model.ResponsesModel
 import com.wangzan101.mika.core.model.Role
 import com.wangzan101.mika.core.model.ToolSpec
+import com.wangzan101.mika.core.usage.TokenBudgetLimits
 import com.wangzan101.mika.core.usage.UsagePurpose
 import com.wangzan101.mika.core.usage.UsageSink
 import com.wangzan101.mika.core.usage.UsageSource
@@ -54,6 +55,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
@@ -146,6 +148,8 @@ data class Provider(
     val contextSettings: Map<String, ModelContextSettings> = emptyMap(),
     /** 用户说的某个模型能不能看图(按模型名):比列表和预设初值都算数,见 [ModelOptions.seesImages]。 */
     val visionOverrides: Map<String, Boolean> = emptyMap(),
+    /** 这家每天所有模型、用途合计的已报告 Token 预算；null 不限制。 */
+    val dailyTokenBudget: Long? = null,
 ) {
     val key: String get() = ProviderConnection.keyOf(kind, baseUrl, name)
 
@@ -157,12 +161,16 @@ data class Provider(
         kind != ProviderConfig.Kind.ChatGpt && kind != ProviderConfig.Kind.Xai && models?.isEmpty() == true && model !in verifiedModels
 }
 
-/** 留空的窗口沿用所选模型配置，留空的触发点交给核心自动计算。 */
-data class ModelContextSettings(val windowTokens: Int? = null, val triggerTokens: Int? = null) {
+/** OkHttp 把超时换算为 Int 毫秒，秒数必须在换算后仍能存下。 */
+internal val MODEL_READ_TIMEOUT_SECONDS = 1..(Int.MAX_VALUE / 1_000)
+
+/** 留空的窗口沿用所选模型配置，留空的触发点交给核心自动计算，留空的读超时用全局默认(120 秒)。 */
+data class ModelContextSettings(val windowTokens: Int? = null, val triggerTokens: Int? = null, val readTimeoutSeconds: Int? = null) {
     fun limits(modelWindow: Int): ContextLimits = ContextLimits.of(windowTokens ?: modelWindow, triggerTokens)
 
     fun validFor(modelWindow: Int): Boolean = (windowTokens == null || windowTokens > 0) &&
-        (triggerTokens == null || (triggerTokens > 0 && triggerTokens == limits(modelWindow).trigger))
+        (triggerTokens == null || (triggerTokens > 0 && triggerTokens == limits(modelWindow).trigger)) &&
+        (readTimeoutSeconds == null || readTimeoutSeconds in MODEL_READ_TIMEOUT_SECONDS)
 }
 
 /** 一个用途选了什么:一个具体模型、用主模型,或不用(只有看图可以不用)。 */
@@ -237,13 +245,15 @@ data class RoleChoices(
 /**
  * 建一个模型客户端时额外给的:[headers] 每个请求都带(客户端标识、会话号,见 [ClientHeaders]);
  * [maxOutputTokens] 限制回复长度(连接测试用),null 按适配器默认;[reasoningEffort] 是这个用途选的思考强度;
- * [thinkingTypes] 是模型列表写明这个模型接受的思考方式(见 [ListedModel.thinkingTypes]),没说为 null。
+ * [thinkingTypes] 是模型列表写明这个模型接受的思考方式(见 [ListedModel.thinkingTypes]),没说为 null;
+ * [readTimeoutSeconds] 是这条配置单独的读超时,慢速本地推理(#295)可调大,null 用全局默认(120 秒)。
  */
 data class ClientSetup(
     val headers: Map<String, String> = emptyMap(),
     val maxOutputTokens: Int? = null,
     val reasoningEffort: String? = null,
     val thinkingTypes: List<String>? = null,
+    val readTimeoutSeconds: Int? = null,
 )
 
 /** 「测试并保存」试调用(见 [ProviderStore.probe])的结果。 */
@@ -274,6 +284,8 @@ class ProviderStore(
     dir: File,
     private val cipher: KeyCipher,
     private val usage: UsageSink = UsageSink { _, _ -> },
+    /** 每次请求前实时查询这家当前本地日的已报告 Token；默认不启用每日限制。 */
+    private val dailyUsage: (String) -> Long = { 0L },
     private val newId: () -> String = { UUID.randomUUID().toString() },
     /** 发给模型服务的 User-Agent;App 给 `Mika/<版本>`。 */
     private val userAgent: String = "Mika",
@@ -304,6 +316,10 @@ class ProviderStore(
     private val _providers = MutableStateFlow<List<Provider>>(emptyList())
     /** 已连接的服务商,按连接的先后。 */
     val providers: StateFlow<List<Provider>> = _providers.asStateFlow()
+
+    // 换 Key 时服务商列表可能没变，额度页用版本号作废旧结果。
+    private val _providerKeyRevisions = MutableStateFlow<Map<String, Long>>(emptyMap())
+    internal val providerKeyRevisions = _providerKeyRevisions.asStateFlow()
 
     private val _configs = MutableStateFlow<List<ProviderConfig>>(emptyList())
     val configs: StateFlow<List<ProviderConfig>> = _configs.asStateFlow()
@@ -351,6 +367,17 @@ class ProviderStore(
         return runCatching { String(cipher.decrypt(decode(enc))) }.getOrNull()
     }
 
+    /** 只为仍匹配这次额度查询的服务商配置取 Key。 */
+    @Synchronized
+    internal fun allowanceKey(provider: Provider, revision: Long): String? =
+        if (matchesAllowanceConnection(provider, revision)) providerKey(provider.id) else null
+
+    internal fun matchesAllowanceConnection(provider: Provider, revision: Long): Boolean {
+        val current = provider(provider.id) ?: return false
+        return current.baseUrl == provider.baseUrl && current.kind == provider.kind && current.signIn == provider.signIn &&
+            (_providerKeyRevisions.value[provider.id] ?: 0L) == revision
+    }
+
     /** 这个服务商存了 Key 没有(本地服务可以不填)。 */
     fun hasKey(providerId: String): Boolean = synchronized(this) { providerId in keys }
 
@@ -383,6 +410,7 @@ class ProviderStore(
             savedUntested = untested && verified.isEmpty() && found.verifiedModels.isEmpty() && listed.isEmpty(),
         )
         _providers.value = _providers.value.map { if (it.id == p.id) p else it }
+        repairUnavailableReasoningEfforts()
         if (apiKey != null) setKey(p.id, apiKey)
         writeConfig()
         return p
@@ -395,6 +423,7 @@ class ProviderStore(
         _providers.value = _providers.value.map {
             if (it.id == providerId) it.copy(models = models, savedUntested = false) else it
         }
+        repairUnavailableReasoningEfforts()
         writeConfig()
     }
 
@@ -443,6 +472,7 @@ class ProviderStore(
         _roles.value = _roles.value.keepOnly(_configs.value.map { it.id }.toSet())
         prune()
         if (providerId in keys) setKey(providerId, "")
+        _providerKeyRevisions.value -= providerId
         writeConfig()
     }
 
@@ -511,6 +541,21 @@ class ProviderStore(
         return true
     }
 
+    /** 修改这家每日 Token 预算；写盘失败时保留内存和盘上原值。 */
+    @Synchronized
+    fun setDailyTokenBudget(providerId: String, limit: Long?): Boolean {
+        if (limit != null && !TokenBudgetLimits.valid(limit)) return false
+        val p = provider(providerId) ?: return false
+        val updated = _providers.value.map { if (it.id == p.id) p.copy(dailyTokenBudget = limit) else it }
+        try {
+            writeAtomically(configFile, configJson(updated))
+        } catch (_: Exception) {
+            return false
+        }
+        _providers.value = updated
+        return true
+    }
+
     /** 记下用户说的 [model] 能不能看图(见 [Provider.visionOverrides]);服务商不存在时返回 false。 */
     @Synchronized
     fun setModelVision(providerId: String, model: String, sees: Boolean): Boolean {
@@ -565,8 +610,16 @@ class ProviderStore(
         ))
         modelFactory(configured, apiKey(cfg.id), listed?.endpoint, ClientSetup(
             headers(p?.sessionHeader, session), reasoningEffort = _roles.value.reasoningEffort(role),
-            thinkingTypes = listed?.thinkingTypes,
-        )).metered(source, usage)
+            thinkingTypes = listed?.thinkingTypes, readTimeoutSeconds = settings?.readTimeoutSeconds,
+        )).metered(source, usage, ::checkDailyBudget)
+    }
+
+    /** 每次实际请求前重查配置和账本；达到预算时不发请求，也不记一笔虚假调用。 */
+    private fun checkDailyBudget(source: UsageSource) {
+        val p = provider(source.providerId) ?: return
+        val limit = p.dailyTokenBudget ?: return
+        val used = dailyUsage(source.providerId)
+        if (used >= limit) throw ModelError.DailyBudgetExceeded(p.name, limit, used)
     }
 
     /**
@@ -777,6 +830,8 @@ class ProviderStore(
      * 请求头四种协议一样带。回复上限([ClientSetup.maxOutputTokens])只给 Messages(本来就必填)和 generateContent;
      * Chat Completions 不给(有的模型只认 `max_tokens`、有的只认 `max_completion_tokens`,给错了整个请求被拒,
      * 连接测试就会误报),Responses 也不给(ChatGPT 套餐那条路不收 `max_output_tokens`)。
+     * 读超时([ClientSetup.readTimeoutSeconds])配置了的按它派生 client(共享连接池与代理),慢速本地推理可调大(#295);
+     * 没配置用全局默认(120 秒)。派生只在建模型时发生一次,不影响别的模型。
      */
     private fun buildModel(cfg: ProviderConfig, apiKey: String?, endpoint: ModelEndpoint?, setup: ClientSetup): ChatModel {
         val (kind, adapterBase) = adapterFor(cfg, endpoint)
@@ -784,6 +839,11 @@ class ProviderStore(
         val baseUrl = if (cfg.kind == ProviderConfig.Kind.Xai) {
             provider(cfg.providerId)?.baseUrl?.takeIf { it.isNotBlank() } ?: adapterBase
         } else adapterBase
+        val defaultHttp = http
+        val http = setup.readTimeoutSeconds
+            ?.takeIf { it in MODEL_READ_TIMEOUT_SECONDS }
+            ?.let { seconds -> defaultHttp.newBuilder().readTimeout(seconds.toLong(), TimeUnit.SECONDS).build() }
+            ?: defaultHttp
         return when (kind) {
             ProviderConfig.Kind.OpenAiCompat ->
                 OpenAiCompatModel(baseUrl, apiKey, cfg.model, cfg.capabilities, http, endpoint?.reasoningField, setup.headers,
@@ -819,6 +879,8 @@ class ProviderStore(
     private fun setKey(providerId: String, apiKey: String) {
         keys = if (apiKey.isEmpty()) keys - providerId else keys + (providerId to encode(cipher.encrypt(apiKey.toByteArray())))
         writeAtomically(keyFile, keysJson())
+        val revisions = _providerKeyRevisions.value
+        _providerKeyRevisions.value = revisions + (providerId to ((revisions[providerId] ?: 0L) + 1))
     }
 
     /** 删掉没有用途在用的模型配置。Key 存在服务商上,不受影响。 */
@@ -842,6 +904,7 @@ class ProviderStore(
         repairStaleContextDefaults()
         // 指向不存在的配置的选择退回默认,没人用的配置删掉;和文件里的不一样(含刚迁移的用途)才写回
         _roles.value = _roles.value.keepOnly(_configs.value.map { it.id }.toSet())
+        repairUnavailableReasoningEfforts()
         prune()
         if (configFile.isFile) {
             val text = configJson()
@@ -895,6 +958,20 @@ class ProviderStore(
     }
 
     /**
+     * 模型目录或客户端认识的档位变化后,旧选择不能继续原样发给服务端:能确定当前选项时,失效项退回默认;
+     * 没有档位元数据、协议本就不提供这项设置的旧配置不动,避免把仍可由服务端处理的值误删。
+     */
+    private fun repairUnavailableReasoningEfforts() {
+        val repaired = _roles.value.reasoningEfforts.mapNotNull { (role, effort) ->
+            val cfg = configFor(role) ?: return@mapNotNull null
+            val listed = provider(cfg.providerId)?.models?.firstOrNull { it.id == cfg.model }
+            val options = ReasoningOptions.of(cfg, listed)
+            if (options == null || effort in options.levels) role to effort else null
+        }.toMap()
+        _roles.value = _roles.value.copy(reasoningEfforts = repaired)
+    }
+
+    /**
      * 预设的默认上下文更新后,把当年按旧默认存下的配置跟上去:仅当存着的正是旧默认、这家预设现在的默认已经不同、
      * 用户没给这个模型单独写过窗口时才改;用户改过的任何值一律不动。只在 [load] 读入后跑一次,
      * 改动随读入后的统一写回落盘。窗口按旧值 64k 时,压缩会频繁改写请求前缀,服务商的前缀缓存整段失效(见 [ProviderPresets])。
@@ -921,10 +998,12 @@ class ProviderStore(
         // 旧版本存下的没有这一项:按地址对得上的预设补上(读入后写回文件时记进去)
         sessionHeader = o["sessionHeader"]?.jsonPrimitive?.content ?: ProviderPresets.forBaseUrl(o.str("baseUrl"))?.sessionHeader,
         signIn = o["signIn"]?.jsonPrimitive?.content,
+        dailyTokenBudget = o.positiveLong("dailyTokenBudget")?.takeIf(TokenBudgetLimits::valid),
         verifiedModels = o["verifiedModels"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet().orEmpty(),
         contextSettings = (o["contextSettings"] as? JsonObject).orEmpty().mapNotNull { (model, raw) ->
             val entry = raw as? JsonObject ?: return@mapNotNull null
-            val settings = ModelContextSettings(entry.positiveInt("windowTokens"), entry.positiveInt("triggerTokens"))
+            val settings = ModelContextSettings(entry.positiveInt("windowTokens"), entry.positiveInt("triggerTokens"),
+                entry.positiveInt("readTimeoutSeconds")?.takeIf { it in MODEL_READ_TIMEOUT_SECONDS })
             if (settings == ModelContextSettings()) null else model to settings
         }.toMap(),
         visionOverrides = (o["visionOverrides"] as? JsonObject).orEmpty().mapNotNull { (model, raw) ->
@@ -994,6 +1073,7 @@ class ProviderStore(
 
     private fun JsonObject.str(k: String) = this[k]!!.jsonPrimitive.content
     private fun JsonObject.positiveInt(k: String) = (this[k] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }
+    private fun JsonObject.positiveLong(k: String) = (this[k] as? JsonPrimitive)?.longOrNull?.takeIf { it > 0 }
 
     private fun writeConfig() = writeAtomically(configFile, configJson())
 
@@ -1005,12 +1085,14 @@ class ProviderStore(
                         put("id", p.id); put("name", p.name); put("kind", p.kind.name); put("baseUrl", p.baseUrl)
                         p.sessionHeader?.let { put("sessionHeader", it) }
                         p.signIn?.let { put("signIn", it) }
+                        p.dailyTokenBudget?.let { put("dailyTokenBudget", it) }
                         if (p.savedUntested) put("untested", true)
                         if (p.verifiedModels.isNotEmpty()) putJsonArray("verifiedModels") { p.verifiedModels.forEach { add(it) } }
                         if (p.contextSettings.isNotEmpty()) putJsonObject("contextSettings") {
                             for ((model, settings) in p.contextSettings) putJsonObject(model) {
                                 settings.windowTokens?.let { put("windowTokens", it) }
                                 settings.triggerTokens?.let { put("triggerTokens", it) }
+                                settings.readTimeoutSeconds?.let { put("readTimeoutSeconds", it) }
                             }
                         }
                         if (p.visionOverrides.isNotEmpty()) putJsonObject("visionOverrides") {
@@ -1162,8 +1244,9 @@ class ProviderStore(
             else ProviderConfig.Kind.of(endpoint.protocol) to endpoint.adapterBaseUrl
 
         /** 产品里的那份(App 建):配置在 files/settings 下,Key 用 Android 密钥库加密,用量记到 [usage]。 */
-        fun create(context: Context, usage: UsageSink, userAgent: String): ProviderStore =
-            ProviderStore(File(context.applicationContext.filesDir, "settings"), KeystoreKeyCipher(), usage, userAgent = userAgent)
+        fun create(context: Context, usage: UsageSink, userAgent: String, dailyUsage: (String) -> Long = { 0L }): ProviderStore =
+            ProviderStore(File(context.applicationContext.filesDir, "settings"), KeystoreKeyCipher(), usage,
+                dailyUsage = dailyUsage, userAgent = userAgent)
 
         /** App 内共用的那份(经 [Owner] 给出)。 */
         fun get(context: Context): ProviderStore = (context.applicationContext as? Owner)?.providers

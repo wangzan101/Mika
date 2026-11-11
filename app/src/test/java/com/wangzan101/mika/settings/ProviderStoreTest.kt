@@ -4,6 +4,7 @@ import com.wangzan101.mika.core.model.Capabilities
 import com.wangzan101.mika.core.model.ChatModel
 import com.wangzan101.mika.core.model.ListedModel
 import com.wangzan101.mika.core.model.Message
+import com.wangzan101.mika.core.model.ModelError
 import com.wangzan101.mika.core.model.ModelEndpoint
 import com.wangzan101.mika.core.model.ModelProtocol
 import com.wangzan101.mika.core.model.ModelReply
@@ -15,14 +16,18 @@ import com.wangzan101.mika.core.model.Usage
 import com.wangzan101.mika.core.usage.UsagePurpose
 import com.wangzan101.mika.core.usage.UsageSource
 import kotlinx.coroutines.test.runTest
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.TimeUnit
 import javax.crypto.KeyGenerator
 
 class ProviderStoreTest {
@@ -34,7 +39,9 @@ class ProviderStoreTest {
 
     private val setups = mutableListOf<ClientSetup>()
 
-    private fun store() = ProviderStore(tmp.root, AesGcmKeyCipher { key }, userAgent = "Mika/1.2.3") { cfg, apiKey, endpoint, setup ->
+    private fun store(dailyUsage: (String) -> Long = { 0L }) = ProviderStore(
+        tmp.root, AesGcmKeyCipher { key }, userAgent = "Mika/1.2.3", dailyUsage = dailyUsage,
+    ) { cfg, apiKey, endpoint, setup ->
         built += cfg to apiKey
         setups += setup
         endpoints += endpoint
@@ -57,6 +64,24 @@ class ProviderStoreTest {
 
     private fun connected(s: ProviderStore, name: String = "P", key: String = "k") =
         s.connect(name, ProviderConfig.Kind.OpenAiCompat, "https://${name.lowercase()}.test/v1", key, listOf(ListedModel("m1"), ListedModel("m2")))
+
+    @Test fun keyChangeInvalidatesAllowanceForOnlyThatProvider() {
+        val store = store()
+        val first = connected(store)
+        val other = connected(store, "Other")
+        val revisions = store.providerKeyRevisions.value
+        val providers = store.providers.value
+
+        store.updateProviderKey(first.id, "new-key")
+
+        assertEquals(providers, store.providers.value)
+        assertEquals(revisions.getValue(first.id) + 1, store.providerKeyRevisions.value[first.id])
+        assertEquals(revisions[other.id], store.providerKeyRevisions.value[other.id])
+        assertNull(store.allowanceKey(first, revisions.getValue(first.id)))
+        assertEquals("new-key", store.allowanceKey(first, store.providerKeyRevisions.value.getValue(first.id)))
+        store.removeProvider(first.id)
+        assertNull(store.providerKeyRevisions.value[first.id])
+    }
 
     // ---------- 用途的选择 ----------
 
@@ -85,6 +110,69 @@ class ProviderStoreTest {
         assertEquals(600_000, reloaded.modelFor(ModelRole.Main)!!.capabilities.compactionTriggerTokens)
         assertTrue(reloaded.setModelContext(reloaded.configFor(ModelRole.Main)!!.id, ModelContextSettings()))
         assertNull(store().provider(first.id)!!.contextSettings["m1"])
+    }
+
+    @Test fun perModelReadTimeoutFlowsIntoTheClientSetupAndPersists() {
+        // #295:慢速本地推理服务(例如经隧道访问)一次生成可以超过全局默认的 120 秒读超时;
+        // 每模型配置的读超时随 ModelContextSettings 存取,并进到建模型用的 ClientSetup 里。
+        val s = store()
+        val first = connected(s)
+        s.use(ModelRole.Main, first.id, "m1", none)
+        val cfg = s.configFor(ModelRole.Main)!!
+        val saved = ModelContextSettings(readTimeoutSeconds = 600)
+        assertTrue(s.setModelContext(cfg.id, saved))
+        s.modelFor(ModelRole.Main)
+        assertEquals(600, setups.last().readTimeoutSeconds)
+        val reloaded = store()
+        reloaded.use(ModelRole.Main, first.id, "m1", none)
+        assertEquals(saved, reloaded.provider(first.id)!!.contextSettings["m1"])
+        reloaded.modelFor(ModelRole.Main)
+        assertEquals(600, setups.last().readTimeoutSeconds)
+    }
+
+    @Test fun configuredReadTimeoutAppliesToTheRealHttpClient() = runTest {
+        MockWebServer().use { server ->
+            server.start()
+            // 响应头故意晚于单模型的一秒读超时;若配置没进入 OkHttp,这里不会抛 Network。
+            server.enqueue(MockResponse().setHeadersDelay(2, TimeUnit.SECONDS).setBody("{}"))
+            val s = ProviderStore(tmp.root, AesGcmKeyCipher { key })
+            val p = s.connect("Local", ProviderConfig.Kind.OpenAiCompat, server.url("/v1").toString(), "k", listOf(ListedModel("m")))
+            s.use(ModelRole.Main, p.id, "m", none)
+            val cfg = s.configFor(ModelRole.Main)!!
+            assertTrue(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = 1)))
+            try {
+                s.modelFor(ModelRole.Main)!!.complete("", emptyList(), emptyList())
+                fail("Expected the configured read timeout")
+            } catch (_: ModelError.Network) {
+                // 真实适配器在读取响应头时超时,而不只是 ClientSetup 里保存了一个数字。
+            }
+        }
+    }
+
+    @Test fun readTimeoutMustFitOkHttpRange() {
+        val s = store()
+        val first = connected(s)
+        s.use(ModelRole.Main, first.id, "m1", none)
+        val cfg = s.configFor(ModelRole.Main)!!
+        assertFalse(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = 0)))
+        assertFalse(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = -5)))
+        assertFalse(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = 2_147_484)))
+        assertTrue(s.setModelContext(cfg.id, ModelContextSettings(readTimeoutSeconds = 2_147_483)))
+    }
+
+    @Test fun previouslySavedOversizeReadTimeoutFallsBackWithoutLosingContextLimits() {
+        val s = store()
+        val first = connected(s)
+        s.use(ModelRole.Main, first.id, "m1", none)
+        val cfg = s.configFor(ModelRole.Main)!!
+        assertTrue(s.setModelContext(cfg.id, ModelContextSettings(1_000_000, 600_000, 600)))
+        val file = tmp.root.resolve("providers.json")
+        file.writeText(file.readText().replace("\"readTimeoutSeconds\":600", "\"readTimeoutSeconds\":2147484"))
+
+        val reloaded = store()
+        assertEquals(ModelContextSettings(1_000_000, 600_000), reloaded.provider(first.id)!!.contextSettings["m1"])
+        assertEquals(1_000_000, reloaded.modelFor(ModelRole.Main)!!.capabilities.contextTokens)
+        assertNull(setups.last().readTimeoutSeconds)
     }
 
     /** 预设改了默认上下文后,按旧默认存下的配置读入时跟上去;用户改过的和写了每模型窗口的不动(见 repairStaleContextDefaults)。 */
@@ -889,6 +977,71 @@ class ProviderStoreTest {
             seen.map { it.first },
         )
         assertEquals(Usage(3, 2), seen.first().second)
+    }
+
+    @Test fun dailyTokenBudgetPersistsClearsAndRejectsInvalidValues() {
+        val s = store()
+        val p = connected(s)
+        assertNull(s.provider(p.id)!!.dailyTokenBudget)
+        assertTrue(s.setDailyTokenBudget(p.id, 10_000))
+        assertEquals(10_000L, store().provider(p.id)!!.dailyTokenBudget)
+        for (invalid in listOf(0L, 9_999L, 100_000_001L)) {
+            assertFalse(s.setDailyTokenBudget(p.id, invalid))
+            assertEquals(10_000L, s.provider(p.id)!!.dailyTokenBudget)
+        }
+        assertTrue(s.setDailyTokenBudget(p.id, null))
+        assertNull(store().provider(p.id)!!.dailyTokenBudget)
+        assertFalse(s.setDailyTokenBudget("missing", 10_000))
+    }
+
+    @Test fun malformedSavedDailyBudgetLoadsAsUnlimited() {
+        val s = store()
+        val p = connected(s)
+        assertTrue(s.setDailyTokenBudget(p.id, 10_000))
+        val file = File(tmp.root, "providers.json")
+        file.writeText(file.readText().replace("\"dailyTokenBudget\":10000", "\"dailyTokenBudget\":1"))
+        assertNull(store().provider(p.id)!!.dailyTokenBudget)
+    }
+
+    @Test fun failedDailyBudgetSaveLeavesTheActiveAndPersistedValuesAlone() {
+        val s = store()
+        val p = connected(s)
+        assertTrue(s.setDailyTokenBudget(p.id, 10_000))
+        val blocked = File(tmp.root, "providers.json.tmp")
+        assertTrue(blocked.mkdir())
+        assertFalse(s.setDailyTokenBudget(p.id, 20_000))
+        assertEquals(10_000L, s.provider(p.id)!!.dailyTokenBudget)
+        assertTrue(blocked.delete())
+        assertEquals(10_000L, store().provider(p.id)!!.dailyTokenBudget)
+    }
+
+    @Test fun dailyBudgetRejectsOnlyItsOwnProviderWithoutAffectingOtherCalls() = runTest {
+        val used = mutableMapOf<String, Long>()
+        val seen = mutableListOf<UsageSource>()
+        val s = ProviderStore(
+            tmp.root, AesGcmKeyCipher { key }, dailyUsage = { used[it] ?: 0 },
+            usage = { source, _ -> seen += source },
+        ) { cfg, _, _, _ -> FakeModel(cfg.capabilities) }
+        val limited = connected(s, name = "Limited")
+        val available = connected(s, name = "Available")
+        s.use(ModelRole.Main, limited.id, "m1", none)
+        s.use(ModelRole.Light, available.id, "m1", none)
+        assertTrue(s.setDailyTokenBudget(limited.id, 10_000))
+        assertTrue(s.setDailyTokenBudget(available.id, 10_000))
+        used[limited.id] = 10_000
+        used[available.id] = 9_999
+
+        try {
+            s.modelFor(ModelRole.Main)!!.complete("s", emptyList(), emptyList())
+            fail("达到每日预算的服务商应停止下一次请求")
+        } catch (e: ModelError.DailyBudgetExceeded) {
+            assertEquals("Limited", e.providerName)
+            assertEquals(10_000L, e.limit)
+            assertEquals(10_000L, e.used)
+        }
+        assertTrue("拒绝时不记一笔不存在的调用", seen.isEmpty())
+        s.modelFor(ModelRole.Light)!!.complete("s", emptyList(), emptyList())
+        assertEquals(listOf(available.id), seen.map { it.providerId })
     }
 
     private class FakeModel(override val capabilities: Capabilities) : ChatModel {

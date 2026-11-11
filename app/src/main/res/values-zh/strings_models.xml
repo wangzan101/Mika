@@ -4,6 +4,7 @@
     <string name="model_context_note">留空使用自动值。同一服务商的同一模型在各用途间共用这份设置，下次任务生效。</string>
     <string name="model_context_window">上下文窗口（token）</string>
     <string name="model_context_trigger">压缩触发点（token）</string>
+    <string name="model_context_read_timeout">读超时（秒）</string>
     <string name="model_context_auto">自动 · %1$d</string>
     <string name="model_context_integer">请输入正整数。</string>
     <string name="model_context_range">可填 %1$d–%2$d 个 token</string>
@@ -189,4 +190,7 @@
     <string name="speech_footer">只列像语音模型的；列表里没有的可以手填模型名，选的时候先试转一小段。</string>
     <string name="speech_pick_failed">这个模型没能转写：%1$s</string>
     <string name="speech_pick_timeout">%1$s 试转一小段，%2$d 秒没有回应</string>
+    <string name="models_daily_token_budget">服务商每日 Token 预算</string>
+    <string name="models_daily_token_budget_sub">按本地日历日统计这家所有模型和用途的已报告输入与输出 Token。达到预算后不再发起下一次请求；在途请求可能超量，未报告用量按 0 计。本地日期变更后自动恢复。</string>
+    <string name="models_daily_token_budget_save_failed">预算保存失败，原设置未变。</string>
 </resources>

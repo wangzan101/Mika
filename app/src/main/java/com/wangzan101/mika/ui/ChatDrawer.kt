@@ -1,5 +1,9 @@
 package com.wangzan101.mika.ui
 
+import android.graphics.Bitmap
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.flow.StateFlow
 import com.wangzan101.mika.R
 import com.wangzan101.mika.i18n.tr
 import com.wangzan101.mika.ui.components.DirectionalIcon
@@ -28,6 +32,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,7 +52,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
@@ -269,8 +273,11 @@ fun ChatDrawer(
     onDeleteSelected: () -> Unit = {},
     /** 批量删除的进度和结果;在底部显示,删完过几秒由外面清掉。 */
     deleteBatch: DeleteBatch? = null,
+    permanent: Boolean = false,
+    onShowScreen: (() -> Unit)? = null,
 ) {
     val c = MikaTheme.colors
+    val shape = if (permanent) RectangleShape else DrawerShape
     // 能勾的就是列在侧栏里、已经存过的对话(还没存过的当前草稿没有编号,删不了)
     val selectableIds = remember(sections) {
         (sections.running + sections.pinned + sections.recent).mapNotNull { it.id }.toSet()
@@ -280,8 +287,8 @@ fun ChatDrawer(
     // 搜索时把几个入口收起来，把高度让给结果;清空后原样回来。搜索框在入口上面，位置不跳
     val searchActive = canSearch && !selecting && query.isNotBlank()
     Column(
-        Modifier.fillMaxHeight().widthIn(max = DrawerWidth).fillMaxWidth()
-            .clip(DrawerShape).background(c.bg, DrawerShape)
+        Modifier.fillMaxHeight().then(if (permanent) Modifier else Modifier.widthIn(max = DrawerWidth)).fillMaxWidth()
+            .clip(shape).background(c.bg, shape)
             .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.navigationBars))
             .testTag("drawer"),
     ) {
@@ -309,6 +316,7 @@ fun ChatDrawer(
         if (canSearch && !selecting) DrawerSearchField(query, onQueryChange)
         // 搜索、多选时把几个入口收起来，把高度让给列表;退出后原样回来
         if (!searchActive && !selecting) Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+            onShowScreen?.let { NavEntry(MikaIcons.Screens, stringResource(R.string.screens_preview), onClick = it) }
             NavEntry(MikaIcons.Message, stringResource(R.string.drawer_personal), onClick = onPersonal)
             NavEntry(MikaIcons.New, stringResource(R.string.chat_new), enabled = canSwitch, onClick = onNew)
             NavEntry(MikaIcons.Clock, stringResource(R.string.drawer_plans), onClick = onPlans)
@@ -329,7 +337,8 @@ fun ChatDrawer(
             sections.recent.isNotEmpty() -> "h-recent"
             else -> "end"
         }
-        LaunchedEffect(first) { list.scrollToItem(0) }
+        // 双栏与抽屉切换会在布局阶段组合侧栏，延后到下一次测量再定位，避免重入测量。
+        LaunchedEffect(first) { list.requestScrollToItem(0) }
         val terms = remember(query) { ConversationSearch.termsOf(query) }
         LazyColumn(Modifier.fillMaxWidth().weight(1f).lazyListScrollbar(list), state = list) {
             if (searchActive) {
@@ -732,21 +741,35 @@ fun ChatWithDrawer(
     /** 从侧栏进去的页面刚退回来:当场打开侧栏,回到进去之前的样子。 */
     reopen: Boolean = false,
     onReopened: () -> Unit = {},
+    /** 当前对话正在操作的实时画面；宽屏可固定在侧栏区域。 */
+    frames: StateFlow<Bitmap?>? = null,
+    operationRun: (String) -> com.wangzan101.mika.task.TaskRun? = { null },
+    /** 聊天和个人助手页启用抽屉返回；画面停靠还需要传入 frames，侧栏功能页只复用布局。 */
+    chatActive: Boolean = true,
+    onConversationSelected: () -> Unit = {},
     onPersonal: () -> Unit = {},
     onRegularChat: () -> Unit = {},
     /** 外部跳回对话页时变化:若之前因返回键留在展开的侧栏,当场收起侧栏。 */
     resetKey: Int = 0,
     content: @Composable (openDrawer: () -> Unit) -> Unit,
 ) {
+    val adaptive = LocalAdaptiveLayout.current
+    val permanent = adaptive.hasNavigation
     val drawer = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    LaunchedEffect(reopen) {
+    val ui by vm.ui.collectAsState()
+    val runId = ui.exchanges.lastOrNull()?.runId
+    var preferConversations by rememberSaveable(ui.conversationId, runId) { mutableStateOf(false) }
+    val screenAvailable = chatActive && permanent && frames != null && ui.pip.visible
+    val screenDocked = screenAvailable && !ui.pip.closed && !preferConversations
+    LaunchedEffect(reopen, permanent) {
+        if (permanent) drawer.snapTo(DrawerValue.Closed)
         if (reopen) {
-            drawer.snapTo(DrawerValue.Open)
+            preferConversations = true
+            if (!permanent) drawer.snapTo(DrawerValue.Open)
             onReopened()
         }
     }
-    val ui by vm.ui.collectAsState()
     val others by vm.otherRunning.collectAsState()
     fun close(then: () -> Unit = {}) {
         scope.launch {
@@ -759,7 +782,7 @@ fun ChatWithDrawer(
         scope.launch { drawer.snapTo(DrawerValue.Closed) }
         go()
     }
-    val open = drawer.targetValue == DrawerValue.Open || drawer.isOpen
+    val open = permanent || drawer.targetValue == DrawerValue.Open || drawer.isOpen
     /** 搜索框里的字和已经拿到的结果;侧栏关掉就清空。 */
     var query by remember { mutableStateOf("") }
     var searchOutcome by remember { mutableStateOf<SearchOutcome?>(null) }
@@ -791,7 +814,7 @@ fun ChatWithDrawer(
     // 搜索时先清掉搜索,再按才离开。对话页里面板、画中画等自己的返回在内层,先于这里处理
     val activity = LocalContext.current.findActivity()
     val context = LocalContext.current
-    BackHandler {
+    BackHandler(enabled = chatActive || selecting || query.isNotEmpty()) {
         when {
             selecting -> {
                 selecting = false
@@ -809,6 +832,11 @@ fun ChatWithDrawer(
     var acting by remember { mutableStateOf<Pair<DrawerConversation, Rect>?>(null) }
     /** 菜单出现的进度:0 是没有,1 是完全出来;关了动画时直接到位。 */
     val lift = remember { Animatable(0f) }
+    LaunchedEffect(adaptive) {
+        // 窗口变了，长按时记录的坐标已过期。
+        acting = null
+        lift.snapTo(0f)
+    }
     LaunchedEffect(acting) {
         if (acting != null) {
             if (reduceMotion) lift.snapTo(1f) else lift.animateTo(1f, tween(MENU_IN_MS, easing = MikaMotion.Decelerate))
@@ -845,143 +873,161 @@ fun ChatWithDrawer(
         }
     }
     val menuOpen = acting != null
-    Box(Modifier.fillMaxSize()) {
-        ModalNavigationDrawer(
-            // 菜单开着时后面整屏(对话页和侧栏)模糊(安卓 12 起;更早的只变暗),无障碍也只读菜单
-            modifier = if (!menuOpen) Modifier else Modifier
-                .then(
-                    if (GlassBlurSupported) Modifier.graphicsLayer {
-                        val r = MenuBlur.toPx() * lift.value
-                        renderEffect = if (r >= 0.5f) BlurEffect(r, r, TileMode.Clamp) else null
-                    } else Modifier,
-                )
-                .clearAndSetSemantics {},
-            drawerContent = {
-                // 只在打开时读盘;每次打开、开着时存储里有对话改过都重读一次
-                val history = remember(open, revision) { if (open) conversations() else emptyList() }
-                val drafts by vm.draftConversations.collectAsState()
-                val all = remember(open, history, drafts, revision) { if (open) vm.withDrafts(history) else emptyList() }
-                val stored = remember(open, revision, ui.conversationId) { if (open) ui.conversationId?.let(conversationTitle) else null }
-                val last = ui.exchanges.lastOrNull()
-                val running = vm.busy()
-                val current = CurrentConversation(
-                    ui.conversationId, running,
-                    stored ?: ChatCopy.title(ui.exchanges),
-                    if (running) ChatCopy.subtitle(last, last?.let(vm::livePlace))?.first.orEmpty() else "",
-                )
-                val canSwitch = vm.canSwitch()
-                // 搜索候选:标题换成侧栏里显示的样子(去掉附件行、网页说明),和行上看到的一致
-                val candidates = remember(all, deleted) {
-                    all.filter { it.id !in deleted }.map { it.copy(title = ChatCopy.plainTitle(it.title)) }
-                }
-                val engine = search
-                LaunchedEffect(open, query, revision, candidates.size, engine) {
-                    val q = query.trim()
-                    if (engine == null || !open || q.isEmpty() || candidates.isEmpty()) {
-                        searchOutcome = null
-                        return@LaunchedEffect
-                    }
-                    // 标题命中不用等正文,先列出来;正文扫完再整体换掉
-                    searchOutcome = SearchOutcome(q, engine.titleMatches(q, candidates), searching = true)
-                    delay(180)
-                    val result = withContext(Dispatchers.IO) { engine.search(q, candidates) }
-                    searchOutcome = SearchOutcome(q, result.hits, searching = false, truncated = result.truncated)
-                }
-                val byId = remember(candidates) { candidates.associateBy { it.id } }
-                val now = System.currentTimeMillis()
-                val runningIds = remember(others, ui.conversationId, running) {
-                    (others + listOfNotNull(ui.conversationId?.takeIf { running })).toSet()
-                }
-                val searchView = searchOutcome?.takeIf { it.query == query.trim() }?.let { outcome ->
-                    DrawerSearch(
-                        outcome.hits.mapNotNull { hit ->
-                            val s = byId[hit.id] ?: return@mapNotNull null
-                            val time = if (s.updatedAt != 0L) conversationTime(s.updatedAt, now) else ""
-                            drawerEntry(
-                                s, ui.conversationId, canSwitch, running = hit.id in runningIds,
-                                time = time, subtitle = hit.snippet.orEmpty(),
-                            )
-                        },
-                        outcome.searching,
-                        outcome.truncated,
-                    )
-                }
-                // 删掉的对话当场不列,不等后台删完
-                val sections = remember(all, current, others, canSwitch, deleted) {
-                    drawerSections(all.filter { it.id !in deleted }, current, others.filter { it !in deleted }, vm::runningGoal, canSwitch, System.currentTimeMillis())
-                }
-                // 能勾的就是此刻列在侧栏里的对话;别处删了、列表变了,勾选里已经不存在的当场去掉
-                val selectableIds = remember(sections) {
-                    (sections.running + sections.pinned + sections.recent).mapNotNull { it.id }.toSet()
-                }
-                LaunchedEffect(selectableIds) { selected = selected intersect selectableIds }
-                ChatDrawer(
-                    check, sections, canSwitch,
-                    query = query,
-                    onQueryChange = { query = it },
-                    search = searchView,
-                    canSearch = candidates.isNotEmpty(),
-                    onNew = { close { vm.newConversation(); onRegularChat() } },
-                    onPersonal = { leave(onPersonal) },
-                    onPlans = { leave(onPlans) },
-                    onMemory = { leave(onMemory) },
-                    onSettings = { leave(onSettings) },
-                    onBrowser = { leave(onBrowser) },
-                    onFiles = { leave(onFiles) },
-                    onScreens = { leave(onScreens) },
-                    onAbout = { leave(onAbout) },
-                    onQuit = { leave { confirmingQuit = true } },
-                    aboutDot = updateAvailable,
-                    onActions = { item, bounds -> if (item.id != null) acting = item to bounds },
-                    onOpen = { item ->
-                        close {
-                            onRegularChat()
-                            val id = item.id
-                            when {
-                                id == null || id == ui.conversationId -> Unit
-                                item.running -> vm.switchTo(id)
-                                else -> vm.openConversation(id)
-                            }
-                        }
-                    },
-                    selecting = selecting,
-                    selected = selected,
-                    onStartSelect = { selecting = true },
-                    onExitSelect = {
-                        selecting = false
-                        selected = emptySet()
-                    },
-                    onToggleSelect = { item ->
-                        item.id?.let { id -> selected = if (id in selected) selected - id else selected + id }
-                    },
-                    onSelectAll = {
-                        selected = if (selectableIds.isNotEmpty() && selectableIds.all { it in selected }) emptySet() else selectableIds
-                    },
-                    onDeleteSelected = {
-                        val ids = selectableIds.filter { it in selected }
-                        if (ids.isNotEmpty()) confirmingMany = ids
-                    },
-                    deleteBatch = deleteBatch,
-                )
-            },
-            drawerState = drawer,
-            // 对话页上从左往右划拉出侧栏(拖着跟手);能左右滚的内容(宽表格、代码块等)先自己滚。
-            // 从左边缘往里滑是系统的返回手势,上面的返回处理同样是打开侧栏
-            gesturesEnabled = true,
-            scrimColor = MikaTheme.colors.floatShadow.copy(alpha = 0.28f),
-        ) {
-            content { scope.launch { if (reduceMotion) drawer.snapTo(DrawerValue.Open) else drawer.open() } }
+    val drawerContent: @Composable () -> Unit = {
+        // 只在打开时读盘;每次打开、开着时存储里有对话改过都重读一次
+        val history = remember(open, revision) { if (open) conversations() else emptyList() }
+        val drafts by vm.draftConversations.collectAsState()
+        val all = remember(open, history, drafts, revision) { if (open) vm.withDrafts(history) else emptyList() }
+        val stored = remember(open, revision, ui.conversationId) { if (open) ui.conversationId?.let(conversationTitle) else null }
+        val last = ui.exchanges.lastOrNull()
+        val running = vm.busy()
+        val current = CurrentConversation(
+            ui.conversationId, running,
+            stored ?: ChatCopy.title(ui.exchanges),
+            if (running) ChatCopy.subtitle(last, last?.let(vm::livePlace))?.first.orEmpty() else "",
+        )
+        val canSwitch = vm.canSwitch()
+        // 搜索候选:标题换成侧栏里显示的样子(去掉附件行、网页说明),和行上看到的一致
+        val candidates = remember(all, deleted) {
+            all.filter { it.id !in deleted }.map { it.copy(title = ChatCopy.plainTitle(it.title)) }
         }
-        acting?.let { (item, bounds) ->
-            val id = item.id ?: return@let
-            ConversationMenu(
-                item, bounds, progress = { lift.value },
-                onPin = { closeMenu { vm.setPinned(id, !item.pinned) } },
-                onRename = { closeMenu { renaming = item } },
-                onTerminal = { closeMenu { activity?.let { a -> com.wangzan101.mika.ui.terminal.TerminalLauncher.open(a, id, item.title) } } },
-                onDelete = { closeMenu { confirming = item to vm.deleteImpact(id) } },
-                onDismiss = { closeMenu() },
+        val engine = search
+        LaunchedEffect(open, query, revision, candidates.size, engine) {
+            val q = query.trim()
+            if (engine == null || !open || q.isEmpty() || candidates.isEmpty()) {
+                searchOutcome = null
+                return@LaunchedEffect
+            }
+            // 标题命中不用等正文,先列出来;正文扫完再整体换掉
+            searchOutcome = SearchOutcome(q, engine.titleMatches(q, candidates), searching = true)
+            delay(180)
+            val result = withContext(Dispatchers.IO) { engine.search(q, candidates) }
+            searchOutcome = SearchOutcome(q, result.hits, searching = false, truncated = result.truncated)
+        }
+        val byId = remember(candidates) { candidates.associateBy { it.id } }
+        val now = System.currentTimeMillis()
+        val runningIds = remember(others, ui.conversationId, running) {
+            (others + listOfNotNull(ui.conversationId?.takeIf { running })).toSet()
+        }
+        val searchView = searchOutcome?.takeIf { it.query == query.trim() }?.let { outcome ->
+            DrawerSearch(
+                outcome.hits.mapNotNull { hit ->
+                    val s = byId[hit.id] ?: return@mapNotNull null
+                    val time = if (s.updatedAt != 0L) conversationTime(s.updatedAt, now) else ""
+                    drawerEntry(
+                        s, ui.conversationId, canSwitch, running = hit.id in runningIds,
+                        time = time, subtitle = hit.snippet.orEmpty(),
+                    )
+                },
+                outcome.searching,
+                outcome.truncated,
             )
+        }
+        // 删掉的对话当场不列,不等后台删完
+        val sections = remember(all, current, others, canSwitch, deleted) {
+            drawerSections(all.filter { it.id !in deleted }, current, others.filter { it !in deleted }, vm::runningGoal, canSwitch, System.currentTimeMillis())
+        }
+        // 能勾的就是此刻列在侧栏里的对话;别处删了、列表变了,勾选里已经不存在的当场去掉
+        val selectableIds = remember(sections) {
+            (sections.running + sections.pinned + sections.recent).mapNotNull { it.id }.toSet()
+        }
+        LaunchedEffect(selectableIds) { selected = selected intersect selectableIds }
+        ChatDrawer(
+            check, sections, canSwitch,
+            query = query,
+            onQueryChange = { query = it },
+            search = searchView,
+            canSearch = candidates.isNotEmpty(),
+            onNew = { close { vm.newConversation(); onRegularChat(); onConversationSelected() } },
+            onPersonal = { leave(onPersonal) },
+            onPlans = { leave(onPlans) },
+            onMemory = { leave(onMemory) },
+            onSettings = { leave(onSettings) },
+            onBrowser = { leave(onBrowser) },
+            onFiles = { leave(onFiles) },
+            onScreens = { leave(onScreens) },
+            onAbout = { leave(onAbout) },
+            onQuit = { leave { confirmingQuit = true } },
+            aboutDot = updateAvailable,
+            permanent = permanent,
+            onShowScreen = if (screenAvailable) ({ preferConversations = false; vm.reopenPip() }) else null,
+            onActions = { item, bounds -> if (item.id != null) acting = item to bounds },
+            onOpen = { item ->
+                close {
+                    onRegularChat()
+                    val id = item.id
+                    when {
+                        id == null || id == ui.conversationId -> Unit
+                        item.running -> vm.switchTo(id)
+                        else -> vm.openConversation(id)
+                    }
+                    onConversationSelected()
+                }
+            },
+            selecting = selecting,
+            selected = selected,
+            onStartSelect = { selecting = true },
+            onExitSelect = {
+                selecting = false
+                selected = emptySet()
+            },
+            onToggleSelect = { item ->
+                item.id?.let { id -> selected = if (id in selected) selected - id else selected + id }
+            },
+            onSelectAll = {
+                selected = if (selectableIds.isNotEmpty() && selectableIds.all { it in selected }) emptySet() else selectableIds
+            },
+            onDeleteSelected = {
+                val ids = selectableIds.filter { it in selected }
+                if (ids.isNotEmpty()) confirmingMany = ids
+            },
+            deleteBatch = deleteBatch,
+        )
+    }
+    CompositionLocalProvider(LocalOperationScreenDocked provides screenDocked) {
+        Box(Modifier.fillMaxSize()) {
+            AdaptiveChatNavigation(
+                layout = adaptive,
+                // 菜单开着时后面整屏(对话页和侧栏)模糊(安卓 12 起;更早的只变暗),无障碍也只读菜单
+                modifier = if (!menuOpen) Modifier else Modifier
+                    .then(
+                        if (GlassBlurSupported) Modifier.graphicsLayer {
+                            val r = MenuBlur.toPx() * lift.value
+                            renderEffect = if (r >= 0.5f) BlurEffect(r, r, TileMode.Clamp) else null
+                        } else Modifier,
+                    )
+                    .clearAndSetSemantics {},
+                drawerContent = drawerContent,
+                drawerState = drawer,
+                drawerGesturesEnabled = chatActive,
+                sideContent = if (screenDocked) ({
+                    val run = ui.conversationId?.let(operationRun)
+                    val liveFrame by (run?.frames ?: frames!!).collectAsState()
+                    var lastFrame by remember(ui.conversationId, runId) { mutableStateOf<Bitmap?>(null) }
+                    LaunchedEffect(liveFrame) { liveFrame?.let { lastFrame = it } }
+                    val previewFrame = liveFrame ?: lastFrame.takeIf { ui.pip.mode == PipMode.Done }
+                    val showConversations = { preferConversations = true }
+                    val closeScreen = { preferConversations = true; vm.closePip() }
+                    if (run != null) InteractiveOperationScreen(run, previewFrame, ui.pip.mode, showConversations, closeScreen)
+                    else OperationScreenPane(previewFrame, ui.pip.mode, showConversations, closeScreen)
+                }) else null,
+            ) {
+                content {
+                    if (permanent) preferConversations = true
+                    else scope.launch { if (reduceMotion) drawer.snapTo(DrawerValue.Open) else drawer.open() }
+                }
+            }
+            acting?.let { (item, bounds) ->
+                val id = item.id ?: return@let
+                ConversationMenu(
+                    item, bounds, progress = { lift.value },
+                    onPin = { closeMenu { vm.setPinned(id, !item.pinned) } },
+                    onRename = { closeMenu { renaming = item } },
+                    onTerminal = { closeMenu { activity?.let { a -> com.wangzan101.mika.ui.terminal.TerminalLauncher.open(a, id, item.title) } } },
+                    onDelete = { closeMenu { confirming = item to vm.deleteImpact(id) } },
+                    onDismiss = { closeMenu() },
+                )
+            }
         }
     }
     renaming?.let { item ->

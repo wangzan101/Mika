@@ -132,6 +132,9 @@ interface IMikaShell {
     boolean flushCallAudio(IBinder owner) = 55;
     Bundle callAudioStats(IBinder owner) = 56;
 
+    // 原地改变 Mika 虚拟屏尺寸并替换接收画面的 Surface，保留屏上的任务。
+    boolean resizeDisplay(int displayId, in Surface surface, int width, int height, int dpi) = 57;
+
     // 沿用早先定下的销毁事务号;AIDL 要求要么全部方法编号要么都不编号
     void destroy() = 16777114;
 }

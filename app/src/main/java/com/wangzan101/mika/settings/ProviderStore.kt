@@ -38,6 +38,7 @@ import com.wangzan101.mika.core.proactive.ProactiveCall
 import com.wangzan101.mika.core.proactive.TargetedModel
 import com.wangzan101.mika.core.proactive.TriageTarget
 import com.wangzan101.mika.core.usage.TokenBudgetLimits
+import com.wangzan101.mika.core.usage.DeepSeekPriceTable
 import com.wangzan101.mika.core.usage.UsagePurpose
 import com.wangzan101.mika.core.usage.UsageSink
 import com.wangzan101.mika.core.usage.UsageSource
@@ -716,8 +717,9 @@ class ProviderStore(
         beforeRetry: (UsageSource, Int) -> Unit = { _, _ -> },
     ): ChatModel {
         val p = provider(cfg.providerId)
-        val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, purpose)
         val listed = listedOf(cfg)
+        val source = UsageSource(cfg.providerId, p?.name ?: cfg.name, cfg.model, purpose,
+            deepSeekDirect = DeepSeekPriceTable.isOfficialEndpoint(adapterFor(cfg, listed?.endpoint).second))
         val settings = p?.contextSettings?.get(cfg.model)
         val configured = if (settings == null) cfg else cfg.copy(capabilities = cfg.capabilities.copy(
             contextTokens = settings.windowTokens ?: cfg.capabilities.contextTokens,

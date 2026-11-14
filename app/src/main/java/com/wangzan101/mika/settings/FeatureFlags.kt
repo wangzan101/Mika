@@ -93,6 +93,21 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         prefs.edit().putBoolean(KEEP_SCREEN_ON, on).commit()
     }
 
+    fun showTaskCost(): Boolean = prefs.getBoolean(SHOW_TASK_COST, false)
+
+    fun setShowTaskCost(on: Boolean) {
+        prefs.edit().putBoolean(SHOW_TASK_COST, on).apply()
+    }
+
+    fun showTaskCostChanges(): Flow<Boolean> = callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == SHOW_TASK_COST) trySend(showTaskCost())
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        send(showTaskCost())
+        awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }.distinctUntilChanged()
+
     /** 干活时把被操作的 App 静音;默认开,用户可以关。 */
     fun muteTarget(): Boolean = prefs.getBoolean(MUTE_TARGET, true)
 
@@ -378,6 +393,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val TASK_TOKEN_BUDGET = "task_token_budget"
         private const val PROACTIVE_DAILY_TOKEN_BUDGET = "proactive_daily_token_budget"
         private const val KEEP_SCREEN_ON = "keep_screen_on"
+        private const val SHOW_TASK_COST = "show_task_cost"
         private const val MUTE_TARGET = "mute_target"
         private const val OPERATING_PACE = "operating_pace"
         private const val AUTO_ARCHIVE_DAYS = "auto_archive_days"

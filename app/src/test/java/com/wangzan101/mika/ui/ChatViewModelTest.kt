@@ -36,7 +36,7 @@ import com.wangzan101.mika.task.SteerState
 import com.wangzan101.mika.task.QueuedFollowUp
 import com.wangzan101.mika.task.QueuedSource
 import com.wangzan101.mika.ui.PipPhysics.Corner
-import com.wangzan101.mika.core.cap.web.AttachedPage
+import com.wangzan101.mika.core.agent.AttachedPage
 import com.wangzan101.mika.core.userscreen.UserScreenMessage
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi

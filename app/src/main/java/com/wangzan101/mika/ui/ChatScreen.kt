@@ -7,7 +7,7 @@ import com.wangzan101.mika.core.agent.QuoteMessage
 import com.wangzan101.mika.core.record.ConversationTokens
 import com.wangzan101.mika.core.usage.DeepSeekCost
 import com.wangzan101.mika.settings.FeatureFlags
-import com.wangzan101.mika.core.cap.web.AttachedPage
+import com.wangzan101.mika.core.agent.AttachedPage
 import com.wangzan101.mika.ui.components.DirectionalIcon
 import com.wangzan101.mika.ui.components.keepsKeyboard
 import com.wangzan101.mika.ui.components.pageBackground

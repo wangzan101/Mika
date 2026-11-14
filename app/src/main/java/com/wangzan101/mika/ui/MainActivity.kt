@@ -80,6 +80,7 @@ import com.wangzan101.mika.ui.theme.MikaTheme
 import com.wangzan101.mika.ui.theme.animationsOff
 import com.wangzan101.mika.ui.theme.appearanceDark
 import com.wangzan101.mika.ui.theme.systemBarsFor
+import com.wangzan101.mika.voice.WakeWordService
 
 class MainActivity : ComponentActivity() {
     private lateinit var monitor: SystemStatusMonitor
@@ -246,6 +247,7 @@ class MainActivity : ComponentActivity() {
         monitor.refresh()
         // 回到前台时按最新设置查一次自动归档(启动时也查过,这里照顾长期不退出的进程)
         (application as MikaApp).autoArchiveNow()
+        WakeWordService.restoreIfRequested(this)
     }
 
     override fun onStop() {

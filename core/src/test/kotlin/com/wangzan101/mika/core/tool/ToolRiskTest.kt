@@ -17,6 +17,14 @@ import com.wangzan101.mika.core.cap.audio.AudioPort
 import com.wangzan101.mika.core.cap.image.ImagePort
 import com.wangzan101.mika.core.cap.image.SavedImage
 import com.wangzan101.mika.core.cap.image.StoredImage
+import com.wangzan101.mika.core.cap.video.VideoTake
+import com.wangzan101.mika.core.cap.video.SavedVideo
+import com.wangzan101.mika.core.cap.video.VideoGenerationPort
+import com.wangzan101.mika.core.cap.video.VideoGenerationRequest
+import com.wangzan101.mika.core.model.VideoCapabilities
+import com.wangzan101.mika.core.cap.video.VideoFrame
+import com.wangzan101.mika.core.cap.video.VideoInfo
+import com.wangzan101.mika.core.cap.video.VideoPort
 import com.wangzan101.mika.core.cap.transcribe.TranscribePort
 import com.wangzan101.mika.core.cap.transcribe.Transcript
 import com.wangzan101.mika.core.model.GeneratedImage
@@ -39,6 +47,7 @@ class ToolRiskTest {
     /** 原来要过锁屏/暂停关卡的工具表。 */
     private val oldWriting = both("tap", "scroll", "swipe", "type_text", "clear_text", "back", "press_key", "diagnose") + setOf(
         "phone_launch_app", "phone_share_text", "phone_share_audio", "phone_share_image", "phone_gesture", "phone_sms_login", "hand_to_user",
+        "phone_launch_app", "phone_share_text", "phone_share_audio", "phone_share_video", "phone_gesture", "phone_sms_login", "hand_to_user",
         "phone_set_alarm", "phone_set_timer", "phone_show_alarms", "phone_add_calendar_event", "phone_set_wheel",
         "web_navigate", "web_tabs", "web_upload", "web_interact", "web_site_mode", "phone_open_link", "web_keep_open", "phone_app_after_task",
     )
@@ -58,6 +67,19 @@ class ToolRiskTest {
         assertEquals(oldSandbox, names.filter(::isSandboxTool).toSet())
         assertEquals(oldSandbox, SANDBOX_TOOLS)
         assertEquals(oldWeb, WEB_TOOLS)
+    }
+
+    private object NoVideoPort : VideoPort {
+        override suspend fun info(path: String) = VideoInfo(path, null, 0, 0, "video/mp4", 0, false)
+        override suspend fun frames(path: String, count: Int) = emptyList<VideoFrame>()
+        override suspend fun saveToMovies(path: String, name: String?) = SavedVideo("Movies/Mika/x.mp4", "content://x", 0)
+    }
+
+    private object NoVideoGeneration : VideoGenerationPort {
+        override val modelName = "test-video"
+        override val capabilities = VideoCapabilities()
+        override suspend fun generate(request: VideoGenerationRequest, onProgress: suspend (String) -> Unit) =
+            VideoTake("/workspace/out/video/x.mp4", null, 0, 0, null)
     }
 
     private object NoTranscribePort : TranscribePort {
@@ -90,11 +112,12 @@ class ToolRiskTest {
                 "phone_call_state", "phone_call_dial", "phone_call_answer", "phone_call_hangup", "phone_call_takeover",
                 "list_device_files", "copy_device_file", "search_device_files", "list_device_directory_hints", "update_device_directory_description",
                 "audio_generate", "audio_save", "audio_transcribe", "speak",
-                "image_generate", "image_edit", "image_save")
+                "image_generate", "image_edit", "image_save",
+                "video_frames", "video_info", "video_save", "video_generate")
         assertEquals(refused, allTools().filter { !it.readOnly }.map { it.name }.toSet())
         // root 命令、通话工具都只在给了端口时登记:各给一个,所有工具都在
         val d = toolDispatcher(FakeScreen(), audio = NoAudioPort, audioSaveEnabled = true, audioSpeakTool = true, transcribe = NoTranscribePort,
-            image = NoImagePort, imageSaveEnabled = true, root = object : com.wangzan101.mika.core.cap.root.RootPort {
+            image = NoImagePort, imageSaveEnabled = true, video = NoVideoPort, videoGeneration = NoVideoGeneration, root = object : com.wangzan101.mika.core.cap.root.RootPort {
             override suspend fun run(command: String, timeoutMs: Long) = com.wangzan101.mika.core.cap.root.RootRun.Unavailable
         }, deviceFiles = object : com.wangzan101.mika.core.cap.devicefiles.DeviceFilesPort {
             override suspend fun search(query: com.wangzan101.mika.core.cap.devicefiles.DeviceFileSearchQuery): com.wangzan101.mika.core.cap.devicefiles.DeviceFileSearchResult = error("read call reached device files")

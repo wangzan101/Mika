@@ -549,14 +549,12 @@ internal fun LiveCallTranscript(callId: String?, lines: List<CallTranscriptLine>
 }
 
 @Composable
-private fun CallReceivePage(
+internal fun CallReceivePage(
     config: CallConfig, state: CallRuntimeState, ready: Boolean, controlsEnabled: Boolean,
     canStartStandby: Boolean, standbyNeedsSetup: Boolean,
     onSetup: () -> Unit, onToggle: (Boolean) -> Unit, onRules: () -> Unit, onBypass: () -> Unit,
     onPause: (Int) -> Unit, onResume: () -> Unit, onInstructions: () -> Unit, onStartStandby: () -> Unit,
 ) {
-    var scopeOpen by rememberSaveable { mutableStateOf(false) }
-    var importantOpen by rememberSaveable { mutableStateOf(false) }
     var pauseOpen by rememberSaveable { mutableStateOf(false) }
     if (state.aiActive || state.liveTranscript.isNotEmpty()) {
         GroupCard {
@@ -601,25 +599,14 @@ private fun CallReceivePage(
 
     GroupLabel(stringResource(R.string.calls_rules))
     GroupCard(Modifier.testTag("call-incoming-rules")) {
-        CallFoldRow(MikaIcons.Phone, stringResource(R.string.calls_rule_scope), scopeOpen,
-            "call-rules-scope", subtitle = rulesSummary(config)) { scopeOpen = !scopeOpen }
-        if (scopeOpen) {
-            FooterNote(stringResource(R.string.calls_rule_delay_summary, config.autoAnswerDelaySeconds))
-            TextButton(onClick = onRules, modifier = Modifier.fillMaxWidth().testTag("call-edit-rules")) {
-                Text(stringResource(R.string.calls_edit_rule))
-            }
-        }
-        HorizontalDivider()
-        CallFoldRow(MikaIcons.Heart, stringResource(R.string.calls_bypass_title), importantOpen,
-            "call-rules-important", subtitle = if (config.bypassIncomingNumbers.isEmpty()) stringResource(R.string.calls_bypass_empty)
-            else stringResource(R.string.calls_bypass_count, config.bypassIncomingNumbers.size)) { importantOpen = !importantOpen }
-        if (importantOpen) {
-            FooterNote(stringResource(R.string.calls_bypass_note))
-            TextButton(onClick = onBypass, modifier = Modifier.fillMaxWidth().testTag("call-edit-bypass")) {
-                Text(stringResource(R.string.calls_edit_rule))
-            }
-        }
-        HorizontalDivider()
+        ListRow(MikaIcons.Phone, stringResource(R.string.calls_rule_scope),
+            subtitle = rulesSummary(config) + " · " + stringResource(R.string.calls_rule_delay_summary, config.autoAnswerDelaySeconds),
+            first = true, onClick = onRules, modifier = Modifier.testTag("call-rules-scope")) { RowChevron() }
+        ListRow(MikaIcons.Heart, stringResource(R.string.calls_bypass_title),
+            subtitle = if (config.bypassIncomingNumbers.isEmpty()) stringResource(R.string.calls_bypass_empty)
+                else stringResource(R.string.calls_bypass_count, config.bypassIncomingNumbers.size),
+            onClick = onBypass, modifier = Modifier.testTag("call-rules-important")) { RowChevron() }
+        HorizontalDivider(Modifier.padding(start = 60.dp), color = MikaTheme.colors.hair)
         val paused = state.autoAnswerStage == CallAutoAnswerStage.PAUSED
         CallFoldRow(MikaIcons.Clock, stringResource(R.string.calls_rule_pause), pauseOpen,
             "call-rules-pause", subtitle = if (paused) autoAnswerSummary(config, state) else null) { pauseOpen = !pauseOpen }

@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -12,8 +11,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -32,6 +32,7 @@ import com.wangzan101.mika.ui.theme.MikaIcons
 import com.wangzan101.mika.ui.theme.MikaSpace
 import com.wangzan101.mika.ui.theme.MikaTheme
 import com.wangzan101.mika.ui.theme.MikaType
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 @Composable
@@ -44,10 +45,9 @@ internal fun CallNumberRuleEditor(config: CallConfig, personal: Boolean, onDismi
     val draft = remember(text) { CallNumberDraft(text) }
     var mode by rememberSaveable { mutableStateOf(config.incomingScope) }
     var types by rememberSaveable { mutableStateOf(config.allowedCallTypes) }
-    var delay by rememberSaveable { mutableStateOf(config.autoAnswerDelaySeconds.toString()) }
     val min = CallConfig.MIN_AUTO_ANSWER_DELAY_SECONDS
     val max = CallConfig.MAX_AUTO_ANSWER_DELAY_SECONDS
-    val seconds = delay.toIntOrNull()?.takeIf { it in min..max }
+    var seconds by rememberSaveable { mutableIntStateOf(config.autoAnswerDelaySeconds.coerceIn(min, max)) }
     var manual by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -73,12 +73,11 @@ internal fun CallNumberRuleEditor(config: CallConfig, personal: Boolean, onDismi
         PageBackground {
             Column(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
                 TopBar(title, MikaIcons.Back, close, stringResource(R.string.calls_cancel), right = {
-                    TextButton(enabled = !busy && draft.valid && seconds != null && (!showTypes || types.isNotEmpty()) && permission?.actionLabel == null, onClick = {
-                        val duration = seconds ?: return@TextButton
+                    TextButton(enabled = !busy && draft.valid && (!showTypes || types.isNotEmpty()) && permission?.actionLabel == null, onClick = {
                         busy = true
                         scope.launch {
                             try {
-                                if (onSave(mode, draft.selectedNumbers, types, duration)) onDismiss() else saveFailed = true
+                                if (onSave(mode, draft.selectedNumbers, types, seconds)) onDismiss() else saveFailed = true
                             } finally { busy = false }
                         }
                     }) { Text(stringResource(R.string.calls_save)) }
@@ -92,27 +91,21 @@ internal fun CallNumberRuleEditor(config: CallConfig, personal: Boolean, onDismi
                             RadioRow(stringResource(R.string.calls_only_list), mode == IncomingScope.LIST, { mode = IncomingScope.LIST }, first = true, enabled = !busy)
                             RadioRow(stringResource(R.string.calls_all_incoming), mode == IncomingScope.ALL, { mode = IncomingScope.ALL },
                                 subtitle = stringResource(R.string.calls_all_note), enabled = !busy && draft.valid)
-                            RadioRow(stringResource(R.string.calls_only_types), mode == IncomingScope.TYPES,
-                                { mode = IncomingScope.TYPES }, enabled = !busy && draft.valid)
                             RadioRow(stringResource(R.string.calls_only_strangers), strangers,
-                                { mode = IncomingScope.STRANGERS }, enabled = !busy && draft.valid)
-                            OutlinedTextField(delay, { delay = it.filter(Char::isDigit).take(2) },
-                                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).testTag("call-answer-delay"),
-                                label = { Text(stringResource(R.string.calls_delay_field, min, max)) },
-                                singleLine = true, isError = seconds == null, enabled = !busy,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                        }
-                    }
-                    if (strangers) item {
-                        FooterNote(stringResource(R.string.calls_strangers_note))
-                        permission?.actionLabel?.let { label ->
-                            TextButton(onClick = permission.action, enabled = !busy) { Text(stringResource(label)) }
+                                { mode = IncomingScope.STRANGERS }, enabled = !busy && draft.valid,
+                                subtitle = if (strangers) stringResource(R.string.calls_strangers_note) else null)
+                            if (strangers) permission?.actionLabel?.let { label ->
+                                TextButton(onClick = permission.action, enabled = !busy,
+                                    modifier = Modifier.padding(start = 50.dp)) { Text(stringResource(label)) }
+                            }
+                            RadioRow(stringResource(R.string.calls_only_types), showTypes,
+                                { mode = IncomingScope.TYPES }, enabled = !busy && draft.valid,
+                                subtitle = if (showTypes) stringResource(R.string.calls_type_note) else null)
                         }
                     }
                     if (showTypes) item {
                         val service by ScreenAccessibility.instance.collectAsState()
                         val context = LocalContext.current
-                        FooterNote(stringResource(R.string.calls_type_note))
                         if (service == null) TextButton(onClick = {
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                         }) { Text(stringResource(R.string.calls_type_accessibility)) }
@@ -123,9 +116,21 @@ internal fun CallNumberRuleEditor(config: CallConfig, personal: Boolean, onDismi
                                     types = if (it) types + type else types - type
                                 }.heightIn(min = 48.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text(stringResource(type.title), Modifier.weight(1f), style = MikaType.Body)
                                     Checkbox(checked, onCheckedChange = null, enabled = !busy)
-                                    Text(stringResource(type.title))
                                 }
+                            }
+                        }
+                    }
+                    if (!personal) item {
+                        val delayLabel = stringResource(R.string.calls_rule_delay_summary, seconds)
+                        GroupCard {
+                            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Text(delayLabel, style = MikaType.Body)
+                                Slider(value = seconds.toFloat(), onValueChange = { seconds = it.roundToInt() },
+                                    valueRange = min.toFloat()..max.toFloat(), steps = max - min - 1, enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth().testTag("call-answer-delay")
+                                        .semantics { contentDescription = delayLabel })
                             }
                         }
                     }

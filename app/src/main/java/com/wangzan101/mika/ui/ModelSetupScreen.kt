@@ -130,6 +130,9 @@ fun ModelSetupScreen(
     var picking by rememberSaveable { mutableStateOf<ModelRole?>(null) }
     var pickingFallbackRole by rememberSaveable { mutableStateOf<ModelRole?>(null) }
     var pickingFallbackSlot by rememberSaveable { mutableStateOf<Int?>(null) }
+    var groupsOpen by rememberSaveable { mutableStateOf(false) }
+    // "" 表示新建,null 表示不在编辑组
+    var groupEditing by rememberSaveable { mutableStateOf<String?>(null) }
     var openProvider by rememberSaveable { mutableStateOf<String?>(null) }
     var allModels by rememberSaveable { mutableStateOf(false) }
     var openDecision by rememberSaveable { mutableStateOf(false) }
@@ -165,12 +168,32 @@ fun ModelSetupScreen(
         pickFallback = { pickingFallbackRole = ModelRole.Main; pickingFallbackSlot = it },
         pickRoleFallback = { r, s -> pickingFallbackRole = r; pickingFallbackSlot = s },
         openProviders = { showProviders = true },
+        openGroups = { groupsOpen = true },
         next = onDone, openSpeech = onOpenSpeech, openVoice = onOpenVoice, openUsage = onOpenUsage,
         openDecision = { openDecision = true }, openSignIn = { signInSheet = it },
         setReasoningEffort = vm::setReasoningEffort, setModelContext = vm::setModelContext,
     )
     when {
         openDecision -> JevSettingsScreen(remember { DecisionSettings.get(context) }, onBack = { openDecision = false })
+        groupEditing != null -> {
+            BackHandler { groupEditing = null }
+            ModelGroupEditorScreen(
+                ui, groupEditing?.takeIf { it.isNotEmpty() },
+                onBack = { groupEditing = null },
+                onSave = { vm.saveGroup(it) },
+                onDelete = { vm.deleteGroup(it) },
+                ensureConfig = { p, m -> vm.ensureConfig(p, m) },
+                onSetContext = vm::setModelContext,
+            )
+        }
+        groupsOpen -> {
+            BackHandler { groupsOpen = false }
+            ModelGroupsScreen(
+                ui, onBack = { groupsOpen = false },
+                onNew = { groupEditing = "" },
+                onEdit = { groupEditing = it },
+            )
+        }
         provider != null -> {
             LaunchedEffect(provider.id) { vm.ensureListed() }
             val accountKind = when {
@@ -255,6 +278,8 @@ fun ModelSetupScreen(
                     },
                     pickManual = { pid, model -> vm.pickManual(role, pid, model) { picking = null } },
                     choose = { vm.choose(role, it); picking = null },
+                    chooseGroup = { vm.chooseGroup(role, it); picking = null },
+                    manageGroups = { picking = null; groupsOpen = true },
                     addProvider = { vm.openForm(); picking = null },
                 ),
                 onBack = { picking = null },
@@ -324,6 +349,8 @@ class ModelSetupActions(
     val next: () -> Unit = {},
     /** 打开一家账号登录的说明面板。 */
     val openSignIn: (SignInKind) -> Unit = {},
+    /** 打开模型组管理页;上手流程不显示入口。 */
+    val openGroups: () -> Unit = {},
     val setReasoningEffort: (ModelRole, String?) -> Unit = { _, _ -> },
     val setModelContext: (String, ModelContextSettings) -> Boolean = { _, _ -> false },
 )
@@ -380,6 +407,9 @@ fun ModelSetupContent(ui: ModelSetupUi, onboarding: Boolean, actions: ModelSetup
                     RolesSection(ui, onPick, actions.setReasoningEffort, actions.setModelContext)
                     SpeechVoiceSection(ui, actions.openSpeech, actions.openVoice)
                     ImageModelSection(ui, actions.openImage)
+                    GroupCard(Modifier.padding(top = 8.dp)) {
+                        ListRow(MikaIcons.Leaf, ModelsCopy.GROUPS, first = true, onClick = actions.openGroups) { RowChevron() }
+                    }
                     actions.openDecision?.let { openDecision ->
                         GroupCard {
                             ListRow(MikaIcons.Route, stringResource(R.string.jev_title), stringResource(R.string.jev_row_sub),
@@ -427,7 +457,7 @@ private fun ProvidersSection(ui: ModelSetupUi, actions: ModelSetupActions) {
     }
     ui.probeNote?.let { FooterNote(it, Modifier.testTag("setup-probe-note"), color = c.warn) }
     // 刚存下的那家一个模型都没试通过:直接去选主模型(选的时候先试调用)
-    if (ui.pickToProbe != null && ui.roles.main == null) {
+    if (ui.pickToProbe != null && !ui.roles.hasMain) {
         Text(
             ModelSetupCopy.PICK_MAIN,
             Modifier.padding(start = 16.dp, bottom = 12.dp).clickable { actions.pickRole(ModelRole.Main) }.testTag("setup-pick-main").padding(vertical = 4.dp),
@@ -814,18 +844,30 @@ private fun FallbackSection(ui: ModelSetupUi, role: ModelRole = ModelRole.Main, 
 }
 
 private fun hasModelContextControl(ui: ModelSetupUi, role: ModelRole): Boolean =
-    ui.roles[role] is RoleChoice.Model && ui.configFor(role) != null
+    (ui.roles[role] is RoleChoice.Model || ui.roles[role] is RoleChoice.Group) && ui.configFor(role) != null
 
 @Composable
 private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
     onSave: (String, ModelContextSettings) -> Boolean, modifier: Modifier = Modifier,
 ) {
-    if (ui.roles[role] !is RoleChoice.Model) return
+    // 具体模型和组都能设;组先给排在最前的成员,成员级设置在组编辑页
+    if (ui.roles[role] !is RoleChoice.Model && ui.roles[role] !is RoleChoice.Group) return
     val cfg = ui.configFor(role) ?: return
     val saved = ui.providerOf(cfg)?.contextSettings?.get(cfg.model) ?: ModelContextSettings()
     var open by rememberSaveable(cfg.id) { mutableStateOf(false) }
     ModelOptionButton(stringResource(R.string.model_context_title), "context-${role.name.lowercase()}", modifier) { open = true }
     if (!open) return
+    ModelContextDialog(cfg, saved, "context", { settings -> onSave(cfg.id, settings) }) {
+        open = false
+    }
+}
+
+/** 一个模型配置的上下文窗口/压缩触发点;用途页和组编辑页共用。[onSave] 返回 false 时留在对话框上说明。 */
+@Composable
+internal fun ModelContextDialog(
+    cfg: ProviderConfig, saved: ModelContextSettings, tagPrefix: String,
+    onSave: (ModelContextSettings) -> Boolean, onDismiss: () -> Unit,
+) {
     var window by rememberSaveable(cfg.id) { mutableStateOf(saved.windowTokens?.toString().orEmpty()) }
     var trigger by rememberSaveable(cfg.id) { mutableStateOf(saved.triggerTokens?.toString().orEmpty()) }
     var readTimeout by rememberSaveable(cfg.id) { mutableStateOf(saved.readTimeoutSeconds?.toString().orEmpty()) }
@@ -840,7 +882,7 @@ private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
     val badReadTimeout = readTimeout.isNotBlank() && settings.readTimeoutSeconds == null
     val keyboard = KeyboardOptions(keyboardType = KeyboardType.Number)
     MikaDialog(
-        onDismissRequest = { open = false },
+        onDismissRequest = onDismiss,
         modifier = Modifier.imePadding(),
         title = { Text(stringResource(R.string.model_context_title)) },
         text = {
@@ -848,13 +890,13 @@ private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
                 Text(cfg.model)
                 Text(stringResource(R.string.model_context_note))
                 OutlinedTextField(window, { window = it; saveFailed = false },
-                    modifier = Modifier.fillMaxWidth().testTag("context-window"), singleLine = true, keyboardOptions = keyboard,
+                    modifier = Modifier.fillMaxWidth().testTag("$tagPrefix-window"), singleLine = true, keyboardOptions = keyboard,
                     label = { Text(stringResource(R.string.model_context_window)) },
                     placeholder = { Text(stringResource(R.string.model_context_auto, modelWindow)) },
                     supportingText = if (badWindow) ({ Text(stringResource(R.string.model_context_integer)) }) else null,
                     isError = badWindow)
                 OutlinedTextField(trigger, { trigger = it; saveFailed = false },
-                    modifier = Modifier.fillMaxWidth().testTag("context-trigger"), singleLine = true, keyboardOptions = keyboard,
+                    modifier = Modifier.fillMaxWidth().testTag("$tagPrefix-trigger"), singleLine = true, keyboardOptions = keyboard,
                     label = { Text(stringResource(R.string.model_context_trigger)) },
                     placeholder = { Text(stringResource(R.string.model_context_auto, limits.trigger)) },
                     supportingText = {
@@ -871,15 +913,15 @@ private fun ModelContextControl(ui: ModelSetupUi, role: ModelRole,
                     }) else null,
                     isError = badReadTimeout)
                 if (!badWindow && (trigger.isBlank() || settings.triggerTokens != null)) Text(stringResource(R.string.model_context_effective, limits.window, limits.trigger),
-                    modifier = Modifier.testTag("context-effective"))
+                    modifier = Modifier.testTag("$tagPrefix-effective"))
                 TextButton(onClick = { window = ""; trigger = ""; readTimeout = ""; saveFailed = false }) { Text(stringResource(R.string.reset)) }
                 if (saveFailed) Text(stringResource(R.string.model_context_save_failed), color = MikaTheme.colors.bad)
             }
         },
         confirmButton = { TextButton(onClick = {
-            if (onSave(cfg.id, settings)) open = false else saveFailed = true
-        }, enabled = !badWindow && !badTrigger && !badReadTimeout, modifier = Modifier.testTag("context-save")) { Text(stringResource(R.string.save)) } },
-        dismissButton = { TextButton(onClick = { open = false }) { Text(stringResource(R.string.cancel)) } },
+            if (onSave(settings)) onDismiss() else saveFailed = true
+        }, enabled = !badWindow && !badTrigger && !badReadTimeout, modifier = Modifier.testTag("$tagPrefix-save")) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 

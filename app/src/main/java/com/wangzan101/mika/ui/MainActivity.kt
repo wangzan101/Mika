@@ -422,7 +422,7 @@ private fun MikaRoot(
     var sourceLegacyText by rememberSaveable { mutableStateOf<String?>(null) }
     val status by monitor.status.collectAsState()
     val roles by store.roles.collectAsState()
-    val hasMain = roles.main != null
+    val hasMain = roles.hasMain
     val check = Prerequisites.check(status, hasMain)
     val app = context.applicationContext as MikaApp
     val personasOn = FeatureFlags.get(context).persona()
@@ -501,7 +501,7 @@ private fun MikaRoot(
     // 第一次打开:欢迎 → 配置模型 → 手机操作;配过模型的跳过前两步,手机操作已就绪或看过引导的跳过最后一步
     val onboardingState = remember { OnboardingState(context) }
     fun onboardingInputs() = Onboarding.Inputs(
-        hasMainModel = store.roles.value.main != null,
+        hasMainModel = store.roles.value.hasMain,
         modelSetupDone = onboardingState.modelSetupDone(),
         phoneNeeded = status.builtinShell != BuiltinShellStatus.Running && status.sdkInt >= Prerequisites.MIN_SDK,
         phoneGuideSeen = phoneSetup.guideSeen(),
@@ -646,7 +646,7 @@ private fun MikaRoot(
                 onOpenPersonas = if (personasOn) ({ nav.push(Route.Persona) }) else null,
                 autonomous = autonomous, onAutonomous = app.approvalControl::setAutonomous,
                 updateVersion = updateState.update?.version, onOpenAbout = { nav.push(Route.About) },
-                mcpServers = app.mcpServers,
+                mcpServers = app.mcpServers, workspaceAccess = app.workspaceAccess,
                 openPhoneOps = openPhoneOps, onPhoneOpsOpened = { openPhoneOps = false })
         }
         Route.Models -> ModelsScreen(store, onBack = back, onOpenSpeech = { nav.push(Route.SpeechModel) }, onOpenVoice = { nav.push(Route.VoiceModel) }, onOpenImage = { nav.push(Route.ImageModel) }, onOpenUsage = { nav.push(Route.Usage) })
@@ -741,6 +741,8 @@ private fun MikaRoot(
                         vmScope.launch { routeCount = withContext(Dispatchers.IO) { routeStore.clear(); routeStore.count() } }
                     },
                     onBack = { memoryRuntime.requestOpen(null); nav.back() },
+                    workspaceAccess = app.workspaceAccess,
+                    workspaceCatalog = remember { AppWorkspaceCatalog(app) },
                 )
             }
         }

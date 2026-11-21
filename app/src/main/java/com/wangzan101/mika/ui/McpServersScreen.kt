@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.wangzan101.mika.R
 import com.wangzan101.mika.settings.McpServerConfig
 import com.wangzan101.mika.settings.McpServerStore
+import com.wangzan101.mika.settings.WorkspaceAccessStore
 import com.wangzan101.mika.ui.components.GroupCard
 import com.wangzan101.mika.ui.components.GroupLabel
 import com.wangzan101.mika.ui.components.ListRow
@@ -41,7 +42,7 @@ import kotlinx.coroutines.launch
 
 /** 设置 › MCP 服务器:连接外部 MCP server(outbound),和「连接电脑」的 inbound 设置分开。 */
 @Composable
-fun McpServersScreen(store: McpServerStore, onBack: () -> Unit) {
+fun McpServersScreen(store: McpServerStore, onBack: () -> Unit, access: WorkspaceAccessStore? = null) {
     val servers by store.servers.collectAsState()
     val health by store.health.collectAsState()
     var editing by remember { mutableStateOf<McpServerConfig?>(null) }
@@ -94,6 +95,23 @@ fun McpServersScreen(store: McpServerStore, onBack: () -> Unit) {
             stringResource(R.string.mcp_servers_help_text),
             Modifier.padding(horizontal = 16.dp),
         )
+        if (access != null) {
+            val allowed by access.state.collectAsState()
+            val ids = servers.map { it.id }.toSet()
+            AllowListSection(
+                title = stringResource(R.string.workspace_mcp_title),
+                allLabel = stringResource(R.string.workspace_mcp_all),
+                note = stringResource(R.string.workspace_mcp_note),
+                all = allowed.mcpAll,
+                items = servers.map { WorkspaceItem(it.id, it.name) },
+                selected = allowed.mcpServers,
+                known = allowed.mcpKnown,
+                onAll = { on -> if (on) access.setAllMcp(true, ids) else access.customizeMcp(ids) },
+                onSelectAll = { access.setAllMcp(true, ids) },
+                onSelectNone = { access.setAllMcp(false, ids) },
+                onItem = { id, on -> access.setMcpServer(id, on, ids) },
+            )
+        }
     }
 
     if (adding || editing != null) {

@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">高リスク</string>
     <string name="calls_type_business">企業・カスタマーサービス</string>
     <string name="calls_type_transport">タクシー・配車</string>
+    <string name="calls_only_strangers">連絡先にない番号のみ</string>
+    <string name="calls_strangers_note">Mika に連絡先の読み取りを許可してください。番号が未登録だと確認できた場合のみ AI が応答します。非通知や照合できない着信にはご自身で応答してください。</string>
 </resources>

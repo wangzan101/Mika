@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">Alto riesgo</string>
     <string name="calls_type_business">Empresas y atención al cliente</string>
     <string name="calls_type_transport">Taxis y transporte con conductor</string>
+    <string name="calls_only_strangers">Solo números no guardados</string>
+    <string name="calls_strangers_note">Permite que Mika lea tus contactos. La IA solo contesta si confirma que el número no está guardado. Si está oculto o falla la consulta, podrás contestar tú.</string>
 </resources>

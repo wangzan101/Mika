@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">Yüksek risk</string>
     <string name="calls_type_business">Şirketler ve müşteri hizmetleri</string>
     <string name="calls_type_transport">Taksi ve araç çağırma</string>
+    <string name="calls_only_strangers">Yalnızca rehberde olmayan numaralar</string>
+    <string name="calls_strangers_note">Mika uygulamasına kişileri okuma izni verin. Yapay zekâ yalnızca numaranın kayıtlı olmadığını doğrularsa yanıtlar. Gizli numaraları ve sorgulanamayan aramaları siz yanıtlarsınız.</string>
 </resources>

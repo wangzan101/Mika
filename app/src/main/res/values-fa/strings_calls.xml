@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">خطر بالا</string>
     <string name="calls_type_business">شرکت‌ها و خدمات مشتریان</string>
     <string name="calls_type_transport">تاکسی و خدمات سفر</string>
+    <string name="calls_only_strangers">فقط شماره‌های ذخیره‌نشده</string>
+    <string name="calls_strangers_note">به Mika اجازهٔ خواندن مخاطبان را بدهید. هوش مصنوعی فقط وقتی پاسخ می‌دهد که مطمئن شود شماره ذخیره نشده است. اگر شماره پنهان باشد یا جستجو ناموفق باشد، پاسخ با شماست.</string>
 </resources>

@@ -39,6 +39,22 @@ class IncomingCallTypeTest {
         assertNull(evidence.typeFor(number))
     }
 
+    @Test fun strangersRequireAConfirmedLookupAndRespectBothPolicies() {
+        val config = ready.copy(incomingScope = IncomingScope.STRANGERS)
+        assertTrue(config.hasIncomingSelection)
+        assertTrue(CallPolicy.canStartAutoAnswer(config, config, number, 500, isStranger = true))
+        assertFalse(CallPolicy.callerAllowed(config, number))
+        assertFalse(CallPolicy.callerAllowed(config, null, isStranger = true))
+        assertFalse(CallPolicy.callerAllowed(config, "Private", isStranger = true))
+        val bypass = config.copy(bypassIncomingNumbers = setOf("+86$number"))
+        assertFalse(CallPolicy.canStartAutoAnswer(bypass, config, number, 500, isStranger = true))
+        assertFalse(CallPolicy.canStartAutoAnswer(config, bypass, number, 500, isStranger = true))
+        assertFalse(CallPolicy.canStartAutoAnswer(config, config, number, 8001, isStranger = true))
+        val prefs = MemoryPrefs()
+        CallSettings(prefs).save(config)
+        assertEquals(IncomingScope.STRANGERS, CallSettings(prefs).state.value.incomingScope)
+    }
+
     @Test fun legacyScopesAndTypeChoicesSurviveReload() {
         val prefs = MemoryPrefs()
         assertEquals(IncomingScope.LIST, CallSettings(prefs).state.value.incomingScope)

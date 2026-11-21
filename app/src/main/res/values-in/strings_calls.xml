@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">Risiko tinggi</string>
     <string name="calls_type_business">Perusahaan dan layanan pelanggan</string>
     <string name="calls_type_transport">Taksi dan transportasi daring</string>
+    <string name="calls_only_strangers">Hanya nomor di luar kontak</string>
+    <string name="calls_strangers_note">Izinkan Mika membaca kontak. AI hanya menjawab jika nomor dipastikan belum tersimpan. Nomor tersembunyi atau yang gagal diperiksa dapat Anda jawab sendiri.</string>
 </resources>

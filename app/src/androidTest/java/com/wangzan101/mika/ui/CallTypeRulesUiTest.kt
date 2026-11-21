@@ -20,7 +20,7 @@ class CallTypeRulesUiTest {
         var saved: CallConfig? = null
         compose.setContent {
             MikaTheme(dark = false) {
-                CallRulesDialog(original, onDismiss = {}) { mode, numbers, types, delay ->
+                CallNumberRuleEditor(original, personal = false, onDismiss = {}) { mode, numbers, types, delay ->
                     saved = original.copy(incomingScope = mode, allowedIncomingNumbers = numbers,
                         allowedCallTypes = types, autoAnswerDelaySeconds = delay)
                     true

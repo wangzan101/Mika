@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">고위험 전화</string>
     <string name="calls_type_business">기업 및 고객 센터</string>
     <string name="calls_type_transport">택시 및 차량 호출</string>
+    <string name="calls_only_strangers">연락처에 없는 번호만</string>
+    <string name="calls_strangers_note">Mika에 연락처 읽기 권한을 허용하세요. 저장되지 않은 번호로 확인된 경우에만 AI가 받습니다. 발신 번호가 숨겨져 있거나 확인할 수 없으면 직접 받으세요.</string>
 </resources>

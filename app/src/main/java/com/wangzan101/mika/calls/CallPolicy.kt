@@ -1,7 +1,7 @@
 package com.wangzan101.mika.calls
 
 enum class CallAudioMode { DIRECT, REDIRECT }
-enum class IncomingScope { LIST, ALL, TYPES }
+enum class IncomingScope { LIST, ALL, TYPES, STRANGERS }
 enum class CallPhase { IDLE, DIALING, RINGING, CONNECTING, ACTIVE, HOLDING, DISCONNECTING, UNKNOWN }
 enum class CallDirection { INCOMING, OUTGOING }
 enum class CallAutoAnswerStage { OFF, BLOCKED, PAUSED, STANDBY, COUNTDOWN, PREPARING, ANSWERING, BUSY }
@@ -39,7 +39,7 @@ data class CallConfig(
     val hasIncomingSelection: Boolean get() = when (incomingScope) {
         IncomingScope.LIST -> allowedIncomingNumbers.isNotEmpty()
         IncomingScope.TYPES -> allowedCallTypes.isNotEmpty()
-        IncomingScope.ALL -> true
+        IncomingScope.ALL, IncomingScope.STRANGERS -> true
     }
     override fun toString(): String =
         "CallConfig(enabled=$enabled, autoAnswer=$autoAnswer, incomingScope=$incomingScope, " +
@@ -111,7 +111,7 @@ internal object CallPolicy {
         config.autoAnswerPausedUntilMs?.takeIf { it > nowMs }?.minus(nowMs) ?: 0L
 
     fun callerAllowed(config: CallConfig, number: String?, nowMs: Long = System.currentTimeMillis(),
-                      type: IncomingCallType? = null): Boolean {
+                      type: IncomingCallType? = null, isStranger: Boolean = false): Boolean {
         if (!config.enabled || !config.autoAnswer || !config.credentialsConfigured || !config.audioVerified) return false
         if (autoAnswerPauseRemainingMs(config, nowMs) > 0L || isBypassed(config, number)) return false
         if (number == null) return config.incomingScope == IncomingScope.ALL
@@ -119,6 +119,7 @@ internal object CallPolicy {
         return when (config.incomingScope) {
             IncomingScope.ALL -> true
             IncomingScope.LIST -> config.allowedIncomingNumbers.any { incomingMatchKey(it) == key }
+            IncomingScope.STRANGERS -> isStranger
             IncomingScope.TYPES -> type != null && type in config.allowedCallTypes
         }
     }
@@ -131,9 +132,10 @@ internal object CallPolicy {
         nowMs: Long = System.currentTimeMillis(),
         ringObservedWallMs: Long = nowMs - ringingForMs,
         type: IncomingCallType? = null,
+        isStranger: Boolean = false,
     ): Boolean =
         ringingForMs in 0L..AUTO_START_WINDOW_MS && initial.audioMode == current.audioMode &&
-            callerAllowed(initial, number, ringObservedWallMs, type) && callerAllowed(current, number, nowMs, type)
+            callerAllowed(initial, number, ringObservedWallMs, type, isStranger) && callerAllowed(current, number, nowMs, type, isStranger)
 
     fun chooseSim(sims: List<CallSim>, requested: String?): CallSim? = when {
         requested == "default" -> sims.singleOrNull { it.isDefault } ?: sims.singleOrNull()

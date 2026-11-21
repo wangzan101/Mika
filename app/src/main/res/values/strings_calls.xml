@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">High risk</string>
     <string name="calls_type_business">Businesses and customer service</string>
     <string name="calls_type_transport">Taxis and ride services</string>
+    <string name="calls_only_strangers">Only numbers outside contacts</string>
+    <string name="calls_strangers_note">Allow Mika to read contacts. AI answers only when the number can be checked and is not saved. Hidden numbers and failed lookups are left for you.</string>
 </resources>

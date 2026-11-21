@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">高风险来电</string>
     <string name="calls_type_business">企业与客服</string>
     <string name="calls_type_transport">出租车与网约车</string>
+    <string name="calls_only_strangers">仅接听陌生号码</string>
+    <string name="calls_strangers_note">请允许 Mika 读取通讯录。只有查到号码未保存时，AI 才会接听。隐藏号码、通讯录无法读取时，由你本人接听。</string>
 </resources>

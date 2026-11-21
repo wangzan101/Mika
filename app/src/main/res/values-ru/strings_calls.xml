@@ -159,4 +159,6 @@
     <string name="calls_type_high_risk">Высокий риск</string>
     <string name="calls_type_business">Компании и поддержка клиентов</string>
     <string name="calls_type_transport">Такси и перевозки</string>
+    <string name="calls_only_strangers">Только номера вне контактов</string>
+    <string name="calls_strangers_note">Разрешите Mika читать контакты. ИИ ответит, только если проверит номер и не найдёт его в контактах. На звонки со скрытых номеров и при сбое проверки вы отвечаете сами.</string>
 </resources>

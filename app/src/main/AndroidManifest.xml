@@ -75,6 +75,7 @@
 
     <!-- list_apps 列出可启动的 App;解析系统权限框所在的包,用于判断「被切走」 -->
     <queries>
+        <intent><action android:name="android.telecom.InCallService" /></intent>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

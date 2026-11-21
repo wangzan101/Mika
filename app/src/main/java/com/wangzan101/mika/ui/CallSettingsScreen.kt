@@ -343,8 +343,8 @@ private fun CallSettingsWorkspace(
     }
 
     when (dialog) {
-        CallDialog.Rules -> CallRulesDialog(config, onDismiss = { dialog = null }, onSave = { all, numbers, delay ->
-            save { it.copy(allowAllIncoming = all, allowedIncomingNumbers = numbers, autoAnswerDelaySeconds = delay) }
+        CallDialog.Rules -> CallRulesDialog(config, onDismiss = { dialog = null }, onSave = { mode, numbers, types, delay ->
+            save { it.copy(incomingScope = mode, allowedIncomingNumbers = numbers, allowedCallTypes = types, autoAnswerDelaySeconds = delay) }
         })
         CallDialog.Bypass -> CallBypassDialog(config.bypassIncomingNumbers, onDismiss = { dialog = null }) { numbers ->
             save { it.copy(bypassIncomingNumbers = numbers) }
@@ -566,7 +566,7 @@ private fun CallReceivePage(
     }
     val autoLabel = stringResource(R.string.calls_auto_answer)
     val canTurnOn = ready && config.audioVerified && state.phase == CallPhase.IDLE &&
-        (config.allowAllIncoming || config.allowedIncomingNumbers.isNotEmpty())
+        config.hasIncomingSelection
     GroupCard {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -863,7 +863,12 @@ private fun autoAnswerSummary(config: CallConfig, state: CallRuntimeState): Stri
 
 @Composable
 private fun rulesSummary(config: CallConfig): String = when {
-    config.allowAllIncoming -> stringResource(R.string.calls_all_note)
+    config.incomingScope == IncomingScope.ALL -> stringResource(R.string.calls_all_note)
+    config.incomingScope == IncomingScope.TYPES -> {
+        val resources = LocalContext.current.resources
+        config.allowedCallTypes.sortedBy { it.ordinal }.joinToString(", ") { resources.getString(it.title) }
+            .ifEmpty { resources.getString(R.string.calls_pick_types) }
+    }
     config.allowedIncomingNumbers.isEmpty() -> stringResource(R.string.calls_allowlist_empty)
     else -> stringResource(R.string.calls_list_count, config.allowedIncomingNumbers.size)
 }
@@ -923,10 +928,12 @@ private fun phaseLabel(phase: CallPhase): String = stringResource(when (phase) {
 })
 
 @Composable
-private fun CallRulesDialog(
-    config: CallConfig, onDismiss: () -> Unit, onSave: suspend (Boolean, Set<String>, Int) -> Boolean,
+internal fun CallRulesDialog(
+    config: CallConfig, onDismiss: () -> Unit,
+    onSave: suspend (IncomingScope, Set<String>, Set<IncomingCallType>, Int) -> Boolean,
 ) {
-    var all by rememberSaveable { mutableStateOf(config.allowAllIncoming) }
+    var mode by rememberSaveable { mutableStateOf(config.incomingScope) }
+    var types by rememberSaveable { mutableStateOf(config.allowedCallTypes) }
     var numbers by rememberSaveable { mutableStateOf(config.allowedIncomingNumbers.sorted().joinToString("\n")) }
     var delay by rememberSaveable { mutableStateOf(config.autoAnswerDelaySeconds.toString()) }
     var busy by remember { mutableStateOf(false) }
@@ -943,10 +950,30 @@ private fun CallRulesDialog(
         text = {
             Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                RadioRow(stringResource(R.string.calls_only_list), !all, { all = false }, first = true, enabled = !busy)
-                RadioRow(stringResource(R.string.calls_all_incoming), all, { all = true },
+                RadioRow(stringResource(R.string.calls_only_list), mode == IncomingScope.LIST, { mode = IncomingScope.LIST }, first = true, enabled = !busy)
+                RadioRow(stringResource(R.string.calls_all_incoming), mode == IncomingScope.ALL, { mode = IncomingScope.ALL },
                     subtitle = stringResource(R.string.calls_all_note), enabled = !busy)
-                OutlinedTextField(
+                RadioRow(stringResource(R.string.calls_only_types), mode == IncomingScope.TYPES, { mode = IncomingScope.TYPES }, enabled = !busy)
+                if (mode == IncomingScope.TYPES) {
+                    Text(stringResource(R.string.calls_type_note), style = MaterialTheme.typography.bodySmall)
+                    val accessibility by com.wangzan101.mika.cap.phone.a11y.ScreenAccessibility.instance.collectAsState()
+                    if (accessibility == null) {
+                        val context = LocalContext.current
+                        TextButton(onClick = {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }) { Text(stringResource(R.string.calls_type_accessibility)) }
+                    }
+                    for (type in IncomingCallType.entries) {
+                        val selected = type in types
+                        Row(Modifier.fillMaxWidth().toggleable(selected, enabled = !busy, role = Role.Checkbox) { checked ->
+                            types = if (checked) types + type else types - type
+                        }.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Checkbox(selected, onCheckedChange = null, enabled = !busy)
+                            Text(stringResource(type.title))
+                        }
+                    }
+                } else OutlinedTextField(
                     numbers, { numbers = it; error = false },
                     modifier = Modifier.fillMaxWidth().testTag("call-allowlist"),
                     label = { Text(stringResource(R.string.calls_allowlist)) },
@@ -970,12 +997,12 @@ private fun CallRulesDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = !busy && validNumbers && seconds != null, onClick = {
+            TextButton(enabled = !busy && (if (mode == IncomingScope.TYPES) types.isNotEmpty() else validNumbers) && seconds != null, onClick = {
                 val duration = seconds ?: return@TextButton
                 busy = true
                 scope.launch {
                     try {
-                        if (onSave(all, normalized ?: return@launch, duration)) onDismiss() else error = true
+                        if (onSave(mode, normalized ?: config.allowedIncomingNumbers, types, duration)) onDismiss() else error = true
                     } finally { busy = false }
                 }
             }) { Text(stringResource(R.string.calls_save)) }

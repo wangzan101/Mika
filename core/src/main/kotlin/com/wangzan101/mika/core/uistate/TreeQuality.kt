@@ -22,42 +22,32 @@ internal data class TreeCheck(val quality: TreeQuality?, val reason: String? = n
 internal object TreeAdequacy {
     /** 有名字的元素少于这个数就拿不准:只有几个字的简单页面和树缺了一大块看起来一样。 */
     private const val ENOUGH_NAMED = 6
+    /** 有名字的元素达到这个数,树文字已明显够用:即便可点控件名字不全,也不判「缺一块」,不因此转 OCR。 */
+    private const val RICH_NAMED = 20
     /** 子树里一个字也没有的节点占屏幕这么大(0–1)就是一块盲区。 */
     private const val BLIND_AREA = 0.2
     /** 有这么多个有名字的元素落在里面的,只是垫在下面的底板(背景图、容器),不算盲区。 */
     private const val NAMED_INSIDE = 3
     /** OCR 补出这么多行树里没有的字,就算树缺了一块。 */
     private const val MISSING_LINES = 3
-    /** 树里已经有这么多带名字的元素,就说明能按 ref 办事:缺几个没名字的控件不判 unusable(网页商品卡、长列表常见)。 */
-    private const val RICH_NAMED = 20
     private const val APPLICATION = "application"
 
     fun ofTree(s: ScreenSnapshot): TreeCheck {
         if (s.protected) return TreeCheck(TreeQuality.Protected)
-        val named = s.elements.filter { it.name.isNotBlank() }
-        // 窗口读不到:只有树里一个带名字的元素都没有时才算不可用
-        if (s.unreadableApp != null && named.isEmpty() && s.elements.none { it.meaningful })
-            return TreeCheck(TreeQuality.Unusable, "unreadable_window")
+        if (s.unreadableApp != null && s.elements.none { it.meaningful }) return TreeCheck(TreeQuality.Unusable, "unreadable_window")
         if (!s.hasWindow && s.web == null) return TreeCheck(TreeQuality.Adequate)
         if (s.elements.isEmpty()) return TreeCheck(TreeQuality.Unusable, "empty_elements")
+        val named = s.elements.filter { it.name.isNotBlank() }
         val controls = s.elements.filter { it.clickable || it.editable }
         // resourceId 常是开发者内部编号,不能当成用户能认出的控件名称。
         val namedControls = controls.count { it.name.isNotBlank() || !it.placeholder.isNullOrBlank() }
-        val check = when {
-            // 窗口读不到:只有树里一个带名字的元素都没有时才算不可用
-            s.unreadableApp != null && named.isEmpty() && s.elements.none { it.meaningful } ->
-                TreeCheck(TreeQuality.Unusable, "unreadable_window")
-            controls.isNotEmpty() && (namedControls == 0 || (controls.size >= 4 && namedControls * 3 <= controls.size)) ->
-                TreeCheck(if (named.isEmpty()) TreeQuality.Unusable else TreeQuality.Partial, "unlabeled_controls")
-            named.isEmpty() -> TreeCheck(TreeQuality.Unusable, "no_text")
-            named.size < ENOUGH_NAMED || blindArea(s, named) -> TreeCheck(null)
-            else -> TreeCheck(TreeQuality.Adequate)
-        }
-        // 收尾护栏:树里已经有一大批带名字的元素时,最多判 partial。
-        // unusable 只留给真读不到(空树、窗口读不到);把能用的树判死会让模型整屏改靠 OCR。
-        if (check.quality == TreeQuality.Unusable && named.size >= RICH_NAMED)
-            return TreeCheck(TreeQuality.Partial, check.reason ?: "plenty_named")
-        return check
+        // 树里已经有足够多有名字的元素:页面文字丰富,模型能按 ref 理解并操作,不因少数无名控件判「缺一块」
+        val richNamed = named.size >= RICH_NAMED
+        if (!richNamed && controls.isNotEmpty() && (namedControls == 0 || (controls.size >= 4 && namedControls * 3 <= controls.size)))
+            return TreeCheck(if (named.isEmpty()) TreeQuality.Unusable else TreeQuality.Partial, "unlabeled_controls")
+        if (named.isEmpty()) return TreeCheck(TreeQuality.Unusable, "no_text")
+        if (named.size < ENOUGH_NAMED || blindArea(s, named)) return TreeCheck(null)
+        return TreeCheck(TreeQuality.Adequate)
     }
 
     /** 树判不准时按 OCR 补出的、树里没有的字([missing],已去掉认错的行)定下来;没读到字([missing] 为 null)照旧判不准。 */

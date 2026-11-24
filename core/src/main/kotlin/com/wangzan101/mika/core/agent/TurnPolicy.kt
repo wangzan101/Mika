@@ -37,6 +37,12 @@ internal object TurnPolicy {
             Feedback.format("progress_check", "used" to used, "max" to s.maxSteps, "answer_or_failure" to ANSWER_OR_FAILURE))
     }
 
+    /** 时间预算用了八成时只提醒一次:先收束到已确认结果,避免把剩余时间耗在探索上。 */
+    fun softTimeBudget(): Notice = Notice(
+        Feedback["budget_soft_limit_source"],
+        Feedback.format("budget_soft_limit", "answer_or_failure" to ANSWER_OR_FAILURE),
+    )
+
     /**
      * 回复里没有调用也没有字([truncated]:字被输出上限截断了,不是完整的回答)。[already] 为 true 表示这样的回复刚提醒过一次:
      * 这次不再提醒,返回 null,任务就此结束。

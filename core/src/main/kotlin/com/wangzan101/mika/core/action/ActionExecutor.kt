@@ -1,23 +1,23 @@
 package com.wangzan101.mika.core.action
 
 import com.wangzan101.mika.core.tool.Risk
-import com.wangzan101.mika.core.safety.gate.ConfirmationGate
-import com.wangzan101.mika.core.safety.gate.Irreversible
-import com.wangzan101.mika.core.safety.guard.DIAGNOSTIC_VERBS
-import com.wangzan101.mika.core.safety.guard.GuardVerdict
-import com.wangzan101.mika.core.safety.guard.OperationGuards
-import com.wangzan101.mika.core.safety.guard.PAGE_READ_VERBS
-import com.wangzan101.mika.core.safety.guard.GuardScope
-import com.wangzan101.mika.core.safety.guard.elementsHash
-import com.wangzan101.mika.core.safety.guard.resultFingerprint
+import com.wangzan101.mika.core.gate.ConfirmationGate
+import com.wangzan101.mika.core.gate.Irreversible
+import com.wangzan101.mika.core.guard.DIAGNOSTIC_VERBS
+import com.wangzan101.mika.core.guard.GuardVerdict
+import com.wangzan101.mika.core.guard.OperationGuards
+import com.wangzan101.mika.core.guard.PAGE_READ_VERBS
+import com.wangzan101.mika.core.guard.GuardScope
+import com.wangzan101.mika.core.guard.elementsHash
+import com.wangzan101.mika.core.guard.resultFingerprint
 import com.wangzan101.mika.core.model.Part
-import com.wangzan101.mika.core.run.record.Redactor
-import com.wangzan101.mika.core.run.record.RunEvent
-import com.wangzan101.mika.core.learn.replay.Anchors
-import com.wangzan101.mika.core.learn.replay.effectiveWrite
-import com.wangzan101.mika.core.screen.uistate.Described
-import com.wangzan101.mika.core.screen.uistate.ScreenSnapshot
-import com.wangzan101.mika.core.screen.uistate.interfaces
+import com.wangzan101.mika.core.record.Redactor
+import com.wangzan101.mika.core.record.RunEvent
+import com.wangzan101.mika.core.replay.Anchors
+import com.wangzan101.mika.core.replay.effectiveWrite
+import com.wangzan101.mika.core.uistate.Described
+import com.wangzan101.mika.core.uistate.ScreenSnapshot
+import com.wangzan101.mika.core.uistate.interfaces
 import com.wangzan101.mika.core.tool.ActionPass
 import com.wangzan101.mika.core.tool.ToolDispatcher
 import com.wangzan101.mika.core.tool.ToolExecution
@@ -34,12 +34,15 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.wangzan101.mika.core.tool.SubActions
-import com.wangzan101.mika.core.safety.guard.OffScreenGuard
+import com.wangzan101.mika.core.tool.LocalToolTimeout
+import com.wangzan101.mika.core.guard.OffScreenGuard
 import com.wangzan101.mika.core.run.RunProvenance
 import com.wangzan101.mika.core.run.SKIPPED_FOR_NEW_MESSAGE
 import com.wangzan101.mika.core.run.waitOrSteer
 import com.wangzan101.mika.core.tool.failCode
 import com.wangzan101.mika.core.capability.Paced
+
+private const val PHONE_TOOL_GRACE_MS = 1_000L
 
 /**
  * 所有改变外部世界的动作唯一的执行入口:[ToolDispatcher.execute] 要一张 [ActionPass],只有这里有。
@@ -61,9 +64,12 @@ class ActionExecutor(
     /** 同一网站、App 里连着做对外动作(发送、提交)时两次之间的间隔(见 [OutwardPacing]);默认不等。 */
     private val pacing: OutwardPacing = OutwardPacing.Off,
     private val onScreenAction: ((Verb?, JsonObject, ToolExecution) -> Unit)? = null,
+    private val phoneToolTimeoutMs: Long? = null,
 ) {
     private val decision = ConfirmDecision(tools, confirmations, approvals, recorder = recorder, provenance = provenance, selfPackage = selfPackage, autonomous = autonomous)
     private val pass = ActionPass()
+    /** 当前 App/站点;由 AgentLoop 的任务状态挂在可变位置后提供。 */
+    internal var currentPlace: (() -> com.wangzan101.mika.core.observation.Place?)? = null
 
     /** 配了确认关卡(付款能经用户同意后做)。 */
     val confirms: Boolean = confirmations != null
@@ -90,6 +96,7 @@ class ActionExecutor(
     }
 
     private suspend fun runAutomatic(call: Part.ToolCall, origin: Origin, followUp: FollowUp, reads: GuardScope?): ActionOutcome {
+        com.wangzan101.mika.core.run.RunDeadline.checkCurrent()
         val args = parseArgs(call.argsJson)
         // 不动屏幕的工具(沙箱一类):不进屏幕守卫,由各自的守卫另管
         val offScreen = tools.offScreen(call.name)
@@ -102,7 +109,13 @@ class ActionExecutor(
         tools.aim(call.name, args)
         try {
             return aimed(call, origin, followUp, reads, args, offScreen, verb)
-        } catch (e: com.wangzan101.mika.core.device.access.AppAccessDenied) {
+        } catch (e: LocalToolTimeout) {
+            guards.beforeAction(call.name, args)
+            val after = guards.result(call.name, e.execution.content)
+            recorder.result(origin.step, call.name, verb, e.execution.content, e.execution.record, null, null,
+                e.durationMs, origin.policy.source, call.id)
+            return ActionOutcome.Ran(e.execution, emptyList(), after, e.execution.content, e.durationMs)
+        } catch (e: com.wangzan101.mika.core.access.AppAccessDenied) {
             val content = buildJsonObject {
                 put("ok", false); put("error", e.code); put("message", e.message); put("retryable", false)
                 e.packageName?.let { put("package", it) }
@@ -124,14 +137,18 @@ class ActionExecutor(
         var call = given
         var args = givenArgs
         var note: JsonObject? = null
-        tools.interfaces.checkAppAccess(tools.declared(call.name))
-        when (val d = tools.interfaces.described(tools.declared(call.name), args)) {
+        val described = tools.localOperation(call.name, phoneToolTimeoutMs) {
+            tools.interfaces.checkAppAccess(tools.declared(call.name))
+            tools.interfaces.described(tools.declared(call.name), args)
+        }
+        when (val d = described) {
             is Described.Failed -> return ran(Step(call, args, origin, emptyList(), writing = false, offScreen, verb, null, followUp, reads, preset = d.result))
             is Described.Resolved -> { args = d.args; call = call.copy(argsJson = d.args.toString()); note = d.note }
             null -> Unit
         }
         val policy = origin.policy
         val readScope = reads?.takeIf { verb in PAGE_READ_VERBS }
+        guards.page(currentPlace?.invoke()?.let { "${it.kind.wire}:${it.name}" })
         val before = when {
             offScreen -> emptyList()
             readScope != null -> guards.beforeAction(call.name, args, verb in DIAGNOSTIC_VERBS, readScope)
@@ -142,7 +159,7 @@ class ActionExecutor(
         val writing = tools.writesScreen(call.name)
         if (writing && !policy.gatedByCaller) try {
             gate()
-        } catch (_: com.wangzan101.mika.core.safety.gate.ScreenRecoveryRequired) {
+        } catch (_: com.wangzan101.mika.core.gate.ScreenRecoveryRequired) {
             // 等关卡时锁过屏:这一步按的是锁屏前的屏幕,不做;让模型重读现在的屏幕再决定
             val notice = ToolExecution(buildJsonObject {
                 put("ok", false); put("error", "screen_changed_during_lock"); put("executed", false)
@@ -151,7 +168,7 @@ class ActionExecutor(
             return ran(Step(call, args, origin, before, writing = false, offScreen, verb, null, followUp, reads, preset = notice))
         }
         // 没有可用的同意就不执行,也不计入失败熔断
-        var d = decision.judge(call.name, args, origin)
+        var d = tools.localOperation(call.name, phoneToolTimeoutMs) { decision.judge(call.name, args, origin) }
         // 不在屏上、工具声明要问的一步(会改动东西的 root 命令):调用方问得到人就当场问,同意了按这次同意再判一次;
         // 问不到人(这次运行不能问、调用方不是模型单步)就不做,照被拦下记
         val ask = if (d is Decision.Required || d is Decision.Denied) tools.approvalRisk(call.name, args)?.ask else null
@@ -160,7 +177,7 @@ class ActionExecutor(
             val answer = (if (d is Decision.Required) followUp.approve(ask) else null)
                 ?: return declined(call, args, origin, before, hit, ToolExecution(Refusals.unavailable()), followUp, "approval_unavailable")
             if (answer.content["ok"] != JsonPrimitive(true)) return declined(call, args, origin, before, hit, answer, followUp, "confirmation_declined")
-            d = decision.judge(call.name, args, origin)
+            d = tools.localOperation(call.name, phoneToolTimeoutMs) { decision.judge(call.name, args, origin) }
         }
         when (d) {
             is Decision.Required -> return blocked(call, args, origin, before, d.hit, null, followUp)
@@ -180,7 +197,7 @@ class ActionExecutor(
         // 改动屏幕的动作:按这块屏的能力的节奏先停一会儿(App 里见 AppDwell),单步、一批里的每一步都在这里停;
         // 组合动作(脚本)本身不停,里面的每一步经这里各自停。到了屏数上限、停留中用户插了话就不做
         val screenPaced = writing && !offScreen && !tools.composite(call.name)
-        val dwelt = if (screenPaced) tools.beforeWrite(call.name, outward = site != null) else Paced.NONE
+        val dwelt = if (screenPaced) tools.localOperation(call.name, phoneToolTimeoutMs) { tools.beforeWrite(call.name, outward = site != null) } else Paced.NONE
         dwelt.stop?.let { stop ->
             return ran(Step(call, args, origin, before, writing = false, offScreen, verb, null, followUp, reads, preset = stop, pacedMs = paced + dwelt.waitMs))
         }
@@ -257,7 +274,7 @@ class ActionExecutor(
         if (changes && s.preset == null && !failed) recorder.noteChange(mark)
         val durationMs = recorder.now() - started
         val resolved = s.followUp.resolve(raw) ?: return ActionOutcome.Cancelled(s.before)
-        tools.interfaces.checkAppAccess(tools.declared(call.name), after = true)
+        tools.localOperation(call.name, phoneToolTimeoutMs) { tools.interfaces.checkAppAccess(tools.declared(call.name), after = true) }
 
         val after = subVerdicts.toMutableList()
         after += if (s.offScreen) offScreen?.result(call.name, s.args, resolved.content).orEmpty() else guards.result(call.name, resolved.content)
@@ -302,17 +319,23 @@ class ActionExecutor(
         }
         ActivityRecord.of(tools, call.name, s.args, exec, n, policy.source, call.id, recorder.now(), s.outward)?.let(recorder::event)
         if (policy.frames == Frames.WhenChanged && shotId != null) recorder.event(RunEvent.Media(recorder.now(), shotId, n, RunEvent.placeLabel(exec.place)))
-        val seen = if (policy.routeTargets) routeTarget(call, s.verb, s.origin, exec) else null
+        val seen = if (policy.routeTargets) tools.localOperation(call.name, phoneToolTimeoutMs) { routeTarget(call, s.verb, s.origin, exec) } else null
         s.traced?.let { recorder.event(RunEvent.State(recorder.now(), "gate_unresolved", "${call.name} $it")) }
         return ActionOutcome.Ran(exec, s.before, after, content, durationMs, shotId.takeIf { picture != null }, picture, seen)
     }
 
     private suspend fun execute(s: Step, sub: SubActions?): ToolExecution {
+        com.wangzan101.mika.core.run.RunDeadline.checkCurrent()
         val call = if (s.offScreen && offScreen != null) offScreen.capTimeout(s.call, s.args) else s.call
-        val cap = s.origin.policy.actionCapMs ?: return tools.execute(call, pass, s.origin.step, sub)
-        // 动作自己有上限
-        return withTimeoutOrNull(cap) { tools.execute(call, pass, s.origin.step, sub) } ?: ToolExecution(buildJsonObject {
-            put("ok", false); put("error", "action_timeout"); put("message", "the action did not finish within ${cap / 1000} s; read the screen before going on")
+        val phoneBoundary = tools.hasLocalToolRunner(call.name)
+        val phoneDeadline = phoneToolTimeoutMs.takeIf { phoneBoundary }
+        val cap = s.origin.policy.actionCapMs
+        val deadline = listOfNotNull(cap, phoneDeadline).minOrNull() ?: return tools.execute(call, pass, s.origin.step, sub)
+        if (phoneDeadline != null) return withContext(ToolDeadline(deadline)) { tools.execute(call, pass, s.origin.step, sub) }
+        return withTimeoutOrNull(deadline) {
+            tools.execute(call, pass, s.origin.step, sub)
+        } ?: ToolExecution(buildJsonObject {
+            put("ok", false); put("error", "action_timeout"); put("message", "the action did not finish within ${deadline / 1000} s; read the screen before going on")
         })
     }
 

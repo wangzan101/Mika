@@ -103,7 +103,12 @@
     <string name="screens_needs_you">تحتاج إليك</string>
     <string name="screens_zoom">تكبير هذه الشاشة</string>
     <string name="task_trigger_time_limit">استغرقت المهمة المجدولة أكثر من %1$d دقيقة، لذا توقفت.</string>
+    <string name="task_run_time_limit">استغرقت المهمة أكثر من %1$d دقيقة، لذا توقفت.</string>
+    <string name="task_phone_execution_stuck">تركت المهمة السابقة التحكم في الهاتف دون استجابة. يعيد Mika تشغيل الاتصال؛ حاول مرة أخرى بعد قليل.</string>
     <string name="trigger_failed_streak">المهمة المجدولة: عدد مرات الفشل المتتالية %1$d</string>
     <string name="trigger_failed_streak_hint">يمكنك إيقاف هذه الخطة مؤقتًا أو تغييرها من صفحة المهام المجدولة.</string>
     <string name="task_no_phone_helper_shizuku">التحكم بالهاتف غير جاهز. ابدأ Shizuku وامنح Mika الإذن (أو تحقق من التحكم بالهاتف في الإعدادات). مهام الويب والملفات غير متأثرة.</string>
+    <string name="task_phone_recovering">لم يستجب التحكم بالهاتف منذ 30 ثانية. تحاول Mika استعادته.</string>
+    <string name="task_phone_restart_required">تعذرت استعادة التحكم بالهاتف. أعد تشغيل Mika قبل المحاولة مجددًا.</string>
+    <string name="task_no_event_timeout">توقفت المهمة بعد %1$d ثانية دون تقدم. يمكنك المتابعة من التقدم المحفوظ.</string>
 </resources>

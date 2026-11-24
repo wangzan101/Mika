@@ -1,6 +1,6 @@
 package com.wangzan101.mika.core.model
 
-import com.wangzan101.mika.core.screen.observation.ReadTag
+import com.wangzan101.mika.core.observation.ReadTag
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -58,7 +58,7 @@ enum class StopReason { EndTurn, ToolUse, MaxTokens, Other }
  */
 data class Usage(
     val inputTokens: Int, val outputTokens: Int, val cachedInputTokens: Int = 0, val reasoningTokens: Int = 0,
-    /** A provider can explicitly report zero cache reads. An absent counter has no cache-rate denominator. */
+    /** True when the provider explicitly reported the cache counter, including an explicit zero. False means absent. */
     val cacheReported: Boolean = cachedInputTokens > 0,
 )
 

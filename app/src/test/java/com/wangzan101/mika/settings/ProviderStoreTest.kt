@@ -22,11 +22,11 @@ import com.wangzan101.mika.core.model.TtsCapabilities
 import com.wangzan101.mika.core.model.Usage
 import com.wangzan101.mika.core.search.GoogleGroundingSearch
 import com.wangzan101.mika.core.search.WebSearchResult
-import com.wangzan101.mika.core.model.usage.ProactiveBudget
-import com.wangzan101.mika.core.model.usage.UsageKey
-import com.wangzan101.mika.core.model.usage.UsageLedger
-import com.wangzan101.mika.core.model.usage.UsagePurpose
-import com.wangzan101.mika.core.model.usage.UsageSource
+import com.wangzan101.mika.core.usage.ProactiveBudget
+import com.wangzan101.mika.core.usage.UsageKey
+import com.wangzan101.mika.core.usage.UsageLedger
+import com.wangzan101.mika.core.usage.UsagePurpose
+import com.wangzan101.mika.core.usage.UsageSource
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -538,7 +538,7 @@ class ProviderStoreTest {
         // 不再有「主模型能看图就兼任看图」的隐含规则
         assertNull(s.configFor(ModelRole.Vision))
         val m = s.modelFor(ModelRole.Main)
-        assertEquals("套上计量后能力照旧(临时:每 16 轮折一次)", cfg("a", vision = true).capabilities.copy(compactionEveryRounds = TEMP_COMPACTION_EVERY_ROUNDS), m?.capabilities)
+        assertEquals("套上计量后能力照旧;压缩只按上下文大小触发", cfg("a", vision = true).capabilities.copy(compactionEveryRounds = null), m?.capabilities)
         assertEquals("a" to "sk-a", built.single().first.id to built.single().second)
     }
 

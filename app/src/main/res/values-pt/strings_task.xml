@@ -94,7 +94,12 @@
     <string name="screens_needs_you">Precisa de você</string>
     <string name="screens_zoom">Ampliar esta tela</string>
     <string name="task_trigger_time_limit">A tarefa agendada passou de %1$d minutos e foi interrompida.</string>
+    <string name="task_run_time_limit">A tarefa passou de %1$d minutos e foi interrompida.</string>
+    <string name="task_phone_execution_stuck">A tarefa anterior deixou o controle do telefone sem resposta. O Mika está reiniciando a conexão; tente novamente em instantes.</string>
     <string name="trigger_failed_streak">A tarefa agendada falhou %1$d vezes seguidas</string>
     <string name="trigger_failed_streak_hint">Você pode pausar ou alterar este plano na página de tarefas agendadas.</string>
     <string name="task_no_phone_helper_shizuku">O controle do telefone não está pronto. Inicie o Shizuku e conceda permissão ao Mika (ou verifique o Controle do telefone nas Configurações). Tarefas de web e arquivos não são afetadas.</string>
+    <string name="task_phone_recovering">O controle do telefone não responde há 30 segundos. Mika está tentando recuperá-lo.</string>
+    <string name="task_phone_restart_required">Não foi possível recuperar o controle do telefone. Reinicie o Mika antes de tentar novamente.</string>
+    <string name="task_no_event_timeout">A tarefa foi interrompida após %1$d segundos sem progresso. Você pode continuar a partir do progresso salvo.</string>
 </resources>

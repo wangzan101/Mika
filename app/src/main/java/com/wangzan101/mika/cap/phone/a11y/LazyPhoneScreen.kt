@@ -1,19 +1,19 @@
 package com.wangzan101.mika.cap.phone.a11y
 
-import com.wangzan101.mika.core.screen.uistate.ActionResult
-import com.wangzan101.mika.core.device.access.AppAccessPolicy
-import com.wangzan101.mika.core.screen.uistate.AfterTaskMarks
-import com.wangzan101.mika.core.screen.uistate.AppCopy
-import com.wangzan101.mika.core.screen.uistate.AppWait
-import com.wangzan101.mika.core.screen.uistate.ScreenCheck
-import com.wangzan101.mika.core.screen.uistate.ScreenPort
-import com.wangzan101.mika.core.screen.uistate.ScreenSnapshot
-import com.wangzan101.mika.core.screen.uistate.ScreenEvent
-import com.wangzan101.mika.core.screen.uistate.VisibleTextLine
-import com.wangzan101.mika.core.screen.uistate.SystemCommandResult
-import com.wangzan101.mika.core.screen.uistate.SystemAction
-import com.wangzan101.mika.core.screen.uistate.SystemActionResult
-import com.wangzan101.mika.core.screen.uistate.WheelOutcome
+import com.wangzan101.mika.core.uistate.ActionResult
+import com.wangzan101.mika.core.access.AppAccessPolicy
+import com.wangzan101.mika.core.uistate.AfterTaskMarks
+import com.wangzan101.mika.core.uistate.AppCopy
+import com.wangzan101.mika.core.uistate.AppWait
+import com.wangzan101.mika.core.uistate.ScreenCheck
+import com.wangzan101.mika.core.uistate.ScreenPort
+import com.wangzan101.mika.core.uistate.ScreenSnapshot
+import com.wangzan101.mika.core.uistate.ScreenEvent
+import com.wangzan101.mika.core.uistate.VisibleTextLine
+import com.wangzan101.mika.core.uistate.SystemCommandResult
+import com.wangzan101.mika.core.uistate.SystemAction
+import com.wangzan101.mika.core.uistate.SystemActionResult
+import com.wangzan101.mika.core.uistate.WheelOutcome
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -104,7 +104,13 @@ class LazyPhoneScreen(
     override suspend fun pressKey(keyCode: Int) = port?.pressKey(keyCode) ?: NO_APP_OPEN
     override suspend fun waitStable(timeoutMs: Long) = port?.waitStable(timeoutMs) ?: true
     override suspend fun awaitChange(timeoutMs: Long): Boolean = port?.awaitChange(timeoutMs) ?: super.awaitChange(timeoutMs)
-    override suspend fun waitFor(condition: String, value: String?, timeoutMs: Long) = port?.waitFor(condition, value, timeoutMs) ?: false
+    override suspend fun waitFor(condition: String, value: String?, timeoutMs: Long): Boolean {
+        val ready = port ?: throw com.wangzan101.mika.core.uistate.ScreenWaitUnavailable(
+            if (lastProblem == null) "no_app_open" else PHONE_UNAVAILABLE,
+            lastProblem ?: "Open a phone app before waiting for its screen.",
+        )
+        return ready.waitFor(condition, value, timeoutMs)
+    }
     override suspend fun nextEvent(kind: String, packageName: String?, timeoutMs: Long): ScreenEvent? {
         val screen = built() ?: return null
         if (kind != "notification") (screen as? AndroidScreen)?.ensureDisplay()

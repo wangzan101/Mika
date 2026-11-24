@@ -94,7 +94,12 @@
     <string name="screens_needs_you">Te necesita</string>
     <string name="screens_zoom">Ampliar esta pantalla</string>
     <string name="task_trigger_time_limit">La tarea programada duró más de %1$d minutos, así que se detuvo.</string>
+    <string name="task_run_time_limit">La tarea duró más de %1$d minutos, así que se detuvo.</string>
+    <string name="task_phone_execution_stuck">La tarea anterior dejó el control del teléfono sin responder. Mika está reiniciando la conexión; inténtalo de nuevo en un momento.</string>
     <string name="trigger_failed_streak">La tarea programada falló %1$d veces seguidas</string>
     <string name="trigger_failed_streak_hint">Puedes pausar o cambiar este plan en la página de tareas programadas.</string>
     <string name="task_no_phone_helper_shizuku">El control del teléfono no está listo. Inicia Shizuku y concede permiso a Mika (o revisa Control del teléfono en Ajustes). Las tareas web y de archivos no se ven afectadas.</string>
+    <string name="task_phone_recovering">El control del teléfono lleva 30 segundos sin responder. Mika está intentando recuperarlo.</string>
+    <string name="task_phone_restart_required">No se pudo recuperar el control del teléfono. Reinicia Mika antes de volver a intentarlo.</string>
+    <string name="task_no_event_timeout">La tarea se detuvo tras %1$d segundos sin avances. Puedes continuar desde el progreso guardado.</string>
 </resources>

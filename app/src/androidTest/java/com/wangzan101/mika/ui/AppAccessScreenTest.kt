@@ -10,7 +10,6 @@ import com.wangzan101.mika.ChineseUi
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import com.wangzan101.mika.settings.ui.AppAccessScreen
 
 @RunWith(AndroidJUnit4::class)
 class AppAccessScreenTest {

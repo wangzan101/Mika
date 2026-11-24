@@ -1,7 +1,7 @@
 package com.wangzan101.mika.core.cap.phone
 
 import com.wangzan101.mika.core.model.Part
-import com.wangzan101.mika.core.screen.observation.Untrusted
+import com.wangzan101.mika.core.observation.Untrusted
 import com.wangzan101.mika.core.prompt.Feedback
 import com.wangzan101.mika.core.prompt.Prompts
 import com.wangzan101.mika.core.tool.ArgError
@@ -13,8 +13,9 @@ import com.wangzan101.mika.core.tool.ToolExecution
 import com.wangzan101.mika.core.tool.Verb
 import com.wangzan101.mika.core.tool.int
 import com.wangzan101.mika.core.tool.str
-import com.wangzan101.mika.core.screen.uistate.UiTreeNode
-import com.wangzan101.mika.core.screen.uistate.toPx
+import com.wangzan101.mika.core.uistate.UiTreeNode
+import com.wangzan101.mika.core.uistate.ScreenPort
+import com.wangzan101.mika.core.uistate.toPx
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -22,10 +23,11 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
-import com.wangzan101.mika.core.screen.uistate.action
-import com.wangzan101.mika.core.screen.uistate.lastOrSnapshot
-import com.wangzan101.mika.core.screen.uistate.screen
-import com.wangzan101.mika.core.screen.uistate.session
+import com.wangzan101.mika.core.uistate.action
+import com.wangzan101.mika.core.uistate.lastOrSnapshot
+import com.wangzan101.mika.core.uistate.screen
+import com.wangzan101.mika.core.uistate.session
+import kotlinx.coroutines.CancellationException
 
 /** 按界面实际内容推进，直到找到目标或内容停止变化。 */
 internal object PhoneFind : PhoneTool {
@@ -88,6 +90,41 @@ internal object PhoneFind : PhoneTool {
     }
 }
 
+/** 每任务一份的手机等待执行器:即使底层 a11y/Binder 调用不响应协程取消,调用方也能按截止时间返回。 */
+internal class PhoneWaitRunner(
+    private val onStuck: (declaredTimeoutMs: Long) -> Unit = {},
+    private val onRecovered: () -> Unit = {},
+) {
+    sealed interface Result {
+        data class Done(val met: Boolean) : Result
+        data object TimedOut : Result
+        data object Stuck : Result
+        data object Failed : Result
+        data class Unavailable(val code: String, val detail: String) : Result
+    }
+    @Volatile private var declaredTimeoutMs = 0L
+    private val worker = PhoneExecutionRunner(onRecovered, { onStuck(declaredTimeoutMs) })
+    val isStuck: Boolean get() = worker.isStuck
+    val isBusy: Boolean get() = worker.isBusy
+
+    suspend fun wait(screen: ScreenPort, condition: String, value: String?, timeoutMs: Long): Result {
+        declaredTimeoutMs = timeoutMs
+        return when (val result = worker.execute(timeoutMs + 200L) { screen.waitFor(condition, value, timeoutMs) }) {
+            is PhoneExecutionRunner.Result.Done -> Result.Done(result.value)
+            PhoneExecutionRunner.Result.TimedOut -> Result.TimedOut
+            PhoneExecutionRunner.Result.Stuck -> Result.Stuck
+            is PhoneExecutionRunner.Result.Failed -> {
+                if (result.error is kotlinx.coroutines.CancellationException) throw result.error
+                val unavailable = generateSequence(result.error) { error -> error.cause?.takeIf { it !== error } }
+                    .filterIsInstance<com.wangzan101.mika.core.uistate.ScreenWaitUnavailable>().firstOrNull()
+                if (unavailable != null) Result.Unavailable(unavailable.code, unavailable.detail) else Result.Failed
+            }
+        }
+    }
+    suspend fun awaitIdle() = worker.awaitIdle()
+    fun close() = worker.close()
+}
+
 /** 按无障碍事件醒来，避免固定间隔反复读屏。 */
 internal object PhoneWait : PhoneTool {
     override val verb = Verb.WaitFor
@@ -105,8 +142,40 @@ internal object PhoneWait : PhoneTool {
         val value = a.str("value", max = 200)
         if (condition != "stable" && value == null) throw ArgError("value", "required")
         val timeout = (a.int("timeoutMs", 0, 30000) ?: 10000).toLong()
-        val met = ctx.screen.waitFor(condition, value, timeout)
-        return ToolExecution(buildJsonObject { put("ok", met); put("met", met); put("condition", condition); if (!met) put("error", "timeout") })
+        val started = System.nanoTime()
+        val outcome = if (ctx.phone.localToolStuck) PhoneWaitRunner.Result.Stuck
+        else ctx.phone.waitRunner.wait(ctx.screen, condition, value, timeout)
+        val actual = (System.nanoTime() - started) / 1_000_000
+        return ToolExecution(buildJsonObject {
+            put("ok", outcome is PhoneWaitRunner.Result.Done && outcome.met)
+            put("met", outcome is PhoneWaitRunner.Result.Done && outcome.met)
+            put("condition", condition)
+            put("declaredTimeoutMs", timeout)
+            put("actualDurationMs", actual)
+            when (outcome) {
+                is PhoneWaitRunner.Result.Done -> if (!outcome.met) {
+                    put("timedOut", true)
+                    put("error", "timeout")
+                }
+                PhoneWaitRunner.Result.TimedOut -> {
+                    put("timedOut", true)
+                    put("screenReadStuck", true)
+                    put("error", "timeout")
+                }
+                PhoneWaitRunner.Result.Stuck -> {
+                    put("screenReadStuck", true)
+                    put("error", "screen_read_stuck")
+                }
+                is PhoneWaitRunner.Result.Unavailable -> {
+                    put("error", outcome.code)
+                    put("message", outcome.detail)
+                    put("timedOut", false)
+                    put("executed", false)
+                    put("recoverable", true)
+                }
+                PhoneWaitRunner.Result.Failed -> put("error", "wait_failed")
+            }
+        })
     }
 }
 

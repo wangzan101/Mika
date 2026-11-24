@@ -7,7 +7,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.wangzan101.mika.settings.ui.DeveloperSwitches
 
 class DeveloperSwitchesTest {
     @get:Rule val texts = ChineseTexts()

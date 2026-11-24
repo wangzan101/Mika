@@ -1,6 +1,6 @@
 package com.wangzan101.mika.core.agent
 
-import com.wangzan101.mika.core.agent.StepSummary
+import com.wangzan101.mika.core.context.StepSummary
 import com.wangzan101.mika.core.model.Author
 import com.wangzan101.mika.core.model.Message
 import com.wangzan101.mika.core.model.Part
@@ -13,6 +13,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import com.wangzan101.mika.core.tool.ToolIndex
 import com.wangzan101.mika.core.tool.Verb
+import java.security.MessageDigest
 
 /** [estimate]:[messages] 的 token 粗估(未校准),发出后和真实用量比对用。[rewritten]:这次是否改写了请求前缀。 */
 data class Compressed(
@@ -20,6 +21,9 @@ data class Compressed(
     val foldedSteps: Int,
     val estimate: Int = TokenEstimate.of(messages),
     val rewritten: Boolean = false,
+    val prefixDigest: String? = null,
+    val epoch: Long? = null,
+    val reason: String? = null,
 )
 
 /**
@@ -56,10 +60,29 @@ class ContextCompressor(
     internal val scale: Double get() = observed?.coerceAtLeast(UNCALIBRATED_SCALE) ?: UNCALIBRATED_SCALE
 
     /** 上一次压缩:它覆盖的完整历史开头 [covered],压成的 [base](粗估 [estimate]);[aggressive]:按模型报超长那一档压的。 */
-    private class View(val covered: List<Message>, val base: List<Message>, val folded: Int, val aggressive: Boolean) {
+    private class View(
+        val covered: List<Message>,
+        val base: List<Message>,
+        val folded: Int,
+        val aggressive: Boolean,
+        val epoch: Long,
+        val reason: String?,
+        val prefixDigest: String,
+    ) {
         val estimate = TokenEstimate.of(base)
     }
     private val views = HashMap<Int, View>()
+    private var epoch = 0L
+    private var invalidated: String? = null
+
+    /** Semantic changes cannot reuse a summary derived from the former task/page facts. */
+    fun invalidate(reason: String) {
+        val hadSummary = views.isNotEmpty()
+        views.clear()
+        invalidated = reason.takeIf { hadSummary }
+        epoch++
+    }
+
 
     /** 一次请求发出后:[estimated] 是这次请求的粗估(含固定开销),[actual] 是服务商报的输入 token。 */
     fun calibrate(estimated: Int, actual: Int) {
@@ -67,7 +90,11 @@ class ContextCompressor(
     }
 
     /** 新任务:压缩状态清空(校准比值留着,同一个模型)。 */
-    fun forget() = views.clear()
+    fun forget() {
+        views.clear()
+        invalidated = null
+        epoch++
+    }
 
     private fun tokens(ms: List<Message>) = TokenEstimate.of(ms) * scale
 
@@ -99,14 +126,33 @@ class ContextCompressor(
         val trigger = view?.let {
             maxOf(limits.trigger, UsageMeter.estimate(it.estimate + fixedOverhead, scale) + limits.margin).coerceAtMost(limits.usable)
         } ?: limits.trigger
-        val compact = (last != null && view == null) || (aggressive && view?.aggressive != true) || size > trigger
+        val compact = invalidated != null || (last != null && view == null) || (aggressive && view?.aggressive != true) || size > trigger
         // 轮数触发:只为控历史长度。大小还没超、模型没报超长时,只把最早超出的往返折进摘要(见 [foldEvery]);
         // 大小/超长照旧走下面的阶梯。压缩后历史回到 keepRecent 轮,之后只追加,直到又攒够 foldEvery 轮才再折(锯齿,不每步都压)。
         val roundOver = foldEvery != null && toolRounds(sent) > keepRecent + foldEvery
-        if (!compact && !roundOver) return Compressed(HistoryPruner.limitImages(sent, maxImages), view?.folded ?: 0)
-        val next = if (compact) compact(history, limits, fixedOverhead, aggressive) else foldToRecent(history)
+        if (!compact && !roundOver) return Compressed(
+            HistoryPruner.limitImages(sent, maxImages),
+            view?.folded ?: 0,
+            prefixDigest = view?.prefixDigest ?: PrefixDigest.of(sent),
+            epoch = view?.epoch ?: epoch,
+        )
+        val reason = when {
+            invalidated != null -> invalidated!!
+            aggressive -> "overflow"
+            roundOver -> "rounds"
+            else -> "context_size"
+        }
+        val next = if (compact) compact(history, contextTokens, limits, fixedOverhead, aggressive, reason) else foldToRecent(history, reason)
         views[contextTokens] = next
-        return Compressed(HistoryPruner.limitImages(next.base, maxImages), next.folded, rewritten = true)
+        invalidated = null
+        return Compressed(
+            HistoryPruner.limitImages(next.base, maxImages),
+            next.folded,
+            rewritten = true,
+            prefixDigest = next.prefixDigest,
+            epoch = next.epoch,
+            reason = next.reason,
+        )
     }
 
     /**
@@ -115,7 +161,8 @@ class ContextCompressor(
      */
     fun overflow(history: List<Message>, contextTokens: Int, fixedOverhead: Int = 0): Boolean {
         val current = sent(valid(views[contextTokens], history), history)
-        val next = compact(history, ContextLimits.of(contextTokens, triggerOverride), fixedOverhead, aggressive = true)
+        invalidate("context_overflow")
+        val next = compact(history, contextTokens, ContextLimits.of(contextTokens, triggerOverride), fixedOverhead, aggressive = true, reason = "overflow")
         if (next.estimate >= TokenEstimate.of(current)) return false
         views[contextTokens] = next
         return true
@@ -135,7 +182,69 @@ class ContextCompressor(
      * 最重的一级整份请求仍超过 [ContextLimits.usable](最近的结果本身太大)时,从最新的开始缩短大结果,直到放得下。
      * 比较的是消息的估算:目标和可用窗口先扣掉固定开销(同一个比值),固定开销只算这一次。
      */
-    private fun compact(history: List<Message>, limits: ContextLimits, fixedOverhead: Int, aggressive: Boolean): View {
+    private fun compact(
+        history: List<Message>,
+        contextTokens: Int,
+        limits: ContextLimits,
+        fixedOverhead: Int,
+        aggressive: Boolean,
+        reason: String,
+    ): View {
+        val previous = valid(views[contextTokens], history)
+        if (previous != null && TokenEstimate.of(previous.base) <= limits.usable) {
+            val candidate = compactTail(previous, history, limits, fixedOverhead, aggressive, reason)
+            val overhead = UsageMeter.estimate(fixedOverhead, scale)
+            val current = sent(previous, history)
+            if (tokens(candidate.base) + overhead <= limits.usable &&
+                tokens(candidate.base) < tokens(current)) {
+                return candidate
+            }
+        }
+        epoch++
+        return compactFresh(history, limits, fixedOverhead, aggressive, epoch, "${reason}_reset")
+    }
+
+    /**
+     * 上一版已经发出的 base 成为稳定前缀;后续只需把新增历史折成一条增量接在后面,
+     * provider 仍能复用之前那一整段前缀缓存。
+     */
+    private fun compactTail(
+        previous: View,
+        history: List<Message>,
+        limits: ContextLimits,
+        fixedOverhead: Int,
+        aggressive: Boolean,
+        reason: String,
+    ): View {
+        val tail = history.subList(previous.covered.size, history.size)
+        if (tail.isEmpty()) return previous
+        val next = compactFresh(
+            tail,
+            limits,
+            fixedOverhead = fixedOverhead + previous.estimate,
+            aggressive = aggressive,
+            epoch = previous.epoch,
+            reason = "${reason}_append",
+        )
+        return View(
+            covered = history.toList(),
+            base = (previous.base + next.base).toList(),
+            folded = previous.folded + next.folded,
+            aggressive = aggressive,
+            epoch = previous.epoch,
+            reason = "${reason}_append",
+            prefixDigest = previous.prefixDigest,
+        )
+    }
+
+    private fun compactFresh(
+        history: List<Message>,
+        limits: ContextLimits,
+        fixedOverhead: Int,
+        aggressive: Boolean,
+        epoch: Long,
+        reason: String,
+    ): View {
         val overhead = UsageMeter.estimate(fixedOverhead, scale)
         val target = limits.target - overhead
         val window = limits.usable - overhead
@@ -155,14 +264,21 @@ class ContextCompressor(
         }
         if (tokens(chosen.messages) > window) chosen = chosen.copy(messages = HistoryPruner.shrinkOversized(chosen.messages) { tokens(it) <= window })
         // 副本:什么都没裁时 chosen 可能就是调用方那份还会追加的历史
-        return View(history.toList(), chosen.messages.toList(), chosen.foldedSteps, aggressive)
+        return View(
+            history.toList(), chosen.messages.toList(), chosen.foldedSteps, aggressive, epoch, reason,
+            PrefixDigest.of(chosen.messages),
+        )
     }
 
     /** 只为控轮数:大小没超、模型没报超长,把最早超出的往返折进摘要,留最近 [keepRecent] 个原样(不做按目标的整段缩短,也不换更狠的档)。 */
-    private fun foldToRecent(history: List<Message>): View {
+    private fun foldToRecent(history: List<Message>, reason: String): View {
         val pruned = HistoryPruner.prune(history, tools, HistoryPruner.Cut(keepRecent))
         val folded = fold(pruned, keepRecent, aggressive = false)
-        return View(history.toList(), folded.messages.toList(), folded.foldedSteps, aggressive = false)
+        epoch++
+        return View(
+            history.toList(), folded.messages.toList(), folded.foldedSteps, aggressive = false, epoch, reason,
+            PrefixDigest.of(folded.messages),
+        )
     }
 
     /** 一段消息里模型发起工具调用的往返数(折叠摘要没有工具调用,不计)。 */
@@ -348,5 +464,46 @@ class ContextCompressor(
         private val OBSERVATIONS = setOf(Verb.Observe, Verb.ListElements)
         private val PINNED_VERBS = setOf(Verb.HandToUser, Verb.AskUser, Verb.RequestConfirmation)
         private val TARGET_KEYS = listOf("target", "text", "package", "query", "direction", "key", "name", "ref", "seconds")
+    }
+}
+
+/** Stable digest of the exact text/tool prefix sent to a provider; image bytes are included unchanged. */
+internal object PrefixDigest {
+    fun of(messages: List<Message>): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        fun put(tag: String, value: String?) {
+            digest.update(tag.toByteArray(Charsets.UTF_8))
+            val bytes = value.orEmpty().toByteArray(Charsets.UTF_8)
+            digest.update(byteArrayOf((bytes.size ushr 24).toByte(), (bytes.size ushr 16).toByte(), (bytes.size ushr 8).toByte(), bytes.size.toByte()))
+            digest.update(bytes)
+        }
+        for (message in messages) {
+            put("role", message.role.name)
+            put("author", message.author.name)
+            for (part in message.parts) when (part) {
+                is Part.Text -> put("text", part.text)
+                is Part.Image -> {
+                    put("image", part.pngBase64)
+                    put("mime", part.mime)
+                    put("size", "${part.width}x${part.height}")
+                }
+                is Part.ToolCall -> {
+                    put("call", part.id)
+                    put("tool", part.name)
+                    put("args", part.argsJson)
+                    put("opaque", part.opaque)
+                }
+                is Part.ToolResult -> {
+                    put("result", part.callId)
+                    put("content", part.content)
+                    put("error", part.isError.toString())
+                }
+                is Part.Thinking -> {
+                    put("thinking", part.text)
+                    put("opaque", part.opaque)
+                }
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

@@ -10,6 +10,7 @@ import android.app.AlarmManager
 class BootRestoreReceiver : BootRestoreHandler() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
+        (context.applicationContext as com.wangzan101.mika.MikaApp).taskDeadlines.checkAndRearm()
         if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_TIME_CHANGED ||
             intent.action == AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED ||
             intent.action == Intent.ACTION_TIMEZONE_CHANGED) TriggerRuntime.rearm(context)

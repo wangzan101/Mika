@@ -4,23 +4,25 @@ import com.wangzan101.mika.core.capability.Capability
 import com.wangzan101.mika.core.capability.CapabilityKey
 import com.wangzan101.mika.core.capability.CapabilityStatus
 import com.wangzan101.mika.core.capability.Paced
-import com.wangzan101.mika.core.screen.uistate.DwellStop
-import com.wangzan101.mika.core.screen.uistate.IdleScroll
-import com.wangzan101.mika.core.screen.uistate.PlacePace
-import com.wangzan101.mika.core.screen.uistate.dwellStopped
+import com.wangzan101.mika.core.uistate.DwellStop
+import com.wangzan101.mika.core.uistate.IdleScroll
+import com.wangzan101.mika.core.uistate.PlacePace
+import com.wangzan101.mika.core.uistate.dwellStopped
 import com.wangzan101.mika.core.capability.PromptEnv
-import com.wangzan101.mika.core.screen.uistate.Surface
-import com.wangzan101.mika.core.screen.observation.Look
+import com.wangzan101.mika.core.capability.LocalToolResult
+import com.wangzan101.mika.core.capability.LocalToolRunner
+import com.wangzan101.mika.core.uistate.Surface
+import com.wangzan101.mika.core.observation.Look
 import com.wangzan101.mika.core.prompt.Prompts
-import com.wangzan101.mika.core.screen.uistate.ScreenPort
+import com.wangzan101.mika.core.uistate.ScreenPort
 import com.wangzan101.mika.core.tool.AgentTool
 import com.wangzan101.mika.core.tool.ArgError
 import com.wangzan101.mika.core.tool.PACKAGE_NAME_RE
 import com.wangzan101.mika.core.tool.ToolContext
 import com.wangzan101.mika.core.tool.Verb
-import com.wangzan101.mika.core.screen.uistate.EffectKind
-import com.wangzan101.mika.core.screen.uistate.ScreenSnapshot
-import com.wangzan101.mika.core.screen.uistate.sessions
+import com.wangzan101.mika.core.uistate.EffectKind
+import com.wangzan101.mika.core.uistate.ScreenSnapshot
+import com.wangzan101.mika.core.uistate.sessions
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -40,8 +42,47 @@ internal class PhoneCapability(
     appCapped: (String) -> Boolean = { false },
     idle: IdleScroll? = null,
     val smsLogin: com.wangzan101.mika.core.cap.phone.sms.SmsLoginPort? = null,
-) : Capability {
+) : Capability, LocalToolRunner {
     val dwell = AppDwell(pacing, appTempo, appCapped, idle)
+    internal var onExecutionRecovered: () -> Unit = {}
+    internal var onExecutionCancelled: () -> Unit = {}
+    private fun phoneWorkerStuck() = runCatching(onExecutionCancelled)
+    private fun phoneWorkerRecovered() {
+        if (!executionRunner.isStuck && !waitRunner.isStuck) runCatching(onExecutionRecovered)
+    }
+    /** A temporary blocked Binder call disables every phone operation for this task, never for other tasks. */
+    internal val waitRunner = PhoneWaitRunner({ phoneWorkerStuck() }, { phoneWorkerRecovered() })
+    /** Ordinary model/batch phone tools run here when ActionExecutor supplies a deadline. */
+    internal val executionRunner = PhoneExecutionRunner({ phoneWorkerRecovered() }, { phoneWorkerStuck() })
+    override val localToolCapability: String get() = PHONE
+    override val localToolStuck: Boolean get() = executionRunner.isStuck || waitRunner.isStuck
+    override val localToolBusy: Boolean get() = executionRunner.isBusy || waitRunner.isBusy
+    override var onLocalToolRecovered: (() -> Unit)?
+        get() = onExecutionRecovered
+        set(value) { onExecutionRecovered = value ?: {} }
+    override var onLocalToolCancelled: (() -> Unit)?
+        get() = onExecutionCancelled
+        set(value) { onExecutionCancelled = value ?: {} }
+
+    override suspend fun <T> runLocalTool(timeoutMs: Long, block: suspend () -> T): LocalToolResult<T> {
+        if (waitRunner.isStuck) return LocalToolResult.Stuck
+        return when (val outcome = executionRunner.execute(timeoutMs, block)) {
+            is PhoneExecutionRunner.Result.Done -> LocalToolResult.Done(outcome.value)
+            PhoneExecutionRunner.Result.TimedOut -> LocalToolResult.TimedOut
+            PhoneExecutionRunner.Result.Stuck -> LocalToolResult.Stuck
+            is PhoneExecutionRunner.Result.Failed -> LocalToolResult.Failed(outcome.error)
+        }
+    }
+
+    override suspend fun awaitLocalToolIdle() {
+        waitRunner.awaitIdle()
+        executionRunner.awaitIdle()
+    }
+
+    override fun closeLocalTools() {
+        waitRunner.close()
+        executionRunner.close()
+    }
 
     override val id = PHONE
     private val tools = PhoneGroup.tools

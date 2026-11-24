@@ -8,7 +8,7 @@ import com.wangzan101.mika.core.chat.GeneratedAudio
 import com.wangzan101.mika.core.chat.GeneratedPhoto
 import com.wangzan101.mika.core.cap.image.SavedImage
 import com.wangzan101.mika.core.model.SavedAudio
-import com.wangzan101.mika.core.run.record.RunEvent
+import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.takeover.Takeover
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,9 +88,11 @@ internal class TaskRunState(
     /** 带对话编号的那份先写:收不带编号的状态时读到的编号就已经是这个任务的。 */
     private val mirrored = listOf(_runId, _sharedFiles, _audios, _photos, _tagged, _state, _takeoverStage, _frames, _displayId, _pipInput, _pipSoundOn, _appShown, _webOpen, _activities, _steers)
 
-    /** 发布与收尾互斥;[ended] 之后不再写状态,迟到的发布不能盖掉终态或重新拿锁。 */
+    /** 发布与收尾互斥;cleanup 关闭实时发布,terminalClaimed 保证终态只发布一次。 */
     internal val publishLock = Any()
-    internal var ended = false
+    internal var livePublishClosed = false
+    internal var terminalClaimed = false
+    internal val ended get() = livePublishClosed || terminalClaimed
 
     internal fun setState(s: TaskState) = synchronized(service.taskState.shownLock) {
         _tagged.value = conversationId to s

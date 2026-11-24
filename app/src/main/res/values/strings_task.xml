@@ -91,7 +91,12 @@
     <string name="screens_needs_you">Needs you</string>
     <string name="screens_zoom">Enlarge this screen</string>
     <string name="task_trigger_time_limit">The scheduled task ran longer than %1$d minutes, so it stopped.</string>
+    <string name="task_run_time_limit">The task ran longer than %1$d minutes, so it stopped.</string>
+    <string name="task_phone_execution_stuck">The previous task left phone control unresponsive. Mika is restarting it; try again shortly.</string>
     <string name="trigger_failed_streak">Scheduled task failed %1$d times in a row</string>
     <string name="trigger_failed_streak_hint">You can pause or change this plan on the Scheduled tasks page.</string>
     <string name="task_no_phone_helper_shizuku">Phone control isn’t ready. Start Shizuku and grant Mika permission (or check Phone control in Settings). Web and file tasks aren’t affected.</string>
+    <string name="task_phone_recovering">Phone control has not responded for 30 seconds. Mika is trying to recover it.</string>
+    <string name="task_phone_restart_required">Phone control could not recover. Restart Mika before trying again.</string>
+    <string name="task_no_event_timeout">The task made no progress for %1$d seconds, so it stopped. You can continue from the saved progress.</string>
 </resources>

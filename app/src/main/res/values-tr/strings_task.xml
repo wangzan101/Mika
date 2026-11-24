@@ -79,6 +79,8 @@
     <string name="screens_needs_you">Size ihtiyaç duyuyor</string>
     <string name="screens_zoom">Bu ekranı büyüt</string>
     <string name="task_trigger_time_limit">Zamanlanmış görev %1$d dakikadan uzun sürdü, bu yüzden durdu.</string>
+    <string name="task_run_time_limit">Görev %1$d dakikadan uzun sürdü, bu yüzden durdu.</string>
+    <string name="task_phone_execution_stuck">Önceki görev telefon denetimini yanıtsız bıraktı. Mika bağlantıyı yeniden başlatıyor; birazdan tekrar deneyin.</string>
     <string name="trigger_failed_streak">Zamanlanmış görev art arda %1$d kez başarısız oldu</string>
     <string name="trigger_failed_streak_hint">Bu planı Zamanlanmış görevler sayfasından duraklatabilir veya değiştirebilirsiniz.</string>
     <string name="chip_thinking">Düşünüyor</string>
@@ -91,4 +93,7 @@
     <string name="chip_route_step">Adım %1$d/%2$d</string>
     <string name="chip_count">%1$d/%2$d</string>
     <string name="task_no_phone_helper_shizuku">Telefon kontrolü hazır değil. Shizuku\'yu başlatın ve Mika\'ya izin verin (veya Ayarlar\'daki Telefon kontrolünü kontrol edin). Web ve dosya görevleri etkilenmez.</string>
+    <string name="task_phone_recovering">Telefon kontrolü 30 saniyedir yanıt vermiyor. Mika kurtarmayı deniyor.</string>
+    <string name="task_phone_restart_required">Telefon kontrolü kurtarılamadı. Yeniden denemeden önce Mika uygulamasını yeniden başlatın.</string>
+    <string name="task_no_event_timeout">Görev %1$d saniye ilerleme olmadığı için durduruldu. Kaydedilen ilerlemeden devam edebilirsiniz.</string>
 </resources>

@@ -91,7 +91,12 @@
     <string name="screens_needs_you">به توجه شما نیاز دارد</string>
     <string name="screens_zoom">بزرگ کردن این صفحه</string>
     <string name="task_trigger_time_limit">کار زمان‌بندی‌شده بیش از %1$d دقیقه طول کشید و متوقف شد.</string>
+    <string name="task_run_time_limit">کار بیش از %1$d دقیقه طول کشید و متوقف شد.</string>
+    <string name="task_phone_execution_stuck">کار قبلی کنترل گوشی را بی‌پاسخ گذاشت. Mika در حال راه‌اندازی دوبارهٔ اتصال است؛ کمی بعد دوباره تلاش کنید.</string>
     <string name="trigger_failed_streak">کار زمان‌بندی‌شده %1$d بار پشت سر هم ناموفق بود</string>
     <string name="trigger_failed_streak_hint">می‌توانید این برنامه را در صفحهٔ کارهای زمان‌بندی‌شده متوقف یا تغییر دهید.</string>
     <string name="task_no_phone_helper_shizuku">کنترل گوشی آماده نیست. Shizuku را شروع کنید و به Mika مجوز بدهید (یا کنترل گوشی را در تنظیمات بررسی کنید). وظایف وب و فایل تحت تأثیر قرار نمی‌گیرند.</string>
+    <string name="task_phone_recovering">کنترل تلفن ۳۰ ثانیه است پاسخ نمی‌دهد. Mika در حال تلاش برای بازیابی آن است.</string>
+    <string name="task_phone_restart_required">بازیابی کنترل تلفن ناموفق بود. پیش از تلاش دوباره، Mika را راه‌اندازی مجدد کنید.</string>
+    <string name="task_no_event_timeout">کار پس از %1$d ثانیه بدون پیشرفت متوقف شد. می‌توانید از پیشرفت ذخیره‌شده ادامه دهید.</string>
 </resources>

@@ -10,7 +10,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import com.wangzan101.mika.settings.ui.WebSearchCopy
 
 class WebSearchCopyTest {
     @get:Rule val texts = ChineseTexts()

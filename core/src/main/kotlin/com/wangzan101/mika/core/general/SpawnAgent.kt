@@ -1,13 +1,13 @@
 package com.wangzan101.mika.core.general
 
-import com.wangzan101.mika.core.run.ChildPhase
-import com.wangzan101.mika.core.run.ChildRunHost
-import com.wangzan101.mika.core.screen.observation.ObsKind
-import com.wangzan101.mika.core.screen.observation.Observation
-import com.wangzan101.mika.core.screen.observation.Trust
-import com.wangzan101.mika.core.screen.observation.Untrusted
+import com.wangzan101.mika.core.child.ChildPhase
+import com.wangzan101.mika.core.child.ChildRunHost
+import com.wangzan101.mika.core.observation.ObsKind
+import com.wangzan101.mika.core.observation.Observation
+import com.wangzan101.mika.core.observation.Trust
+import com.wangzan101.mika.core.observation.Untrusted
 import com.wangzan101.mika.core.prompt.Prompts
-import com.wangzan101.mika.core.run.record.Redactor
+import com.wangzan101.mika.core.record.Redactor
 import com.wangzan101.mika.core.run.Attendance
 import com.wangzan101.mika.core.run.RunId
 import com.wangzan101.mika.core.run.RunOrigin
@@ -97,7 +97,8 @@ internal object SpawnAgent : AgentTool {
                                format: String?, steps: Int, limit: Int, parallelChild: Boolean = false): ToolExecution {
         val child = RunSpec(RunId(UUID.randomUUID().toString()), goal, parent.threadId,
             provenance = RunProvenance(RunOrigin.Child, Attendance.Unattended),
-            capabilities = setOf("web", "sandbox"), readOnly = true, parent = parent.id, stepBudget = steps,
+            capabilities = setOf("web", "sandbox"), readOnly = true, parent = parent.id,
+            budget = parent.budget.copy(maxSteps = steps),
             parallelChild = parallelChild)
         val result = host.spawn(child, format)
         val text = result.text.take(limit)

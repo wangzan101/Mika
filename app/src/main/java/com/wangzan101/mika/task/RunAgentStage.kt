@@ -1,37 +1,33 @@
 package com.wangzan101.mika.task
 
+import com.wangzan101.mika.core.action.OutwardPacing
 import android.os.Build
 import android.util.Log
 import android.view.Display
 import com.wangzan101.mika.MikaApp
-import com.wangzan101.mika.cap.web.LazyWebPort
-import com.wangzan101.mika.cap.web.WebHandover
-import com.wangzan101.mika.cap.web.WebSites
-import com.wangzan101.mika.core.action.OutwardPacing
 import com.wangzan101.mika.core.agent.AgentLoop
 import com.wangzan101.mika.core.agent.ModelRouter
+import com.wangzan101.mika.core.model.ChatModel
+import com.wangzan101.mika.settings.ProviderStore
+import com.wangzan101.mika.core.record.RunEvent
+import com.wangzan101.mika.core.replay.RouteMatcher
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.agent.Turn
-import com.wangzan101.mika.core.cap.web.WEB
-import com.wangzan101.mika.core.learn.knowledge.ChannelFacts
-import com.wangzan101.mika.core.model.ChatModel
-import com.wangzan101.mika.core.run.record.RunEvent
-import com.wangzan101.mika.core.learn.replay.RouteMatcher
-import com.wangzan101.mika.core.run.RunInput
 import com.wangzan101.mika.core.run.RunOrigin
+import com.wangzan101.mika.core.run.RunInput
 import com.wangzan101.mika.core.tool.HandBack
 import com.wangzan101.mika.settings.FeatureFlags
-import com.wangzan101.mika.settings.ProviderStore
-import com.wangzan101.mika.settings.mainFallbackChain
-import com.wangzan101.mika.settings.mainProviderId
 import com.wangzan101.mika.takeover.HandoverActivity
 import com.wangzan101.mika.takeover.HandoverActivityCounter
 import com.wangzan101.mika.takeover.Takeover
 import com.wangzan101.mika.takeover.TakeoverPort
 import com.wangzan101.mika.takeover.stoppedAt
-import com.wangzan101.mika.task.TaskRun.Companion.TAG
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import com.wangzan101.mika.core.knowledge.ChannelFacts
+import com.wangzan101.mika.cap.web.LazyWebPort
+import com.wangzan101.mika.cap.web.WebHandover
+import com.wangzan101.mika.cap.web.WebSites
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
@@ -40,6 +36,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.wangzan101.mika.core.cap.web.WEB
+import com.wangzan101.mika.task.TaskRun.Companion.TAG
 
 // 运行装配:Agent 循环与接管
 internal suspend fun TaskRun.assembleAgent(a: RunAssembly, m: RunModels, ph: RunPhone, taskGate: TaskGate, mem: RunMemory, rec: RunRecord, pr: RunPrompt, web: LazyWebPort?, t: RunTools, priorTurns: List<Turn>): AgentLoop {
@@ -97,7 +95,7 @@ internal suspend fun TaskRun.assembleAgent(a: RunAssembly, m: RunModels, ph: Run
             if (phoneScreen.acquired && dispatcher?.surface != WEB) phone?.screen?.let { phoneRuntime.awaitUserPick(it, taskGate, w) }
             // 等关卡期间发生过锁屏周期:按旧屏幕准备好的动作作废,执行入口换成说明结果喂回模型
             if (taskGate.pass({ phoneScreen.acquired && dispatcher?.surface != WEB }, w))
-                throw com.wangzan101.mika.core.safety.gate.ScreenRecoveryRequired()
+                throw com.wangzan101.mika.core.gate.ScreenRecoveryRequired()
         }, knowledge = knowledge, screenMaps = memoryRuntime.screenMaps(), sink = sink, trace = trace, installedApps = { apps },
         // 选渠道用的事实:装了哪些 App、在 Mika 里登录过哪些网站、有没有内置浏览器
         channelFacts = {
@@ -109,7 +107,7 @@ internal suspend fun TaskRun.assembleAgent(a: RunAssembly, m: RunModels, ph: Run
                 challengedSites = withContext(Dispatchers.IO) { registry.challengedSites() },
             )
         },
-        maxSteps = env.evalHooks.maxSteps ?: runSpec.stepBudget ?: AgentLoop.UNLIMITED_STEPS,
+        maxSteps = env.evalHooks.maxSteps ?: runSpec.budget.maxSteps ?: AgentLoop.UNLIMITED_STEPS,
         reviewFinalAnswer = false,
         inputTimeoutMs = TaskService.INPUT_TIMEOUT_MS,
         // 询问 / 自主:询问时只有花钱的一步先问(有确认关卡和 request_confirmation);自主时连付款也不问。

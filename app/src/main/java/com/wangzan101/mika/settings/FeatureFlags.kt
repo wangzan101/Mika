@@ -9,11 +9,12 @@ import com.wangzan101.mika.capsule.CapsuleIdleOpacity
 import com.wangzan101.mika.capsule.CapsuleMode
 import com.wangzan101.mika.capsule.DockSide
 import com.wangzan101.mika.core.agent.SpeedFlags
+import com.wangzan101.mika.core.agent.RunBudget
 import com.wangzan101.mika.core.cap.phone.OperatingPace
-import com.wangzan101.mika.core.learn.knowledge.GuideCatalog
+import com.wangzan101.mika.core.knowledge.GuideCatalog
 import com.wangzan101.mika.chat.AutoArchive
-import com.wangzan101.mika.core.model.usage.ProactiveBudget
-import com.wangzan101.mika.core.model.usage.TokenBudgetLimits
+import com.wangzan101.mika.core.usage.ProactiveBudget
+import com.wangzan101.mika.core.usage.TokenBudgetLimits
 import com.wangzan101.mika.task.ParallelCapability
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -64,11 +65,43 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         prefs.edit().putInt(PARALLEL_MAX, max).commit()
     }
 
-    /** 每个任务最多走多少步;null 表示不限制。默认不限制,下次任务起生效。 */
-    fun taskStepLimit(): Int? = prefs.getInt(TASK_STEP_LIMIT, 0).takeIf { it in 1..MAX_TASK_STEP_LIMIT }
+    /** 每个任务最多走多少步;null 表示明确选了不限制。未配置过时使用 60 步。 */
+    fun taskStepLimit(): Int? {
+        migrateTaskBudgetDefaults()
+        return prefs.getInt(TASK_STEP_LIMIT, 0).takeIf { it in 1..MAX_TASK_STEP_LIMIT }
+    }
 
     fun setTaskStepLimit(limit: Int?) {
         prefs.edit().putInt(TASK_STEP_LIMIT, (limit ?: 0).coerceIn(0, MAX_TASK_STEP_LIMIT)).commit()
+    }
+
+    /** 普通交互任务的最长运行时间;null 表示明确选了不限制。未配置过时使用 10 分钟。 */
+    fun taskRunMinutes(): Int? {
+        migrateTaskBudgetDefaults()
+        return prefs.getInt(TASK_RUN_LIMIT, 0).takeIf { it in TASK_RUN_MINUTES }
+    }
+
+    fun setTaskRunMinutes(minutes: Int?) {
+        prefs.edit().putInt(TASK_RUN_LIMIT, minutes?.takeIf { it in TASK_RUN_MINUTES } ?: 0).commit()
+    }
+
+    /** 启动一个普通任务时冻结下来的预算;之后再改设置只影响下一个任务。 */
+    fun taskRunBudget(): RunBudget = RunBudget(
+        maxSteps = taskStepLimit(),
+        timeBudgetMs = taskRunMinutes()?.times(60_000L),
+        phoneToolTimeoutMs = DEFAULT_PHONE_TOOL_TIMEOUT_MS,
+    )
+
+    /**
+     * 普通任务预算的新默认值只迁移一次。每一步迁移前先看键在不在:
+     * 用户明确选过“不限制”(存 0)时保留,只有从未配置的键才写新默认。
+     */
+    private fun migrateTaskBudgetDefaults() {
+        if (prefs.getBoolean(TASK_BUDGET_DEFAULTS_V1, false)) return
+        val edit = prefs.edit()
+        if (!prefs.contains(TASK_STEP_LIMIT)) edit.putInt(TASK_STEP_LIMIT, DEFAULT_TASK_STEP_LIMIT)
+        if (!prefs.contains(TASK_RUN_LIMIT)) edit.putInt(TASK_RUN_LIMIT, DEFAULT_TASK_RUN_MINUTES)
+        edit.putBoolean(TASK_BUDGET_DEFAULTS_V1, true).commit()
     }
 
     /**
@@ -425,7 +458,7 @@ class FeatureFlags(private val prefs: SharedPreferences) {
     }.distinctUntilChanged()
 
     /**
-     * 用户点了「完全退出」,要到下次打开 Mika 的界面为止([com.wangzan101.mika.MikaQuit])。
+     * 用户点了「完全退出」,要到下次打开 Mika 的界面为止([com.wangzan101.mika.quit.MikaQuit])。
      * 在这期间进程可能被无障碍服务重新拉起:胶囊不画、后台服务不补起、自动恢复也不做,直到用户自己打开 App。
      */
     fun quitRequested(): Boolean = prefs.getBoolean(QUIT_REQUESTED, false)
@@ -469,6 +502,10 @@ class FeatureFlags(private val prefs: SharedPreferences) {
         private const val SCHEDULED_QUIET_HOURS = "scheduled_quiet_hours"
         /** 每个任务步数上限能设的最大值;0/null 表示不限制。 */
         const val MAX_TASK_STEP_LIMIT = 500
+        const val DEFAULT_TASK_STEP_LIMIT = 60
+        const val DEFAULT_TASK_RUN_MINUTES = 10
+        const val DEFAULT_PHONE_TOOL_TIMEOUT_MS = 30_000L
+        val TASK_RUN_MINUTES = listOf(5, 10, 15, 30, 60, 120)
         /** 定时任务最长运行时间可选的几档(分钟)。 */
         val TRIGGER_RUN_MINUTES = listOf(15, 30, 60, 120)
         /** 每任务沙箱命令累计时长可选的几档(分钟)。 */
@@ -496,7 +533,9 @@ class FeatureFlags(private val prefs: SharedPreferences) {
             "speed_defaults_applied_v5" to { f -> f.copy(tablesAtBirth = true) },
         )
         private const val PARALLEL_MAX = "parallel_max"
+        private const val TASK_BUDGET_DEFAULTS_V1 = "task_budget_defaults_v1"
         private const val TASK_STEP_LIMIT = "task_step_limit"
+        private const val TASK_RUN_LIMIT = "task_run_limit_minutes"
         private const val TRIGGER_RUN_LIMIT = "trigger_run_limit_minutes"
         private const val SANDBOX_BUDGET_LIMIT = "sandbox_budget_limit_minutes"
         private const val ATTACHMENT_FILE_LIMIT = "attachment_file_limit_mb"

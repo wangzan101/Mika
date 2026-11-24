@@ -1,20 +1,25 @@
 package com.wangzan101.mika.core.cap.phone
 
 import com.wangzan101.mika.core.assembly.toolDispatcher
+import com.wangzan101.mika.core.action.ToolDeadline
 import com.wangzan101.mika.core.model.Part
+import com.wangzan101.mika.core.tool.ActionPass
 import com.wangzan101.mika.core.tool.Args
 import com.wangzan101.mika.core.tool.FakeScreen
 import com.wangzan101.mika.core.tool.SubActions
 import com.wangzan101.mika.core.tool.ToolExecution
-import com.wangzan101.mika.core.run.record.Redactor
+import com.wangzan101.mika.core.record.Redactor
 import com.wangzan101.mika.core.tool.Verb
-import com.wangzan101.mika.core.screen.uistate.ScreenPort
-import com.wangzan101.mika.core.screen.uistate.ScreenSnapshot
-import com.wangzan101.mika.core.screen.uistate.ScreenEvent
-import com.wangzan101.mika.core.screen.uistate.SystemCommandResult
-import com.wangzan101.mika.core.screen.uistate.ActionResult
-import com.wangzan101.mika.core.screen.uistate.UiTreeNode
-import com.wangzan101.mika.core.screen.uistate.UiWindowTree
+import com.wangzan101.mika.core.uistate.ScreenPort
+import com.wangzan101.mika.core.uistate.ScreenSnapshot
+import com.wangzan101.mika.core.uistate.ScreenEvent
+import com.wangzan101.mika.core.uistate.SystemCommandResult
+import com.wangzan101.mika.core.uistate.ActionResult
+import com.wangzan101.mika.core.uistate.UiTreeNode
+import com.wangzan101.mika.core.uistate.UiWindowTree
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -328,6 +333,171 @@ class PhoneAutomationToolsTest {
         assertEquals("pm list packages", command)
         assertTrue(cmd.content["output"]!!.jsonPrimitive.content.contains("shell"))
         assertFalse(Redactor.args(Verb.PhoneCommand, """{"command":"echo private"}""", false).contains("private"))
+    }
+
+    @Test fun unavailableWaitDoesNotPretendTheDeadlineElapsed() = runBlocking {
+        val screen = object : ScreenPort by FakeScreen() {
+            override suspend fun waitFor(c: String, value: String?, timeoutMs: Long): Boolean =
+                throw com.wangzan101.mika.core.uistate.ScreenWaitUnavailable("no_app_open", "open an app first")
+        }
+        val dispatcher = toolDispatcher(screen)
+        try {
+            val result = PhoneWait.execute(
+                Args(PhoneWait.def, Json.parseToJsonElement("""{"condition":"appear","value":"missing","timeoutMs":10000}""").jsonObject), dispatcher.ctx).content
+            assertEquals("no_app_open", result["error"]!!.jsonPrimitive.content)
+            assertEquals("false", result["timedOut"]!!.jsonPrimitive.content)
+            assertEquals("false", result["executed"]!!.jsonPrimitive.content)
+            assertFalse(dispatcher.localToolsBusy)
+        } finally { dispatcher.closeLocalTools() }
+    }
+
+    @Test fun waitReturnsAtDeadlineWhenScreenIgnoresCancellation() = runBlocking {
+        val screen = object : ScreenPort by FakeScreen() {
+            override suspend fun waitFor(c: String, value: String?, timeoutMs: Long): Boolean {
+                val end = System.nanoTime() + 600_000_000L
+                while (System.nanoTime() < end) {
+                    try {
+                        Thread.sleep(600)
+                    } catch (_: InterruptedException) {
+                        // Simulate a Binder call that does not react to coroutine cancellation.
+                    }
+                }
+                return true
+            }
+        }
+        val dispatcher = toolDispatcher(screen)
+        val started = System.nanoTime()
+        val result = PhoneWait.execute(
+            Args(PhoneWait.def, Json.parseToJsonElement("""{"condition":"appear","value":"完成","timeoutMs":50}""").jsonObject),
+            dispatcher.ctx,
+        ).content
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("wait blocked for ${elapsedMs}ms", elapsedMs < 400)
+        assertEquals("false", result["met"]!!.jsonPrimitive.content)
+        assertEquals("timeout", result["error"]!!.jsonPrimitive.content)
+        assertEquals("true", result["screenReadStuck"]!!.jsonPrimitive.content)
+        delay(700)
+    }
+
+    @Test fun oneTaskStuckWaitingDoesNotDisableAnotherTasksWait() = runBlocking {
+        val blocked = object : ScreenPort by FakeScreen() {
+            override suspend fun waitFor(c: String, value: String?, timeoutMs: Long): Boolean {
+                val end = System.nanoTime() + 600_000_000L
+                while (System.nanoTime() < end) {
+                    try {
+                        Thread.sleep(600)
+                    } catch (_: InterruptedException) {
+                        // A real blocked Binder call need not respond to interruption.
+                    }
+                }
+                return true
+            }
+        }
+        val first = toolDispatcher(blocked)
+        PhoneWait.execute(
+            Args(PhoneWait.def, Json.parseToJsonElement("""{"condition":"appear","value":"完成","timeoutMs":50}""").jsonObject),
+            first.ctx,
+        )
+
+        val healthy = object : ScreenPort by FakeScreen() {
+            override suspend fun waitFor(c: String, value: String?, timeoutMs: Long) = true
+        }
+        val second = toolDispatcher(healthy)
+        val result = PhoneWait.execute(
+            Args(PhoneWait.def, Json.parseToJsonElement("""{"condition":"appear","value":"完成","timeoutMs":1000}""").jsonObject),
+            second.ctx,
+        ).content
+
+        assertEquals("true", result["met"]!!.jsonPrimitive.content)
+        assertFalse(result.containsKey("screenReadStuck"))
+        delay(700)
+    }
+
+    @Test fun ordinaryPhoneToolHonoursDeadlineContext() = runBlocking {
+        val screen = object : ScreenPort by FakeScreen() {
+            override suspend fun snapshot(): ScreenSnapshot {
+                val end = System.nanoTime() + 600_000_000L
+                while (System.nanoTime() < end) {
+                    try {
+                        Thread.sleep(600)
+                    } catch (_: InterruptedException) {
+                        // Simulate a synchronous accessibility/Binder path.
+                    }
+                }
+                return FakeScreen().snapshot()
+            }
+        }
+        val dispatcher = toolDispatcher(screen)
+        val started = System.nanoTime()
+        val result = withContext(ToolDeadline(50)) {
+            dispatcher.executeRead(Part.ToolCall("deadline", "phone_observe", "{}"))
+        }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+
+        assertTrue("phone tool blocked for ${elapsedMs}ms", elapsedMs < 400)
+        assertEquals("false", result.content["ok"]!!.jsonPrimitive.content)
+        assertEquals("phone_execution_stuck", result.content["error"]!!.jsonPrimitive.content)
+        assertEquals("50", result.content["declaredDeadlineMs"]!!.jsonPrimitive.content)
+        delay(700)
+    }
+
+    @Test
+    fun phonePreparationReadIsInsideTheDeadlineBoundary() = runBlocking {
+        val screen = object : ScreenPort by FakeScreen() {
+            override suspend fun peek(): ScreenSnapshot {
+                val end = System.nanoTime() + 300_000_000L
+                while (System.nanoTime() < end) {
+                    try {
+                        Thread.sleep(10)
+                    } catch (_: InterruptedException) {
+                        // Simulate a synchronous accessibility/Binder path.
+                    }
+                }
+                return FakeScreen().peek()
+            }
+        }
+        val dispatcher = toolDispatcher(screen)
+        val started = System.nanoTime()
+        val result = withContext(ToolDeadline(50)) {
+            dispatcher.execute(Part.ToolCall("deadline-tap", "phone_tap", """{"x":500,"y":500}"""), ActionPass())
+        }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+
+        assertTrue("phone preparation blocked for ${elapsedMs}ms", elapsedMs < 250)
+        assertEquals("phone_execution_stuck", result.content["error"]!!.jsonPrimitive.content)
+        delay(350)
+    }
+
+    @Test
+    fun compositePhoneToolDirectReadIsInsideTheDeadlineBoundary() = runBlocking {
+        val screen = object : ScreenPort by FakeScreen() {
+            override suspend fun snapshot(): ScreenSnapshot {
+                val end = System.nanoTime() + 300_000_000L
+                while (System.nanoTime() < end) {
+                    try {
+                        Thread.sleep(10)
+                    } catch (_: InterruptedException) {
+                        // Simulate a synchronous accessibility/Binder path.
+                    }
+                }
+                return FakeScreen().snapshot()
+            }
+        }
+        val dispatcher = toolDispatcher(screen)
+        dispatcher.ctx.sub = SubActions { ToolExecution(buildJsonObject { put("ok", true) }) }
+        val started = System.nanoTime()
+        val result = withContext(ToolDeadline(50)) {
+            dispatcher.execute(
+                Part.ToolCall("deadline-find", "phone_find", """{"text":"完成","direction":"down","maxScrolls":1}"""),
+                ActionPass(),
+                sub = SubActions { ToolExecution(buildJsonObject { put("ok", true) }) },
+            )
+        }
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+
+        assertTrue("composite phone tool blocked for ${elapsedMs}ms", elapsedMs < 250)
+        assertEquals("phone_execution_stuck", result.content["error"]!!.jsonPrimitive.content)
+        delay(350)
     }
 
     @Test fun gestureConvertsTwoFingerPathsToPixels() = runTest {

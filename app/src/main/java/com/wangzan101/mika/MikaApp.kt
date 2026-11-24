@@ -1,26 +1,15 @@
 package com.wangzan101.mika
 
+import com.wangzan101.mika.record.DetailedTraces
+import com.wangzan101.mika.R
+import com.wangzan101.mika.i18n.ResourceTexts
+import com.wangzan101.mika.i18n.UiText
+import com.wangzan101.mika.i18n.AppLanguage
+import com.wangzan101.mika.i18n.tr
+import com.wangzan101.mika.ui.ChatCopy
 import android.app.Application
 import android.net.Uri
 import android.util.Log
-import com.wangzan101.mika.R
-import com.wangzan101.mika.cap.phone.PhoneServices
-import com.wangzan101.mika.cap.sandbox.AndroidSandbox
-import com.wangzan101.mika.cap.sandbox.AttachmentLimits
-import com.wangzan101.mika.cap.sandbox.Attachments
-import com.wangzan101.mika.cap.sandbox.RuntimePreparer
-import com.wangzan101.mika.cap.sandbox.SandboxDirs
-import com.wangzan101.mika.cap.sandbox.SandboxOwner
-import com.wangzan101.mika.cap.sandbox.SandboxState
-import com.wangzan101.mika.cap.sandbox.ShareExporter
-import com.wangzan101.mika.cap.sandbox.SkillsSync
-import com.wangzan101.mika.cap.sandbox.WorkspaceKey
-import com.wangzan101.mika.cap.web.SiteRegistry
-import com.wangzan101.mika.cap.web.WebFiles
-import com.wangzan101.mika.cap.web.WebOwner
-import com.wangzan101.mika.cap.web.cdp.WebDevtools
-import com.wangzan101.mika.capsule.AppForeground
-import com.wangzan101.mika.capsule.CapsuleController
 import com.wangzan101.mika.chat.AndroidBranchWorkspace
 import com.wangzan101.mika.chat.AutoArchive
 import com.wangzan101.mika.chat.ConversationDeleter
@@ -30,55 +19,63 @@ import com.wangzan101.mika.chat.ProjectDeleter
 import com.wangzan101.mika.chat.ProjectStore
 import com.wangzan101.mika.chat.SharedDraftStore
 import com.wangzan101.mika.chat.WorkspaceResolver
-import com.wangzan101.mika.task.ConfirmationNotifier
 import com.wangzan101.mika.core.cap.sandbox.SandboxStatus
-import com.wangzan101.mika.core.run.Outbox
-import com.wangzan101.mika.core.run.RunStore
-import com.wangzan101.mika.core.model.usage.UsageLedger
-import com.wangzan101.mika.core.workspace.SandboxTree
-import com.wangzan101.mika.i18n.AppLanguage
-import com.wangzan101.mika.i18n.ResourceTexts
-import com.wangzan101.mika.i18n.UiText
-import com.wangzan101.mika.i18n.tr
+import com.wangzan101.mika.cap.sandbox.AndroidSandbox
+import com.wangzan101.mika.cap.sandbox.Attachments
+import com.wangzan101.mika.cap.sandbox.AttachmentLimits
+import com.wangzan101.mika.cap.sandbox.WorkspaceKey
+import com.wangzan101.mika.ui.AttachFiles
+import com.wangzan101.mika.cap.sandbox.ShareExporter
+import com.wangzan101.mika.cap.web.WebFiles
+import com.wangzan101.mika.cap.sandbox.RuntimePreparer
+import com.wangzan101.mika.cap.sandbox.SandboxDirs
+import com.wangzan101.mika.cap.sandbox.SandboxState
+import com.wangzan101.mika.cap.sandbox.SkillsSync
+import com.wangzan101.mika.capsule.AppForeground
+import com.wangzan101.mika.capsule.CapsuleController
+import com.wangzan101.mika.confirm.ConfirmationNotifier
 import com.wangzan101.mika.memory.AppLearningActions
 import com.wangzan101.mika.memory.MemoryRuntime
-import com.wangzan101.mika.record.DetailedTraces
-import com.wangzan101.mika.knowledge.FileRouteStore
 import com.wangzan101.mika.settings.ApprovalControl
 import com.wangzan101.mika.settings.ApprovalStore
 import com.wangzan101.mika.settings.FeatureFlags
+import com.wangzan101.mika.cap.phone.PhoneServices
+import com.wangzan101.mika.replay.FileRouteStore
 import com.wangzan101.mika.settings.ProviderStore
-import com.wangzan101.mika.settings.proactiveTarget
-import com.wangzan101.mika.settings.proactiveTargeted
-import com.wangzan101.mika.settings.ttsModel
-import com.wangzan101.mika.task.FileChildRunStore
+import com.wangzan101.mika.core.run.Outbox
+import com.wangzan101.mika.core.run.RunStore
+import com.wangzan101.mika.core.usage.UsageLedger
 import com.wangzan101.mika.task.FileOutboxStore
 import com.wangzan101.mika.task.FileRunStateStore
 import com.wangzan101.mika.task.LocalChannel
-import com.wangzan101.mika.task.RemoteTaskHub
-import com.wangzan101.mika.task.ResourceScheduler
 import com.wangzan101.mika.task.RunRecovery
-import com.wangzan101.mika.task.TaskCenterState
-import com.wangzan101.mika.task.TaskEnvironment
 import com.wangzan101.mika.task.TaskRecovery
-import com.wangzan101.mika.task.TaskService
 import com.wangzan101.mika.task.TriggerOutcomes
-import com.wangzan101.mika.task.TriggerRuntime
+import com.wangzan101.mika.task.TaskService
+import com.wangzan101.mika.task.TaskCenterState
 import com.wangzan101.mika.teach.TeachRuntime
-import com.wangzan101.mika.chat.ui.AttachFiles
-import com.wangzan101.mika.chat.ui.ChatCopy
-import com.wangzan101.mika.chat.ui.ChatViewModel
-import com.wangzan101.mika.chat.ui.TaskActions
+import com.wangzan101.mika.ui.ChatViewModel
+import com.wangzan101.mika.ui.TaskActions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.wangzan101.mika.cap.web.cdp.WebDevtools
+import com.wangzan101.mika.cap.web.WebOwner
+import com.wangzan101.mika.cap.web.SiteRegistry
+import com.wangzan101.mika.cap.sandbox.SandboxOwner
+import com.wangzan101.mika.core.workspace.SandboxTree
+import com.wangzan101.mika.task.TaskEnvironment
+import com.wangzan101.mika.task.ResourceScheduler
+import com.wangzan101.mika.task.RemoteTaskHub
+import com.wangzan101.mika.task.FileChildRunStore
+import com.wangzan101.mika.task.TriggerRuntime
 
 /**
  * App 容器:进程里共用的服务都在这里建一份,经各自的 Owner 接口交给安卓入口(界面、服务、广播、provider),
@@ -237,6 +234,8 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
     override val taskRecovery: TaskRecovery by lazy { TaskRecovery(this, phone.sharedShell) }
 
     /** 运行账本与送达账本:整个进程一份,任务服务和启动时的恢复共用(同一个文件不能有两份实例)。 */
+    val taskDeadlines by lazy { com.wangzan101.mika.task.TaskDeadlineRuntime(this) }
+
     val runStore: RunStore by lazy { FileRunStateStore(java.io.File(filesDir, "runs-v3.json")) }
     val outbox: Outbox by lazy { Outbox(FileOutboxStore(java.io.File(filesDir, "outbox-v3.json"))) }
 
@@ -261,7 +260,7 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
             override fun delivered(key: String) = TriggerRuntime.delivered(app, key)
             override fun actionFailed(key: String, reason: String) = TriggerRuntime.actionFailed(app, key, reason)
         }, conversations, scope, records = com.wangzan101.mika.record.RunStore(app).reader(), label = labels::label,
-            appLabel = { com.wangzan101.mika.task.ConfirmationNotifier.appLabel(app, it) },
+            appLabel = { com.wangzan101.mika.confirm.ConfirmationNotifier.appLabel(app, it) },
             languageTag = { com.wangzan101.mika.i18n.AppLanguage.resolved(app).tag },
             scheduledLocalChannel = localChannel(scheduled = true))
     }
@@ -611,7 +610,10 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         // 上次异常退出时留下的改动(App 被静音)在这里恢复
         scope.launch { taskRecovery.recover() }
         // 上次进程被杀时没结束的运行:现在就标为中断并告知,不等任务服务起来
-        if (!quit) runRecovery.recover().let { if (it.isNotEmpty()) Log.w("MikaTask", "${it.size} runs interrupted by process restart") }
+        if (!quit) {
+            taskDeadlines.recoverBeforeRuns()
+            runRecovery.recover().let { if (it.isNotEmpty()) Log.w("MikaTask", "${it.size} runs interrupted by process restart") }
+        }
         // 用户已绑定并打开微信渠道时恢复监听；完全退出期间由各运行入口统一拒绝补起
         wechat.ensureRunning()
         if (flags.proactive()) proactive.start(paused = quit)
@@ -678,8 +680,9 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         environment.migrateLegacy(source)
     }
 
-    /** 用户重新打开 Mika:补上退出时略过的启动工作(见 [com.wangzan101.mika.MikaQuit])。 */
+    /** 用户重新打开 Mika:补上退出时略过的启动工作(见 [com.wangzan101.mika.quit.MikaQuit])。 */
     fun resumeAfterQuit() {
+        taskDeadlines.recoverBeforeRuns()
         runRecovery.recover()
         RuntimePreparer.ensure(this)
         autoArchiveNow()

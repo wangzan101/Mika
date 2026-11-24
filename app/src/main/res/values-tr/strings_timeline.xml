@@ -93,4 +93,6 @@
     <string name="timeline_step_limit_value">%1$d / %2$d</string>
     <string name="timeline_token_budget">Token bütçesi</string>
     <string name="timeline_token_budget_value">%1$s / %2$s</string>
+    <string name="timeline_cache_reporting">Önbellek raporu</string>
+    <string name="timeline_cache_reporting_value">%2$d çağrıdan %1$d bildirildi · önbellekte %3$s</string>
 </resources>

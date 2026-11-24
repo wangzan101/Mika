@@ -105,4 +105,6 @@
     <string name="timeline_step_limit_value">%1$d / %2$d</string>
     <string name="timeline_token_budget">Бюджет токенов</string>
     <string name="timeline_token_budget_value">%1$s / %2$s</string>
+    <string name="timeline_cache_reporting">Отчёт о кэше</string>
+    <string name="timeline_cache_reporting_value">Сообщено о %1$d из %2$d вызовов · в кэше %3$s</string>
 </resources>

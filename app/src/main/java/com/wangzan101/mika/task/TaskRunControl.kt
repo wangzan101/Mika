@@ -5,13 +5,13 @@ import com.wangzan101.mika.core.action.ConfirmChoice
 import com.wangzan101.mika.core.agent.AgentLoop
 import com.wangzan101.mika.core.agent.GateReason
 import com.wangzan101.mika.core.agent.TaskState
-import com.wangzan101.mika.core.run.ChildAgentRunner
+import com.wangzan101.mika.core.child.ChildAgentRunner
 import com.wangzan101.mika.core.run.Delivery
 import com.wangzan101.mika.core.run.InputReceipt
 import com.wangzan101.mika.core.run.RunInbox
 import com.wangzan101.mika.core.run.RunInput
 import com.wangzan101.mika.core.run.RunId
-import com.wangzan101.mika.task.ConfirmationNotifier
+import com.wangzan101.mika.confirm.ConfirmationNotifier
 import com.wangzan101.mika.i18n.tr
 import com.wangzan101.mika.i18n.trPlural
 import com.wangzan101.mika.takeover.Takeover
@@ -102,10 +102,15 @@ internal class TaskRunControl(
      * 任务的终态:[execute] 收尾之后才写,不经 [publish]。不论显示的是不是自己,都先把本次的运行编号记到
      * 自己对话名下([TaskService.endedRunIds]),界面收到结束状态时按对话取;显示中时也写 [TaskService.endedRunId]。
      */
-    fun end(end: TaskState) = synchronized(service.taskState.shownLock) {
-        service.taskState._endedRunIds.value = service.taskState._endedRunIds.value + (conversationId to state._runId.value)
-        if (shownRef()) service.taskState._endedRunId.value = state._runId.value
-        state.setState(end)
+    fun end(end: TaskState): Boolean = synchronized(state.publishLock) {
+        if (state.terminalClaimed) return@synchronized false
+        state.terminalClaimed = true
+        synchronized(service.taskState.shownLock) {
+            service.taskState._endedRunIds.value = service.taskState._endedRunIds.value + (conversationId to state._runId.value)
+            if (shownRef()) service.taskState._endedRunId.value = state._runId.value
+            state.setState(end)
+        }
+        true
     }
 
     /** 超出并行上限在排队;放出来开跑时 [dequeue]。 */

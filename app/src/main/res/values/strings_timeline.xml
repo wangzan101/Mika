@@ -97,4 +97,6 @@
     <string name="timeline_step_limit_value">%1$d / %2$d</string>
     <string name="timeline_token_budget">Token budget</string>
     <string name="timeline_token_budget_value">%1$s / %2$s</string>
+    <string name="timeline_cache_reporting">Cache reporting</string>
+    <string name="timeline_cache_reporting_value">%1$d of %2$d calls reported · %3$s cached</string>
 </resources>

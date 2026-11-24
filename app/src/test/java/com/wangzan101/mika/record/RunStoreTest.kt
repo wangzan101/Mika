@@ -1,6 +1,6 @@
 package com.wangzan101.mika.record
 
-import com.wangzan101.mika.core.run.record.RunEvent
+import com.wangzan101.mika.core.record.RunEvent
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonObject
@@ -32,10 +32,10 @@ class RunStoreTest {
             appendLine("""{"type":"task_started","atMs":1,"goal":"private goal","model":"main"}""")
             for (step in 1..78) {
                 if (step == 42) {
-                    appendLine("""{"type":"compressed","atMs":420,"foldedSteps":16}""")
+                    appendLine("""{"type":"compressed","atMs":420,"foldedSteps":16,"prefixDigest":"abc123","epoch":2,"reason":"context_size_append"}""")
                     appendLine("""{"type":"model_reply","atMs":421,"step":42,"role":"light_rejected","text":"private reply","inputTokens":null,"cachedTokens":null}""")
                 }
-                appendLine("""{"type":"model_reply","atMs":${step * 10 + 2},"step":$step,"inputTokens":200,"cachedTokens":${if (step == 1) 0 else 128},"outputTokens":4,"argsJson":"private arguments"}""")
+                appendLine("""{"type":"model_reply","atMs":${step * 10 + 2},"step":$step,"inputTokens":200,"cachedTokens":${if (step == 1) 0 else 128},"cacheReported":true,"provider":"DeepSeek","outputTokens":4,"argsJson":"private arguments"}""")
             }
             appendLine("""{"type":"tool_result","atMs":783,"step":78,"resultJson":"private content","screenshotId":1}""")
             appendLine("""{"type":"compressed","atMs":784,"foldedSteps":20}""")
@@ -53,7 +53,9 @@ class RunStoreTest {
         assertEquals("light_rejected", replies[41].getValue("role").jsonPrimitive.content)
         assertEquals("128", replies.last().getValue("cachedTokens").jsonPrimitive.content)
         assertEquals("200", replies.last().getValue("inputTokens").jsonPrimitive.content)
-        assertEquals(Json.parseToJsonElement("""{"type":"compressed","atMs":420,"foldedSteps":16}"""), rows[42])
+        assertEquals("true", replies.last().getValue("cacheReported").jsonPrimitive.content)
+        assertEquals("DeepSeek", replies.last().getValue("provider").jsonPrimitive.content)
+        assertEquals(Json.parseToJsonElement("""{"type":"compressed","atMs":420,"foldedSteps":16,"prefixDigest":"abc123","epoch":2,"reason":"context_size_append"}"""), rows[42])
         assertEquals(Json.parseToJsonElement("""{"type":"compressed","atMs":784,"foldedSteps":20}"""), rows[rows.lastIndex - 1])
         assertFalse(exported.contains("private"))
         assertFalse(exported.contains("screenshotId"))

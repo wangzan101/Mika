@@ -287,6 +287,11 @@
     <string name="settings_extensions">拡張と接続</string>
     <string name="settings_network">ネットワーク</string>
     <string name="settings_runtime">ランタイム</string>
+    <string name="settings_task_run_limit">タスクごとの実行時間</string>
+    <string name="settings_task_run_limit_sub">通常のタスクを 1 回に最大どれだけ動かすか。オフは無制限です。時間になるとタスクは止まり、時間切れだったことを伝えます。</string>
+    <plurals name="settings_task_run_minutes_n">
+        <item quantity="other">%1$d 分</item>
+    </plurals>
     <string name="settings_trigger_run_limit">スケジュールタスクの最長実行時間</string>
     <string name="settings_trigger_run_limit_sub">スケジュールタスクは見ていない間に動きます。オフは無制限です。時間になるとタスクは止まり、時間切れだったことを伝えます。</string>
     <plurals name="settings_trigger_run_minutes_n">

@@ -5,18 +5,19 @@ import android.util.Log
 import com.wangzan101.mika.MikaApp
 import com.wangzan101.mika.i18n.AppLanguage
 import com.wangzan101.mika.core.agent.SystemPrompt
+import com.wangzan101.mika.core.agent.RunBudget
 import com.wangzan101.mika.core.prompt.PersonaPrompt
-import com.wangzan101.mika.core.run.record.Redactor
-import com.wangzan101.mika.core.learn.memory.UserUtterances
+import com.wangzan101.mika.core.record.Redactor
+import com.wangzan101.mika.core.memory.UserUtterances
 import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.core.model.ModelRole
 import com.wangzan101.mika.core.agent.Turn
 import com.wangzan101.mika.core.run.RunId
 import com.wangzan101.mika.core.run.RunSpec
 import com.wangzan101.mika.core.run.RunOrigin
-import com.wangzan101.mika.core.learn.knowledge.KnowledgeStore
-import com.wangzan101.mika.core.learn.knowledge.GuideCatalog
-import com.wangzan101.mika.core.run.record.RunSink
+import com.wangzan101.mika.core.knowledge.KnowledgeStore
+import com.wangzan101.mika.core.knowledge.GuideCatalog
+import com.wangzan101.mika.core.record.RunSink
 import com.wangzan101.mika.record.RunStore
 import com.wangzan101.mika.settings.FeatureFlags
 import kotlinx.coroutines.CancellationException
@@ -86,7 +87,17 @@ internal suspend fun TaskRun.assembleRecord(a: RunAssembly): RunRecord {
     val trace = record?.takeIf { traceTicket != null }?.let { run ->
         resources.acquire(Dispatchers.IO, traces.store::finish) { traces.start(traceTicket, run.runId) }
     }
-    return RunRecord(sink, trace)
+    val terminal = TaskTerminalRecord(sink) {
+        synchronized(runState.publishLock) {
+            if (runState.terminalClaimed) runState._state.value as? com.wangzan101.mika.core.agent.TaskState.Terminal else null
+        }
+    }
+    terminalRecord = terminal
+    deadlineEntry?.let { entry ->
+        terminal.event(com.wangzan101.mika.core.record.RunEvent.State(System.currentTimeMillis(), "task_deadline_armed",
+            "mode=${(service.application as MikaApp).taskDeadlines.alarmMode.name.lowercase()};budgetMs=${entry.budgetMs}"))
+    }
+    return RunRecord(terminal, trace)
 }
 
 internal suspend fun TaskRun.assembleMemory(m: RunModels, ph: RunPhone): RunMemory {
@@ -203,10 +214,10 @@ internal suspend fun TaskRun.assemblePrompt(a: RunAssembly, priorTurns: List<Tur
     val personaLabel = if (persona != null && (personaLayer != null || assistant != PersonaPrompt.DEFAULT_NICKNAME)) {
         Redactor.text("${persona.name} · v${persona.revision}")
     } else null
-    val stepLimit = if (conditionCheck) null else FeatureFlags.get(service).taskStepLimit()
+    val budget = if (conditionCheck) RunBudget() else launchBudget
     val runSpec = RunSpec(RunId(key), goal, conversationId,
         priorTurns,
         provenance, if (conditionCheck) setOf("web", "sandbox") else null, readOnly = conditionCheck,
-        stepBudget = stepLimit, tokenBudget = tokenBudget)
+        budget = budget, tokenBudget = tokenBudget)
     return RunPrompt(userScreens, basePrompt, personaLabel, runSpec)
 }

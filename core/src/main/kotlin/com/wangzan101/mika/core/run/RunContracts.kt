@@ -1,6 +1,7 @@
 package com.wangzan101.mika.core.run
 
 import com.wangzan101.mika.core.action.ConfirmChoice
+import com.wangzan101.mika.core.agent.RunBudget
 import com.wangzan101.mika.core.agent.Turn
 
 @JvmInline value class RunId(val value: String) {
@@ -20,7 +21,8 @@ data class RunSpec(
     /** 条件检查 Run 只允许读取；网页导航作为取得读取对象的准备动作例外。 */
     val readOnly: Boolean = false,
     val parent: RunId? = null,
-    val stepBudget: Int? = null,
+    /** 任务启动时冻结的步数、总时长和无事件保护预算。 */
+    val budget: RunBudget = RunBudget(),
     /** 主循环、旁路调用和子任务共享的已报告 Token 预算；null 不限制。 */
     val tokenBudget: Long? = null,
     /** 由同一批次并行派发的子任务，宿主为它单独分配有状态的资源。 */

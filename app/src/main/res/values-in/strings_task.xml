@@ -88,7 +88,12 @@
     <string name="screens_needs_you">Perlu Anda</string>
     <string name="screens_zoom">Perbesar layar ini</string>
     <string name="task_trigger_time_limit">Tugas terjadwal berjalan lebih dari %1$d menit, jadi dihentikan.</string>
+    <string name="task_run_time_limit">Tugas berjalan lebih dari %1$d menit, jadi dihentikan.</string>
+    <string name="task_phone_execution_stuck">Tugas sebelumnya membuat kontrol ponsel tidak merespons. Mika sedang memulai ulang koneksi; coba lagi sebentar lagi.</string>
     <string name="trigger_failed_streak">Tugas terjadwal gagal %1$d kali berturut-turut</string>
     <string name="trigger_failed_streak_hint">Anda bisa menjeda atau mengubah rencana ini di halaman Tugas terjadwal.</string>
     <string name="task_no_phone_helper_shizuku">Kontrol ponsel belum siap. Mulai Shizuku dan beri izin ke Mika (atau periksa Kontrol ponsel di Pengaturan). Tugas web dan file tidak terpengaruh.</string>
+    <string name="task_phone_recovering">Kontrol ponsel tidak merespons selama 30 detik. Mika sedang mencoba memulihkannya.</string>
+    <string name="task_phone_restart_required">Kontrol ponsel tidak dapat dipulihkan. Mulai ulang Mika sebelum mencoba lagi.</string>
+    <string name="task_no_event_timeout">Tugas dihentikan setelah %1$d detik tanpa kemajuan. Anda dapat melanjutkan dari kemajuan yang tersimpan.</string>
 </resources>

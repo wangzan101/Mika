@@ -4,13 +4,13 @@ import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import com.wangzan101.mika.core.cap.phone.WheelMath
-import com.wangzan101.mika.core.screen.uistate.ElementLocator
-import com.wangzan101.mika.core.screen.uistate.UiElement
-import com.wangzan101.mika.core.screen.uistate.UiStates
-import com.wangzan101.mika.core.screen.uistate.UiTreeNode
-import com.wangzan101.mika.core.screen.uistate.UiWindowTree
-import com.wangzan101.mika.core.screen.uistate.ambiguousFieldReadback
-import com.wangzan101.mika.core.screen.uistate.normalize
+import com.wangzan101.mika.core.uistate.ElementLocator
+import com.wangzan101.mika.core.uistate.UiElement
+import com.wangzan101.mika.core.uistate.UiStates
+import com.wangzan101.mika.core.uistate.UiTreeNode
+import com.wangzan101.mika.core.uistate.UiWindowTree
+import com.wangzan101.mika.core.uistate.ambiguousFieldReadback
+import com.wangzan101.mika.core.uistate.normalize
 
 /**
  * 读一次屏的结果。[hash] 覆盖所有可见节点(含标成「对无障碍不重要」的)的文字、类型、位置、勾选、
@@ -26,6 +26,7 @@ internal class ScreenRead(
     val windows: List<UiWindowTree> = emptyList(),
     /** 有应用窗口(不管根节点读不读得到)。 */
     val anyAppWindow: Boolean = hasAppWindow,
+    val timing: ScreenReadMetrics? = null,
 )
 
 /** 从某块屏的窗口里读出元素列表、界面指纹和诊断用的文字。 */
@@ -51,7 +52,8 @@ internal object ScreenReader {
         contentWindows(windows).filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
             .firstNotNullOfOrNull { it.root?.packageName?.toString() }
 
-    fun read(windows: List<AccessibilityWindowInfo>, width: Int, height: Int): ScreenRead {
+    fun read(windows: List<AccessibilityWindowInfo>, width: Int, height: Int, windowsMs: Long = 0): ScreenRead {
+        val started = System.nanoTime()
         val content = contentWindows(windows)
         val entries = mutableListOf<NodeEntry>()
         val texts = mutableListOf<String>()
@@ -60,9 +62,17 @@ internal object ScreenReader {
         var password = false
         var lastLabel: String? = null
         val rect = Rect()
+        var rootsNanos = 0L
+        var propertiesNanos = 0L
+        var childrenNanos = 0L
+        var nodes = 0
+        var maxDepth = 0
 
         fun visit(n: AccessibilityNodeInfo, depth: Int, inList: Boolean): List<UiTreeNode> {
             if (depth > MAX_DEPTH) return emptyList()
+            nodes++
+            maxDepth = maxOf(maxDepth, depth)
+            val propertiesStarted = System.nanoTime()
             val visible = n.isVisibleToUser
             val editable = visible && canSetText(n)
             var ref: String? = null
@@ -111,9 +121,12 @@ internal object ScreenReader {
                 }
             }
             val childrenInList = inList || isList(n)
+            propertiesNanos += System.nanoTime() - propertiesStarted
+            val childrenStarted = System.nanoTime()
             val children = buildList {
                 for (i in 0 until n.childCount) n.getChild(i)?.let { addAll(visit(it, depth + 1, childrenInList)) }
             }
+            childrenNanos += System.nanoTime() - childrenStarted
             if (!visible) return children
             return listOf(UiTreeNode(
                 role = roleOf(n), bounds = clippedBounds, ref = ref,
@@ -130,7 +143,9 @@ internal object ScreenReader {
         }
 
         val trees = content.map { w ->
+            val rootStarted = System.nanoTime()
             val root = w.root
+            rootsNanos += System.nanoTime() - rootStarted
             UiWindowTree(
                 id = w.id,
                 type = when (w.type) {
@@ -152,6 +167,15 @@ internal object ScreenReader {
             anyAppWindow = content.any { it.type == AccessibilityWindowInfo.TYPE_APPLICATION },
             topPackage = topPackage(windows),
             windows = trees,
+            timing = ScreenReadMetrics(
+                windowsMs = windowsMs,
+                rootsMs = rootsNanos / 1_000_000,
+                propertiesMs = propertiesNanos / 1_000_000,
+                childrenMs = childrenNanos / 1_000_000,
+                totalMs = (System.nanoTime() - started) / 1_000_000 + windowsMs,
+                nodes = nodes,
+                maxDepth = maxDepth,
+            ),
         )
     }
 

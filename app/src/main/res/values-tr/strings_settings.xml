@@ -287,6 +287,11 @@
     <string name="settings_extensions">Uzantılar ve bağlantılar</string>
     <string name="settings_network">Ağ</string>
     <string name="settings_runtime">Çalışma zamanı</string>
+    <string name="settings_task_run_limit">Görev başına çalışma süresi</string>
+    <string name="settings_task_run_limit_sub">Normal bir görevin en fazla ne kadar çalışabileceği. Kapalı, sınırsız demektir; süre dolduğunda görev durur ve süresinin bittiğini söyler.</string>
+    <plurals name="settings_task_run_minutes_n">
+        <item quantity="other">%1$d dakika</item>
+    </plurals>
     <string name="settings_trigger_run_limit">Zamanlanmış görevler için süre sınırı</string>
     <string name="settings_trigger_run_limit_sub">Zamanlanmış görevler siz uzaktayken çalışır. Kapalı, sınırsız demektir; süre dolduğunda görev durur ve süresinin bittiğini söyler.</string>
     <plurals name="settings_trigger_run_minutes_n">

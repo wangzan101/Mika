@@ -2,6 +2,7 @@ package com.wangzan101.mika.core.run
 
 import com.wangzan101.mika.core.agent.AgentLoop
 import com.wangzan101.mika.core.agent.FakeModel
+import com.wangzan101.mika.core.agent.RunBudget
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.model.Author
 import com.wangzan101.mika.core.model.Capabilities
@@ -11,8 +12,8 @@ import com.wangzan101.mika.core.model.ModelReply
 import com.wangzan101.mika.core.model.Part
 import com.wangzan101.mika.core.model.StopReason
 import com.wangzan101.mika.core.model.ToolSpec
-import com.wangzan101.mika.core.run.record.RunEvent
-import com.wangzan101.mika.core.run.record.RunSink
+import com.wangzan101.mika.core.record.RunEvent
+import com.wangzan101.mika.core.record.RunSink
 import com.wangzan101.mika.core.tool.FakeScreen
 import com.wangzan101.mika.core.assembly.toolDispatcher
 import kotlinx.coroutines.runBlocking
@@ -31,6 +32,18 @@ import java.time.ZoneId
 class RunContractTest {
     private fun spec() = RunSpec(RunId("r1"), "看看", "thread-1")
     private fun done() = com.wangzan101.mika.core.testing.answerReply("完成")
+
+    @Test fun runSpecCarriesTheImmutableBudgetSnapshot() {
+        val budget = RunBudget(
+            maxSteps = 60,
+            timeBudgetMs = 600_000,
+            modelCallTimeoutMs = 180_000,
+        )
+        val spec = RunSpec(RunId("budget"), "goal", "thread", budget = budget)
+        assertEquals(budget, spec.budget)
+        assertEquals(60, spec.budget.maxSteps)
+        assertEquals(600_000L, spec.budget.timeBudgetMs)
+    }
 
     @Test fun oldAndNewEntrySendTheSameOrdinaryRequest() = runTest {
         val oldModel = FakeModel(done())

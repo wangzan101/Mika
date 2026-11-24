@@ -113,4 +113,6 @@
     <string name="timeline_running">قيد التشغيل</string>
     <string name="timeline_token_budget">ميزانية Token</string>
     <string name="timeline_token_budget_value">%1$s / %2$s</string>
+    <string name="timeline_cache_reporting">تقرير التخزين المؤقت</string>
+    <string name="timeline_cache_reporting_value">تم الإبلاغ عن %1$d من %2$d مكالمات · %3$s مخزّنة مؤقتًا</string>
 </resources>

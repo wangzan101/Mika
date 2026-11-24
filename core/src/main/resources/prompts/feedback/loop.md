@@ -49,6 +49,12 @@ You have already typed "{{text}}" {{times}} times in this task; typing it again 
 ## progress_check
 Progress check: {{used}} of {{max}} steps used and the task is not finished. If what you have checked so far (search inside the app, its main menus) shows the target is not there or cannot be reached, stop now. {{answer_or_failure}} Continue only if you have a concrete, untried next place to look.
 
+## budget_soft_limit_source
+time budget
+
+## budget_soft_limit
+The task has used at least 80% of its time budget. Stop exploring optional routes. Finish with a confirmed result, or call end_not_done with the partial result, what is still missing and what you checked. Continue only if one concrete action is necessary to complete the requested result. {{answer_or_failure}}
+
 ## final_turn
 You are out of steps; no more phone actions are possible. If the task is done, reply to the user with the result in text, stating only what you read. If it is not done or only partly done, call end_not_done with the confirmed partial result, what you checked and what is missing.
 

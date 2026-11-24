@@ -4,13 +4,13 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
-import com.wangzan101.mika.core.run.record.Redactor
-import com.wangzan101.mika.core.run.record.RunMetrics
-import com.wangzan101.mika.core.run.record.RunMetricsStore
-import com.wangzan101.mika.core.run.record.RunEvent
-import com.wangzan101.mika.core.run.record.RunRecords
-import com.wangzan101.mika.core.run.record.RunSink
-import com.wangzan101.mika.core.run.record.RunSummary
+import com.wangzan101.mika.core.record.Redactor
+import com.wangzan101.mika.core.record.RunMetrics
+import com.wangzan101.mika.core.record.RunMetricsStore
+import com.wangzan101.mika.core.record.RunEvent
+import com.wangzan101.mika.core.record.RunRecords
+import com.wangzan101.mika.core.record.RunSink
+import com.wangzan101.mika.core.record.RunSummary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
@@ -170,8 +170,8 @@ class RunStore internal constructor(
         private val USAGE_FIELDS = mapOf(
             "task_started" to setOf("model"),
             "model_reply" to setOf("step", "model", "role", "tool", "inputTokens", "cachedTokens",
-                "outputTokens", "repliedAtMs", "latencyMs", "retryWaitMs"),
-            "compressed" to setOf("foldedSteps"),
+                "outputTokens", "repliedAtMs", "latencyMs", "retryWaitMs", "group", "cacheReported", "provider"),
+            "compressed" to setOf("foldedSteps", "prefixDigest", "epoch", "reason", "prefixMessages", "model"),
             "model_calls" to setOf("calls", "httpCalls", "unreported", "httpUnreported", "inputTokens", "cachedTokens", "outputTokens"),
             "task_ended" to setOf("outcome", "kind"),
         )

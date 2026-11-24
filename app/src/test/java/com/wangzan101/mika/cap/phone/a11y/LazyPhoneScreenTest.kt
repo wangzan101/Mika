@@ -1,9 +1,9 @@
 package com.wangzan101.mika.cap.phone.a11y
 
-import com.wangzan101.mika.core.screen.uistate.ActionResult
-import com.wangzan101.mika.core.screen.uistate.ScreenPort
-import com.wangzan101.mika.core.screen.uistate.SystemAction
-import com.wangzan101.mika.core.screen.uistate.SystemActionResult
+import com.wangzan101.mika.core.uistate.ActionResult
+import com.wangzan101.mika.core.uistate.ScreenPort
+import com.wangzan101.mika.core.uistate.SystemAction
+import com.wangzan101.mika.core.uistate.SystemActionResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,14 +29,14 @@ class LazyPhoneScreenTest {
 
     @Test fun blockedAppDoesNotConnectHelper() = runTest {
         val lazy = LazyPhoneScreen(1080, 2400, listApps = { emptyList() }) { attempts++; real }
-        val guarded = com.wangzan101.mika.core.screen.uistate.AppAccessScreenPort(lazy,
-            com.wangzan101.mika.core.device.access.AppAccessPolicy {
-                com.wangzan101.mika.core.device.access.AppAccessState(blocked = setOf("bank"))
+        val guarded = com.wangzan101.mika.core.uistate.AppAccessScreenPort(lazy,
+            com.wangzan101.mika.core.access.AppAccessPolicy {
+                com.wangzan101.mika.core.access.AppAccessState(blocked = setOf("bank"))
             }, packages = { emptyList() })
         try {
             guarded.openApp("bank")
             org.junit.Assert.fail("blocked app must be refused")
-        } catch (e: com.wangzan101.mika.core.device.access.AppAccessDenied) {
+        } catch (e: com.wangzan101.mika.core.access.AppAccessDenied) {
             assertEquals("app_blocked", e.code)
         }
         assertEquals(0, attempts)
@@ -48,6 +48,24 @@ class LazyPhoneScreenTest {
         assertEquals(ActionResult.Failed("no_app_open"), screen.tapXY(1, 1))
         assertEquals(0, attempts)
         assertFalse(screen.acquired)
+    }
+
+    @Test fun unstartedWaitIsNotADeadlineTimeout() = runTest {
+        try {
+            screen.waitFor("appear", "missing", 10_000)
+            org.junit.Assert.fail("unacquired screen cannot run a wait")
+        } catch (e: com.wangzan101.mika.core.uistate.ScreenWaitUnavailable) {
+            assertEquals("no_app_open", e.code)
+        }
+        assertEquals(0, attempts)
+        screen.openApp("a.b")
+        try {
+            screen.waitFor("appear", "missing", 10_000)
+            org.junit.Assert.fail("unavailable screen cannot run a wait")
+        } catch (e: com.wangzan101.mika.core.uistate.ScreenWaitUnavailable) {
+            assertEquals("phone_unavailable", e.code)
+        }
+        assertEquals(1, attempts)
     }
 
     @Test fun launchingAnAppConnectsOrSaysWhy() = runTest {

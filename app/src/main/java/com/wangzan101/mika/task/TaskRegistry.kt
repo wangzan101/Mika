@@ -6,7 +6,7 @@ import com.wangzan101.mika.core.run.RunId
 import com.wangzan101.mika.core.run.RunPhase
 import com.wangzan101.mika.core.run.RunStore
 import com.wangzan101.mika.core.run.StoredRun
-import com.wangzan101.mika.core.screen.uistate.AppWait
+import com.wangzan101.mika.core.uistate.AppWait
 
 sealed interface StartResult<out R> {
     data class Started<R>(val run: R) : StartResult<R>
@@ -38,6 +38,14 @@ class TaskCenter<R : Any>(
     private val resolveWorkspace: (String) -> String = { it },
     private val create: (conversationId: String, goal: String) -> R,
 ) {
+    private val retainedOwners = HashSet<String>()
+
+    @Synchronized
+    fun releaseRetainedOwner(run: R) {
+        retainedOwners -= keyOf(run)
+        resources.releaseOwner(keyOf(run))
+    }
+
     private val running = mutableListOf<R>()
     private val queued = mutableListOf<R>()
     /** 迁移中的调用方继续从这里拿资源，实际所有权归 [resources]。 */
@@ -91,20 +99,22 @@ class TaskCenter<R : Any>(
      */
     @Synchronized
     fun reserve(pkg: String, owner: String, stillUsed: () -> Boolean): Boolean {
-        return resources.reserveApp(pkg, owner, { byKey(it) != null }, stillUsed)
+        if (resources.appHolder(pkg)?.let { it != owner && it in retainedOwners } == true) return false
+        return resources.reserveApp(pkg, owner, { byKey(it) != null || it in retainedOwners }, stillUsed)
     }
 
     /** 任务 [owner] 此刻能不能占 [pkg](只查不占,规则同 [reserve])。 */
     @Synchronized
     fun appFree(pkg: String, owner: String, stillUsed: () -> Boolean): Boolean =
-        resources.appFree(pkg, owner, { byKey(it) != null }, stillUsed)
+        resources.appHolder(pkg)?.let { it != owner && it in retainedOwners } != true &&
+            resources.appFree(pkg, owner, { byKey(it) != null || it in retainedOwners }, stillUsed)
 
     /**
      * 任务 [owner] 等别的任务放开 [pkg],最多 [timeoutMs](见 [ResourceScheduler.awaitApp]:互相等的不等)。
      * 挂起着等,不拿这里的锁;在不在跑按开始等那一刻的任务名单认。
      */
     suspend fun awaitApp(pkg: String, owner: String, timeoutMs: Long, free: suspend () -> Boolean): AppWait {
-        val active = synchronized(this) { runs().map(keyOf).toSet() }
+        val active = synchronized(this) { runs().map(keyOf).toSet() + retainedOwners }
         return resources.awaitApp(pkg, owner, timeoutMs, { it in active }, free)
     }
 
@@ -120,10 +130,10 @@ class TaskCenter<R : Any>(
 
     /** 任务结束(或排队时被取消);返回因此从队里放出来、该开始跑的任务。 */
     @Synchronized
-    fun onEnded(run: R): List<R> {
+    fun onEnded(run: R, releaseResources: Boolean = true): List<R> {
         if (queued.removeAll { it === run }) return emptyList()
         running.removeAll { it === run }
-        resources.releaseOwner(keyOf(run))
+        if (releaseResources) resources.releaseOwner(keyOf(run)) else retainedOwners += keyOf(run)
         val started = mutableListOf<R>()
         while (queued.isNotEmpty() && running.size < limit().max) {
             val index = queued.indexOfFirst { candidate ->

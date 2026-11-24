@@ -71,6 +71,17 @@ class TaskRegistryTest {
         assertEquals(emptyList<Run>(), registry.queued())
     }
 
+    @Test fun terminalPublicationCanRetainResourceOwnershipUntilWorkerExit() {
+        val a = (registry.tryStart("a", "one") as StartResult.Started).run
+        val b = (registry.tryStart("b", "two") as StartResult.Started).run
+        assertTrue(registry.reserve("settings", a.key) { true })
+        registry.onEnded(a, releaseResources = false)
+        assertFalse(registry.reserve("settings", b.key) { true })
+        assertFalse(registry.reserve("settings", b.key) { false })
+        registry.releaseRetainedOwner(a)
+        assertTrue(registry.reserve("settings", b.key) { true })
+    }
+
     // 两个任务同时要开同一个 App:先占到的那个才能开,另一个拿到「别的任务在用」
     @Test fun sameAppReservedByFirstRun() {
         val a = (registry.tryStart("a", "一") as StartResult.Started).run

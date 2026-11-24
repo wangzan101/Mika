@@ -1,67 +1,63 @@
 package com.wangzan101.mika.task
 
+import com.wangzan101.mika.R
+import com.wangzan101.mika.i18n.tr
+import com.wangzan101.mika.core.usage.DeepSeekPriceCache
+import com.wangzan101.mika.core.usage.RunUsageTally
+import com.wangzan101.mika.cap.sandbox.SandboxState
+import com.wangzan101.mika.cap.sandbox.AndroidSandbox
+import com.wangzan101.mika.cap.sandbox.SandboxDirs
+import com.wangzan101.mika.cap.sandbox.WorkspaceKey
+import com.wangzan101.mika.chat.SharedFile
+import com.wangzan101.mika.chat.WorkspaceResolver
 import android.graphics.Bitmap
 import android.os.IBinder
+import com.wangzan101.mika.cap.phone.display.PhoneViewport
+import com.wangzan101.mika.cap.phone.display.phoneViewport
 import android.os.SystemClock
 import android.util.Log
 import com.wangzan101.mika.BuildConfig
-import com.wangzan101.mika.MikaApp
-import com.wangzan101.mika.R
-import com.wangzan101.mika.browser.UserBrowser
 import com.wangzan101.mika.cap.phone.PhoneServices
-import com.wangzan101.mika.cap.phone.display.AgentDisplay
-import com.wangzan101.mika.cap.phone.display.PhoneViewport
-import com.wangzan101.mika.cap.phone.display.PipInput
-import com.wangzan101.mika.cap.phone.display.phoneViewport
-import com.wangzan101.mika.cap.sandbox.AndroidSandbox
-import com.wangzan101.mika.cap.sandbox.SandboxDirs
-import com.wangzan101.mika.cap.sandbox.SandboxState
-import com.wangzan101.mika.cap.sandbox.WorkspaceKey
-import com.wangzan101.mika.chat.ConversationStore
-import com.wangzan101.mika.chat.SharedFile
-import com.wangzan101.mika.chat.WorkspaceResolver
+import com.wangzan101.mika.MikaApp
 import com.wangzan101.mika.core.action.ConfirmChoice
+import com.wangzan101.mika.core.agent.TaskStages
 import com.wangzan101.mika.core.agent.AgentLoop
 import com.wangzan101.mika.core.agent.FailKind
+import com.wangzan101.mika.core.model.ModelSession
+import com.wangzan101.mika.chat.ConversationStore
+import com.wangzan101.mika.memory.MemoryRuntime
+import com.wangzan101.mika.settings.ProviderStore
+import com.wangzan101.mika.voice.model.settingsProtocol
+import com.wangzan101.mika.core.record.RunEvent
+import com.wangzan101.mika.replay.FileRouteStore
 import com.wangzan101.mika.core.agent.JudgedOutcome
 import com.wangzan101.mika.core.agent.LearnGate
-import com.wangzan101.mika.core.agent.NoticeTurn
 import com.wangzan101.mika.core.agent.OutcomeJudge
-import com.wangzan101.mika.core.agent.RunOutcome
 import com.wangzan101.mika.core.agent.StopSummary
-import com.wangzan101.mika.core.agent.TaskStages
+import com.wangzan101.mika.core.agent.RunOutcome
 import com.wangzan101.mika.core.agent.TaskState
+import com.wangzan101.mika.core.agent.NoticeTurn
+import com.wangzan101.mika.core.agent.RunBudget
 import com.wangzan101.mika.core.agent.Turn
-import com.wangzan101.mika.core.assembly.toolDispatcher
-import com.wangzan101.mika.core.run.ChildAgentRunner
-import com.wangzan101.mika.core.model.ModelSession
-import com.wangzan101.mika.core.run.record.RunEvent
-import com.wangzan101.mika.core.run.record.RunSink
-import com.wangzan101.mika.core.run.ResourceScope
 import com.wangzan101.mika.core.run.ChannelPeer
-import com.wangzan101.mika.core.run.Delivery
-import com.wangzan101.mika.core.run.RunInbox
-import com.wangzan101.mika.core.run.RunOrigin
 import com.wangzan101.mika.core.run.RunProvenance
-import com.wangzan101.mika.core.model.usage.DeepSeekPriceCache
-import com.wangzan101.mika.core.model.usage.RunUsageTally
-import com.wangzan101.mika.i18n.tr
-import com.wangzan101.mika.memory.MemoryRuntime
+import com.wangzan101.mika.core.run.RunOrigin
+import com.wangzan101.mika.core.child.ChildAgentRunner
+import com.wangzan101.mika.core.run.RunInbox
+import com.wangzan101.mika.core.run.Delivery
+import com.wangzan101.mika.core.record.RunSink
+import com.wangzan101.mika.core.resource.ResourceScope
+import com.wangzan101.mika.cap.phone.display.AgentDisplay
+import com.wangzan101.mika.cap.phone.display.PipInput
 import com.wangzan101.mika.record.RunHandle
 import com.wangzan101.mika.record.RunStore
-import com.wangzan101.mika.knowledge.FileRouteStore
 import com.wangzan101.mika.settings.FeatureFlags
-import com.wangzan101.mika.settings.ProviderStore
 import com.wangzan101.mika.settings.RunApproval
-import com.wangzan101.mika.settings.imageModel
-import com.wangzan101.mika.settings.ttsModel
-import com.wangzan101.mika.settings.untestedMainProvider
 import com.wangzan101.mika.takeover.Takeover
-import com.wangzan101.mika.voice.model.settingsProtocol
-import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import com.wangzan101.mika.browser.UserBrowser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -73,6 +69,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.UUID
+import com.wangzan101.mika.core.assembly.toolDispatcher
 
 /**
  * 浮层恢复声音的路由:只有真正把 App 交到用户手上的接管才处理;接管对象从任务开跑起就一直存在,
@@ -121,7 +119,7 @@ class TaskRun(
     val parallel: Boolean = false,
 ) : ScreenControl {
     override val manualControl = com.wangzan101.mika.core.run.ManualControl()
-    internal data class ManualTarget(val port: com.wangzan101.mika.core.screen.uistate.ScreenPort, val identity: String, val width: Int, val height: Int, val inputWidth: Int, val inputHeight: Int)
+    internal data class ManualTarget(val port: com.wangzan101.mika.core.uistate.ScreenPort, val identity: String, val width: Int, val height: Int, val inputWidth: Int, val inputHeight: Int)
     private var manualTarget: ManualTarget? = null
     internal var manualTargetNow: (suspend () -> ManualTarget?)? = null
 
@@ -148,7 +146,7 @@ class TaskRun(
         if (waitingTakeover) takeover?.handBack()
     }
 
-    private suspend fun manualInput(width: Int, height: Int, act: suspend (ManualTarget) -> com.wangzan101.mika.core.screen.uistate.ActionResult): Boolean {
+    private suspend fun manualInput(width: Int, height: Int, act: suspend (ManualTarget) -> com.wangzan101.mika.core.uistate.ActionResult): Boolean {
         val version = manualControl.version
         return manualControl.userInput {
             if (manualControl.version != version) return@userInput false
@@ -156,7 +154,7 @@ class TaskRun(
             val target = manualTarget ?: return@userInput false
             if (target.identity != current.identity || width != current.width || height != current.height ||
                 target.width != width || target.height != height || target.inputWidth != current.inputWidth || target.inputHeight != current.inputHeight) return@userInput false
-            try { target.port.checkAppAccess(); act(target) is com.wangzan101.mika.core.screen.uistate.ActionResult.Ok }
+            try { target.port.checkAppAccess(); act(target) is com.wangzan101.mika.core.uistate.ActionResult.Ok }
             catch (e: CancellationException) { throw e }
             catch (_: Exception) { false }
         } ?: false
@@ -214,6 +212,8 @@ class TaskRun(
     internal var workflowAttemptId: String? = null
     internal var channelPeer: ChannelPeer? = null
     internal var channelMessageId: String? = null
+    /** 从真正开始执行起冻结的普通任务预算;条件检查使用它自己的只读工具集。 */
+    @Volatile internal var launchBudget: RunBudget = RunBudget()
     /** 主循环已经给出结局的时间；与结果实际发出之间的耗时用于定位渠道回传延迟。 */
     @Volatile internal var resultReadyAtMs = 0L
         private set
@@ -339,6 +339,16 @@ class TaskRun(
     /** shell 进程没了,虚拟屏和上面的 App 一起没了;任务没法接着做。 */
     @Volatile var shellDied = false
         internal set
+    /** watchdog 已发布终态,但执行协程仍未退出;手机资源继续隔离,新手机任务快速失败。 */
+    @Volatile internal var phoneExecutionStuck = false
+    /** A generic phone tool timed out; keep the process quarantine until its per-task worker recovers. */
+    @Volatile internal var phoneToolWorkerStuck = false
+    internal val liveness = TaskLiveness(SystemClock::elapsedRealtime)
+    internal val localDispatchers = java.util.concurrent.CopyOnWriteArrayList<com.wangzan101.mika.core.tool.ToolDispatcher>()
+    internal val hasLocalWorkers: Boolean get() = localDispatchers.any { it.localToolsBusy }
+    internal fun revokeLocalWorkers() = localDispatchers.forEach { it.closeLocalTools() }
+    internal suspend fun awaitLocalWorkers() = localDispatchers.forEach { it.awaitLocalToolIdle() }
+
     /** 已接上的手机侧;浮层恢复声音据此找到当前目标 App,收尾时清空。 */
     @Volatile internal var phone: PhoneSide? = null
     fun cancel() {
@@ -409,6 +419,7 @@ class TaskRun(
     /** 运行事件里界面要跟的两样:实际做过的事,和插话已交给模型。 */
     internal val liveEvents = object : RunSink {
         override fun event(e: RunEvent) {
+            liveness.event(e)
             when {
                 e is RunEvent.Activity -> synchronized(service.taskState.shownLock) {
                     val n = synchronized(runState.activityLog) { runState.activityLog += e; runState.activityLog.size }
@@ -417,6 +428,8 @@ class TaskRun(
                 e is RunEvent.State && e.name == "reply_interrupted" -> steerCoordinator.onInterrupted(e.detail)
                 e is RunEvent.State && e.name == "reply_finished_before_steer" -> steerCoordinator.onFinished(e.detail)
                 e is RunEvent.State && e.name == "steer_received" -> steerCoordinator.onSteerReceived(e.detail)
+                e is RunEvent.State && e.name == "phone_execution_stuck" -> service.onPhoneToolStuck(this@TaskRun)
+                e is RunEvent.State && e.name == "phone_execution_recovered" -> service.onPhoneToolRecovered(this@TaskRun)
             }
         }
     }
@@ -428,7 +441,16 @@ class TaskRun(
      * 任务的终态:[execute] 收尾之后才写,不经 [publish]。不论显示的是不是自己,都先把本次的运行编号记到
      * 自己对话名下([TaskService.endedRunIds]),界面收到结束状态时按对话取;显示中时也写 [TaskService.endedRunId]。
      */
-    fun end(end: TaskState) = runControl.end(end)
+    @Volatile internal var terminalRecord: TaskTerminalRecord? = null
+    internal var deadlineEntry: TaskDeadlineEntry? = null
+    internal var executionDeadline: com.wangzan101.mika.core.run.RunDeadline? = null
+
+    fun end(end: TaskState): Boolean = runControl.end(end).also { won ->
+        if (won) {
+            terminalRecord?.finish(end, System.currentTimeMillis())
+            (service.application as MikaApp).taskDeadlines.finish(key)
+        }
+    }
 
     /** 超出并行上限在排队;放出来开跑时 [dequeue]。 */
     fun queue(position: Int) = runControl.queue(position)
@@ -572,6 +594,12 @@ class TaskRun(
     /** execute 收尾;拆成独立函数以缩小 execute 的 suspend 状态机(超大 suspend 函数会被 ART 校验器拒绝)。 */
     private suspend fun cleanup(c: RunAssembly) {
         withContext(NonCancellable) { manualControl.close() }
+        // A timed-out Binder/a11y call may still own the virtual display or screen port. Keep those
+        // resources alive until the actual worker exits; a stuck task remains quarantined meanwhile.
+        withContext(NonCancellable) {
+            revokeLocalWorkers()
+            awaitLocalWorkers()
+        }
         manualTarget = null
         manualTargetNow = null
         activePhoneDisplay = null
@@ -581,7 +609,7 @@ class TaskRun(
         runState._frames.value = null
         runState._phoneFrames.value = null
         runState._webOpen.value = false
-        synchronized(runState.publishLock) { runState.ended = true }
+        synchronized(runState.publishLock) { runState.livePublishClosed = true }
         if (awake != null && service.hasQueuedRuns()) wakeHandoff = service.wakeLock.lease().also { it.acquire() }
         awake?.close()
         awake = null
@@ -625,7 +653,10 @@ class TaskRun(
                 try { c.mute?.restoreAll() } finally { recovery.endRun(key) }
                 c.watcher?.close()
             } finally {
-                try { c.resources.close() } finally { c.smsLogin?.close() }
+                try { c.resources.close() } finally {
+                    c.dispatcher?.closeLocalTools()
+                    c.smsLogin?.close()
+                }
             }
         }
         phone = null

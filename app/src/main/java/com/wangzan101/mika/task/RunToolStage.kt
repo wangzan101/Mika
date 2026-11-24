@@ -2,30 +2,30 @@ package com.wangzan101.mika.task
 
 import com.wangzan101.mika.R
 import com.wangzan101.mika.i18n.tr
-import com.wangzan101.mika.core.screen.uistate.IdleScroll
+import com.wangzan101.mika.core.uistate.IdleScroll
 import com.wangzan101.mika.core.cap.web.PagePacing
-import com.wangzan101.mika.core.screen.uistate.PlacePace
+import com.wangzan101.mika.core.uistate.PlacePace
 import kotlin.random.Random
 import com.wangzan101.mika.core.action.OutwardPacing
-import com.wangzan101.mika.settings.ui.StatusCopy
+import com.wangzan101.mika.ui.StatusCopy
 import com.wangzan101.mika.cap.sandbox.GrantedFolderFiles
 import com.wangzan101.mika.cap.sandbox.SandboxDirs
 import com.wangzan101.mika.cap.phone.setup.RootShell
 import com.wangzan101.mika.cap.root.RootCommands
 import com.wangzan101.mika.MikaApp
 import com.wangzan101.mika.core.agent.AgentLoop
-import com.wangzan101.mika.core.run.record.RunEvent
+import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.run.RunOrigin
 import com.wangzan101.mika.core.run.Attendance
 import com.wangzan101.mika.core.cap.sandbox.FolderFileImporter
-import com.wangzan101.mika.core.cap.wechat.explicitWechatOwnerRequest
+import com.wangzan101.mika.core.wechat.explicitWechatOwnerRequest
 import com.wangzan101.mika.wechat.AndroidWechatOwnerPort
-import com.wangzan101.mika.core.run.ChildAgentRunner
-import com.wangzan101.mika.core.screen.vision.VisionService
+import com.wangzan101.mika.core.child.ChildAgentRunner
+import com.wangzan101.mika.core.vision.VisionService
 import com.wangzan101.mika.record.RunStore
 import com.wangzan101.mika.settings.FeatureFlags
-import com.wangzan101.mika.media.BitmapImageOps
+import com.wangzan101.mika.vision.BitmapImageOps
 import com.wangzan101.mika.cap.web.LazyWebPort
 import com.wangzan101.mika.cap.web.WebStack
 import kotlinx.coroutines.flow.first
@@ -103,8 +103,10 @@ internal suspend fun TaskRun.assembleTools(a: RunAssembly, m: RunModels, ph: Run
                 conversationId = conversationId, inlineScreen = speed.inlineScreen,
                 sandboxBudgetMs = sandboxBudgetMs,
                 adaptiveVision = speed.adaptiveVision)
+            localDispatchers += childTools
+            childTools.localToolTimeoutMs = launchBudget.phoneToolTimeoutMs
             childTools.manualControl = manualControl
-            AgentLoop(model, childTools, basePrompt, maxSteps = childSpec.stepBudget ?: AgentLoop.UNLIMITED_STEPS,
+            AgentLoop(model, childTools, basePrompt, sink = liveEvents, maxSteps = childSpec.budget.maxSteps ?: AgentLoop.UNLIMITED_STEPS,
                 // 子任务跟着询问 / 自主;询问时它也过关卡,子任务里花钱的一步一律不做
                 confirmations = runApproval.gate(), approvals = runApproval, autonomous = runApproval.startedAutonomous,
                 promptTransform = { promptHook.transform(it) },
@@ -211,6 +213,8 @@ internal suspend fun TaskRun.assembleTools(a: RunAssembly, m: RunModels, ph: Run
         pluginTools = pluginTools, pluginScriptRunner = pluginRunner,
         pluginArgsDir = java.io.File(service.cacheDir, "plugin-args"))
     dispatcher = tools
+    localDispatchers += tools
+    tools.localToolTimeoutMs = launchBudget.phoneToolTimeoutMs
     tools.manualControl = manualControl
     manualTargetNow = target@{
         if (stopPressed || job?.isActive != true || takeover?.handedOver == true) return@target null

@@ -169,6 +169,99 @@ class ContextCompressorTest {
         outs.forEach { assertTrue(uncalibrated(it.messages) <= ContextLimits.of(ctx).usable) }
     }
 
+    @Test fun laterCompactionsPreserveThePreviouslySentPrefix() {
+        val all = head + taps(160)
+        fun h(n: Int) = all.take(head.size + 2 * n)
+        val c = ContextCompressor(TOOLS)
+        val ctx = 8_000
+        var stable: List<Message>? = null
+        var stableRun = 0
+        var longestRun = 0
+        for (n in 1..160) {
+            val out = c.compress(h(n), contextTokens = ctx)
+            if (out.rewritten) {
+                if (stable != null) {
+                    stableRun = if (out.messages.size >= stable!!.size && out.messages.take(stable!!.size) == stable) {
+                        stableRun + 1
+                    } else {
+                        // Prefix epochs may reset when the frozen base itself no longer fits the usable window.
+                        0
+                    }
+                    longestRun = maxOf(longestRun, stableRun)
+                }
+                stable = out.messages
+            }
+        }
+        assertTrue("the fixture must keep the prefix through multiple compactions", longestRun >= 2)
+    }
+
+    @Test fun incrementalCompactionKeepsPrefixDigestAndEpoch() {
+        val all = head + taps(80)
+        fun h(n: Int) = all.take(head.size + 2 * n)
+        val c = ContextCompressor(TOOLS)
+        val ctx = 8_000
+        val first = c.compress(h(60), contextTokens = ctx)
+        assertTrue(first.rewritten)
+        val digest = first.prefixDigest
+        val epoch = first.epoch
+        assertTrue(!digest.isNullOrBlank())
+        assertTrue(epoch != null && epoch > 0)
+
+        val second = c.compress(h(80), contextTokens = ctx)
+        if (second.messages.size >= first.messages.size && second.messages.take(first.messages.size) == first.messages) {
+            assertEquals(digest, second.prefixDigest)
+            assertEquals(epoch, second.epoch)
+        }
+    }
+
+    @Test fun forcedPrefixRewriteAdvancesEpoch() {
+        val all = head + taps(80)
+        fun h(n: Int) = all.take(head.size + 2 * n)
+        val c = ContextCompressor(TOOLS)
+        val ctx = 4_000
+        val first = c.compress(h(30), contextTokens = ctx, fixedOverhead = 1_800)
+        assertTrue(first.rewritten)
+        val before = first.epoch!!
+
+        c.forget()
+        val second = c.compress(h(50), contextTokens = ctx, fixedOverhead = 1_800)
+
+        assertTrue(second.epoch!! > before)
+    }
+
+    @Test fun callerRecordsPageAndContradictedFactInvalidations() = runTest {
+        val events = mutableListOf<com.wangzan101.mika.core.record.RunEvent>()
+        val model = FakeModel(answerReply("one"), answerReply("two"), answerReply("three"), contextTokens = 8_000)
+        val caller = ModelCaller(model, toolDispatcher(FakeScreen()), null, SpeedFlags.OFF, RetryPolicy.NONE, { events += it }, { 0 })
+        val history = head + taps(80)
+        caller.reset("system")
+        caller.ask(history, emptyList(), step = 1)
+        caller.noteContextResult(com.wangzan101.mika.core.tool.ToolExecution(kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"ok":true,"effect":{"kind":"place_changed"}}""").let { it as kotlinx.serialization.json.JsonObject }), com.wangzan101.mika.core.tool.Verb.Tap)
+        caller.ask(history, emptyList(), step = 2)
+        caller.noteContextResult(com.wangzan101.mika.core.tool.ToolExecution(kotlinx.serialization.json.Json.parseToJsonElement(
+            """{"ok":false,"verification":"mismatch"}""").let { it as kotlinx.serialization.json.JsonObject }))
+        caller.ask(history, emptyList(), step = 3)
+        val records = events.filterIsInstance<com.wangzan101.mika.core.record.RunEvent.Compressed>()
+        assertTrue(records.any { it.reason == "page_changed" })
+        assertTrue(records.any { it.reason == "facts_changed" })
+        assertTrue(records.all { it.prefixMessages != null && it.model == model.name && !it.prefixDigest.isNullOrBlank() })
+    }
+
+    @Test fun semanticInvalidationRebuildsSummaryFromFullHistory() {
+        val history = head + taps(80)
+        val c = ContextCompressor(TOOLS)
+        var previous = c.compress(history, contextTokens = 8_000)
+        for (reason in listOf("user_steer", "page_changed", "facts_changed", "model_changed")) {
+            c.invalidate(reason)
+            val next = c.compress(history, contextTokens = 8_000)
+            assertTrue(next.rewritten)
+            assertTrue(next.epoch!! > previous.epoch!!)
+            assertTrue(next.reason!!.startsWith(reason))
+            previous = next
+        }
+    }
+
     @Test fun oversizedNewestResultIsShrunkToFitTheWindow() {
         val huge = round("run_command", """{"command":"cat big.log"}""",
             """{"ok":true,"exitCode":0,"output":"${"日志".repeat(40_000)}"}""")

@@ -1,6 +1,6 @@
 package com.wangzan101.mika.core.agent
 
-import com.wangzan101.mika.core.run.trace.RunTrace
+import com.wangzan101.mika.core.trace.RunTrace
 import com.wangzan101.mika.core.action.ConfirmDecision
 import com.wangzan101.mika.core.model.ChatModel
 import com.wangzan101.mika.core.model.Message
@@ -13,20 +13,30 @@ import com.wangzan101.mika.core.model.StreamingChatModel
 import com.wangzan101.mika.core.model.ToolSpec
 import com.wangzan101.mika.core.model.Usage
 import com.wangzan101.mika.core.net.RateLimitGovernor
-import com.wangzan101.mika.core.run.record.Redactor
-import com.wangzan101.mika.core.run.record.RunEvent
+import com.wangzan101.mika.core.record.Redactor
+import com.wangzan101.mika.core.record.RunEvent
 import com.wangzan101.mika.core.tool.ToolDispatcher
 import com.wangzan101.mika.core.tool.parseArgs
 import kotlinx.coroutines.CancellationException
-import com.wangzan101.mika.core.model.usage.ConversationMeter
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import com.wangzan101.mika.core.usage.ConversationMeter
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * 一次模型调用:历史只追加,估算越过触发点才压缩一次([ContextCompressor],完整历史不动)、主模型一时的故障按 [retry] 重试、上下文超长时压得更狠再发一次,
@@ -57,8 +67,63 @@ internal class ModelCaller(
             diffScreens = tools.inlineScreen, triggerOverride = m.capabilities.compactionTriggerTokens,
             foldEvery = m.capabilities.compactionEveryRounds) }
     private val compactions = java.util.IdentityHashMap<ChatModel, CompactionState>()
+    private val requestPrefixes = java.util.IdentityHashMap<ChatModel, RequestPrefix>()
+    private var lastRequestModel: ChatModel? = null
+    private var contextPlace: com.wangzan101.mika.core.observation.Place? = null
+    private var pageStructure: Map<String, Int>? = null
+    private var pageUrl: String? = null
+
+    fun invalidateContext(reason: String) {
+        compressors.values.forEach { it.invalidate(reason) }
+        requestPrefixes.values.forEach { it.invalidate(reason) }
+        anchors.clear()
+    }
+
+    fun noteContextResult(result: com.wangzan101.mika.core.tool.ToolExecution, verb: com.wangzan101.mika.core.tool.Verb? = null) {
+        val next = result.place
+        if (next != null) {
+            if (contextPlace != null && contextPlace != next) invalidateContext("place_changed")
+            contextPlace = next
+        }
+        val effect = result.content["effect"] as? kotlinx.serialization.json.JsonObject
+        val kind = (effect?.get("kind") as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val error = (result.content["error"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        val screen = result.content["screen"] as? kotlinx.serialization.json.JsonObject ?: result.content
+        val url = (screen["url"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.substringBefore('#')
+        if (url != null) {
+            if (pageUrl != null && pageUrl != url) invalidateContext("page_changed")
+            pageUrl = url
+        }
+        val elements = result.screenElements ?: screen["elements"] as? kotlinx.serialization.json.JsonArray
+        elements?.let { nodes ->
+            // Page identity uses control structure, not changing list text or snapshot IDs.
+            val structure = nodes.mapNotNull { node ->
+                val o = node as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val role = (o["role"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@mapNotNull null
+                val id = (o["resourceId"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                "$role:$id"
+            }.groupingBy { it }.eachCount()
+            val old = pageStructure
+            if (old != null && old.values.sum() >= 4 && structure.values.sum() >= 4) {
+                val overlap = old.entries.sumOf { (key, count) -> minOf(count, structure[key] ?: 0) }
+                if (overlap * 5 < maxOf(old.values.sum(), structure.values.sum()) * 2) invalidateContext("page_changed")
+            }
+            if (structure.isNotEmpty()) pageStructure = structure
+        }
+        if (kind == "place_changed" || (result.changed == true && verb in setOf(
+            com.wangzan101.mika.core.tool.Verb.Back, com.wangzan101.mika.core.tool.Verb.Navigate,
+            com.wangzan101.mika.core.tool.Verb.LaunchApp,
+        ))) invalidateContext("page_changed")
+        if (error in setOf("stale_snapshot", "stale_ref", "ref_expired", "element_not_found", "target_not_found", "screen_changed", "wrong_app") ||
+            result.content["factsChanged"] == kotlinx.serialization.json.JsonPrimitive(true) ||
+            result.content["verification"] == kotlinx.serialization.json.JsonPrimitive("mismatch") ||
+            effect?.get("readbackMatches") == kotlinx.serialization.json.JsonPrimitive(false)) invalidateContext("facts_changed")
+    }
+
     /** 本任务里已为重试等过的时间(对着 [RetryPolicy.taskWaitBudgetMs])。 */
     private var taskRetryWaitMs = 0L
+    /** 当前任务的模型调用墙钟上限和心跳间隔;由 [reset] 在任务开始时冻结。 */
+    private var runBudget = RunBudget.DEFAULT
 
     /** 主模型链:[model] 加上备援。切过去之后本任务余下都用它(和轻量模型停用一个道理),[reset] 回到主模型。 */
     private val chain: List<ChatModel> = listOf(model) + fallbacks
@@ -90,9 +155,15 @@ internal class ModelCaller(
     /** 每个模型最近一次请求的固定开销估算;回复进历史时和用量一起记进锚点。 */
     private val lastOverhead = java.util.IdentityHashMap<ChatModel, Int>()
 
-    fun reset(prompt: String) {
+    fun reset(prompt: String, budget: RunBudget = RunBudget.DEFAULT) {
         systemPrompt = prompt
+        runBudget = budget
         compactions.clear()
+        requestPrefixes.clear()
+        lastRequestModel = null
+        contextPlace = null
+        pageStructure = null
+        pageUrl = null
         taskRetryWaitMs = 0
         chainIndex = 0
         headError = null
@@ -170,6 +241,7 @@ internal class ModelCaller(
             now(), step, RunEvent.clip(Redactor.text(text)), first?.name, first?.let { Redactor.args(tools.verb(it.name), it.argsJson, secretField = true) },
             reply?.usage?.inputTokens, reply?.usage?.outputTokens, reply?.usage?.cachedInputTokens, now() - asked,
             used?.name ?: picked.name, ROLE_LIGHT_REJECTED, group = r.groupOf(picked),
+            cacheReported = reply?.usage?.cacheReported, provider = used?.provider,
         ))
         emit(RunEvent.State(now(), "light_to_main", first?.name ?: if (light == null) "light_error" else "no_tool"))
         onText?.invoke("")
@@ -307,6 +379,12 @@ internal class ModelCaller(
         val overhead = TokenEstimate.of(systemPrompt) + specs.sumOf { TokenEstimate.of(it.name + it.description + it.parametersJsonSchema) }
         val contextTokens = using.capabilities.contextTokens
         val compressor = compressorFor(using)
+        val requestPrefix = requestPrefixes.getOrPut(using) { RequestPrefix() }
+        if (lastRequestModel != null && lastRequestModel !== using) {
+            compressor.invalidate("model_changed")
+            requestPrefix.invalidate("model_changed")
+        }
+        lastRequestModel = using
         var compaction = compactions[using] ?: CompactionState()
         var overflowRetried = false
         var overflowRewrote = false
@@ -318,7 +396,6 @@ internal class ModelCaller(
             val restored = ContextRecovery.ensure(history, raw.messages)
             val sent = if (restored === raw.messages) raw else raw.copy(messages = restored, estimate = TokenEstimate.of(restored))
             val (next, report) = CompactionPolicy.sent(compaction, sent.foldedSteps)
-            if (report) emit(RunEvent.Compressed(now(), sent.foldedSteps))
             compaction = next
             compactions[using] = compaction
             try {
@@ -330,19 +407,30 @@ internal class ModelCaller(
                 val sentAt = now()
                 lastRetryWaitMs = clock.firstAttemptAt?.let { sentAt - it } ?: 0L
                 if (clock.firstAttemptAt == null) clock.firstAttemptAt = sentAt
-                suspend fun invokeModel(): ModelReply {
+                suspend fun sendOnce(guardedOnText: ((String) -> Unit)?): ModelReply {
+                    com.wangzan101.mika.core.run.RunDeadline.checkCurrent()
                     val prompt = promptTransform?.invoke(systemPrompt) ?: systemPrompt
-                    return if (onText == null) using.complete(prompt, sent.messages, specs)
-                    else if (using is StreamingChatModel) using.completeStreaming(prompt, sent.messages, specs, onText)
+                    val prefix = requestPrefix.sent(prompt, specs, sent.messages)
+                    if (report || (prefix.changed && sent.foldedSteps > 0)) emit(RunEvent.Compressed(
+                        now(), sent.foldedSteps, prefix.digest, prefix.epoch,
+                        if (prefix.reason == "request_prefix_changed") sent.reason ?: prefix.reason else prefix.reason,
+                        prefix.messages, using.name,
+                    ))
+                    com.wangzan101.mika.core.run.RunDeadline.checkCurrent()
+                    return if (guardedOnText == null) using.complete(prompt, sent.messages, specs)
+                    else if (using is StreamingChatModel) using.completeStreaming(prompt, sent.messages, specs, guardedOnText)
                     else using.complete(prompt, sent.messages, specs).also { result ->
                         result.parts.filterIsInstance<Part.Text>().joinToString("") { it.text }
-                            .takeIf(String::isNotEmpty)?.let(onText)
+                            .takeIf(String::isNotEmpty)?.let(guardedOnText)
                     }
                 }
-                suspend fun send(): ModelReply =
+                suspend fun sendInContext(guardedOnText: ((String) -> Unit)?): ModelReply =
                     if (currentCoroutineContext()[ConversationMeter] != null && roleOf(using) == ROLE_MAIN)
-                        withContext(ConversationMeter.MainRequest(step)) { invokeModel() }
-                    else invokeModel()
+                        withContext(ConversationMeter.MainRequest(step)) { sendOnce(guardedOnText) }
+                    else sendOnce(guardedOnText)
+                suspend fun send(): ModelReply = if (using.managedTransport) callWithWatchdog(step, using.name, retries, onText) { guardedOnText ->
+                    sendInContext(guardedOnText)
+                } else sendInContext(onText)
                 val reply = if (trace == null) send() else {
                     val change = when {
                         overflowRewrote -> "overflow_compaction folded=" + raw.foldedSteps
@@ -359,6 +447,7 @@ internal class ModelCaller(
                 }
             } catch (e: ModelError.ContextTooLong) {
                 onText?.invoke("")
+                requestPrefix.invalidate("context_overflow")
                 val (after, again) = CompactionPolicy.overflow(compaction, overflowRetried) {
                     compressor.overflow(history, contextTokens, overhead)
                 }
@@ -389,6 +478,86 @@ internal class ModelCaller(
                 // 等待中取消任务就此结束
                 delay(wait)
             }
+        }
+    }
+
+    /**
+     * 模型请求的墙钟边界。工作协程不挂在调用方 Job 下,所以底层 SDK 即使阻塞、忽略取消,
+     * 调用方仍按预算返回;超时后的迟到文字也由 [AtomicBoolean] 丢掉。
+     */
+    private suspend fun callWithWatchdog(
+        step: Int,
+        modelName: String,
+        retry: Int,
+        onText: ((String) -> Unit)?,
+        block: suspend (onText: ((String) -> Unit)?) -> ModelReply,
+    ): ModelReply {
+        val timeoutMs = runBudget.modelCallTimeoutMs
+        val startedAt = now()
+        emit(RunEvent.ModelRequestStarted(startedAt, step, modelName, retry, timeoutMs))
+
+        val intervalMs = minOf(runBudget.noEventWarnMs, timeoutMs / 4).coerceAtLeast(1)
+        // 这是网络墙钟,必须走真实时间调度器;不能跟 runTest 的虚拟时钟走,否则正常调用会被瞬间判超时。
+        val heartbeat = CoroutineScope(currentCoroutineContext() + Dispatchers.Default).launch {
+            while (true) {
+                delay(intervalMs)
+                emit(RunEvent.ModelHeartbeat(
+                    atMs = now(), step = step, model = modelName,
+                    waitedMs = (now() - startedAt).coerceAtLeast(0), retry = retry, phase = "waiting_for_model",
+                ))
+            }
+        }
+        val allowText = AtomicBoolean(true)
+        val wallStart = System.nanoTime()
+        fun elapsedMs() = (System.nanoTime() - wallStart) / 1_000_000L
+        val lastEventAt = AtomicLong(0L)
+        val workerJob = SupervisorJob()
+        val worker = CoroutineScope(
+            currentCoroutineContext().minusKey(Job) + workerJob + Dispatchers.IO,
+        ).async {
+            val guarded: ((String) -> Unit)? = onText?.let { callback ->
+                { text ->
+                    lastEventAt.set(elapsedMs())
+                    if (allowText.get()) callback(text)
+                }
+            }
+            block(guarded)
+        }
+        return try {
+            var noEventTimedOut = false
+            val reply = withContext(Dispatchers.Default) {
+                while (true) {
+                    val at = elapsedMs()
+                    val totalLeft = timeoutMs - at
+                    val eventLeft = runBudget.noEventStopMs - (at - lastEventAt.get()).coerceAtLeast(0)
+                    if (totalLeft <= 0) break
+                    if (eventLeft <= 0) {
+                        noEventTimedOut = true
+                        break
+                    }
+                    val result = withTimeoutOrNull(minOf(totalLeft, eventLeft, 250L)) { worker.await() }
+                    if (result != null) return@withContext result
+                }
+                null
+            }
+            if (reply == null) {
+                allowText.set(false)
+                worker.cancel()
+                emit(RunEvent.ModelHeartbeat(
+                    atMs = now(), step = step, model = modelName,
+                    waitedMs = (now() - startedAt).coerceAtLeast(0), retry = retry,
+                    phase = if (noEventTimedOut) "no_event_timeout" else "timed_out",
+                ))
+                throw ModelError.Network(TimeoutException(
+                    if (noEventTimedOut) "模型请求超过 ${runBudget.noEventStopMs}ms 没有新事件"
+                    else "模型请求超过 ${timeoutMs}ms 未返回",
+                ))
+            }
+            reply
+        } finally {
+            allowText.set(false)
+            heartbeat.cancel()
+            workerJob.cancel()
         }
     }
 

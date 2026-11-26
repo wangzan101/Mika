@@ -334,4 +334,6 @@
     <string name="chat_example_share_title">Bagikan Mika ke teman</string>
     <string name="chat_example_share_blurb">Rekomendasikan ke yang butuh</string>
     <string name="chat_example_share">Bagikan tautan proyek Mika https://github.com/wangzan101/mika ke seorang teman, dan bilang Mika bisa mengoperasikan ponsel untuknya.</string>
+    <string name="chat_video">Video</string>
+    <string name="chat_video_play">Putar</string>
 </resources>

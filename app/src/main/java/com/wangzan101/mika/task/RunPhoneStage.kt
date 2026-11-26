@@ -195,6 +195,7 @@ internal suspend fun TaskRun.connectPhone(a: RunAssembly, appAccess: com.wangzan
         appAccess = appAccess,
         shareAudioFile = { path -> phoneRuntime.shareWorkspaceAudio(path) },
         shareImageFile = { path -> shareWorkspaceImage(path) },
+        shareVideoFile = { path -> shareWorkspaceVideo(path) },
     )
     val side0 = PhoneSide(shell, a11y, screen, agentDisplay, muter)
     phone = side0

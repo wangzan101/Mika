@@ -362,4 +362,6 @@
     <string name="chat_example_share_title">Comparte Mika con un amigo</string>
     <string name="chat_example_share_blurb">Recomiéndalo a quien le sirva</string>
     <string name="chat_example_share">Comparte el enlace del proyecto Mika https://github.com/wangzan101/mika con un amigo y cuéntale que puede manejar el teléfono por él.</string>
+    <string name="chat_video">Vídeo</string>
+    <string name="chat_video_play">Reproducir</string>
 </resources>

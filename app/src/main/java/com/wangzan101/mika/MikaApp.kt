@@ -486,6 +486,37 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         },
     ) = synthesize(text)
 
+    /**
+     * 在系统播放器里打开工作区的一段视频:经关口复制到缓存中转区再交出去,工作区本身不开放。
+     * 中转区只留最近一次的副本(换一段播放时删掉上一段),其余的启动时清掉。
+     */
+    private suspend fun playWorkspaceVideo(conversationId: String, path: String) {
+        val dirs = com.wangzan101.mika.cap.sandbox.SandboxDirs(this)
+        val root = java.io.File(cacheDir, VIDEO_PLAY_DIR)
+        val staging = com.wangzan101.mika.cap.web.UploadStaging(
+            root,
+            dirs.gate,
+            maxFileBytes = com.wangzan101.mika.media.AndroidVideoPort.MAX_BYTES,
+            maxTotalBytes = com.wangzan101.mika.media.AndroidVideoPort.MAX_BYTES,
+        )
+        val staged = dirs.tree.shared {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                root.listFiles()?.forEach { it.deleteRecursively() }
+                staging.stage(dirs.workspace(workspaceResolver.resolve(conversationId)), listOf(path))
+            }
+        }
+        val file = (staged as? com.wangzan101.mika.cap.web.UploadStaging.Result.Ok)?.staged?.files?.firstOrNull() ?: return
+        val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.videoplay", file)
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+            .setDataAndType(uri, "video/*")
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(intent) }
+    }
+
+    /** 取工作区一段视频的首帧当聊天卡片封面(直接在闸门句柄上解码,不复制视频);读不出来返回 null。 */
+    private suspend fun videoPoster(conversationId: String, path: String): android.graphics.Bitmap? =
+        com.wangzan101.mika.media.AndroidVideoPort(this, conversationId).poster(path, maxSide = 320)
+
     /** 人工示范。onCreate 里建好；在那之前的无障碍事件不采集。 */
     lateinit var teach: TeachRuntime
         private set
@@ -559,8 +590,11 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
                 .stateIn(scope, SharingStarted.Eagerly, SandboxState.get(app).status.value !is SandboxStatus.Unsupported),
             sharedFiles = taskState.sharedFiles,
             generatedAudios = taskState.audios,
+            generatedVideos = taskState.videos,
             playAudio = { id, path -> playWorkspaceAudio(id, path) },
             generatedPhotos = taskState.photos,
+            playVideo = { id, path -> playWorkspaceVideo(id, path) },
+            videoPosterLoader = { id, path -> videoPoster(id, path) },
             activities = taskState.activities,
             steers = taskState.steers,
             summarizing = taskState.summarizing,
@@ -704,10 +738,16 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         scope.launch { runCatching { com.wangzan101.mika.media.AudioShareExporter(this@MikaApp).cleanPending() } }
         // 上次存相册写到一半被杀留下的空壳条目
         scope.launch { runCatching { com.wangzan101.mika.cap.image.ImageExporter(this@MikaApp).cleanPending() } }
-        // 上次分享图片复制到一半被杀留下的空壳条目
+        // 上次分享图片、视频复制到一半被杀留下的空壳条目
         scope.launch { runCatching { com.wangzan101.mika.media.ShareFileExporter(this@MikaApp).cleanPending() } }
+        // 上次存影片库写到一半被杀留下的空壳条目
+        scope.launch { runCatching { com.wangzan101.mika.media.VideoExporter(this@MikaApp).cleanPending() } }
         // 上次进程留下的网页上传副本
         scope.launch { runCatching { WebFiles.clearStale(this@MikaApp, SandboxDirs(this@MikaApp).gate) } }
+        // 上次进程留下的视频播放副本
+        scope.launch(Dispatchers.IO) { runCatching { java.io.File(cacheDir, VIDEO_PLAY_DIR).deleteRecursively() } }
+        // 上次进程下载到一半的生成视频
+        scope.launch(Dispatchers.IO) { runCatching { java.io.File(cacheDir, com.wangzan101.mika.media.AndroidVideoGenerationPort.CACHE_DIR).deleteRecursively() } }
         // 更新已经装上后,关于页下好的安装包
         scope.launch(Dispatchers.IO) { runCatching { apkUpdater.dropInstalled() } }
         // 运行环境没准备好(首次启动、Mika 升级后)就在后台准备,不联网、对用户不可见
@@ -770,3 +810,6 @@ class MikaApp : Application(), WebOwner, SandboxOwner, TaskEnvironment.Owner, Ph
         }
     }
 }
+
+/** 聊天视频卡片点开时的播放副本目录(cacheDir 下);和 res/xml/video_playback_files.xml 对应。 */
+private const val VIDEO_PLAY_DIR = "videoplay"

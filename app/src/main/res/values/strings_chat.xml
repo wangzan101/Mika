@@ -348,4 +348,6 @@
     <string name="chat_example_share_title">Share Mika with a friend</string>
     <string name="chat_example_share_blurb">Tell a friend who could use it</string>
     <string name="chat_example_share">Share the Mika project link https://github.com/wangzan101/mika with a friend, and tell them it can operate the phone for them.</string>
+    <string name="chat_video">Video</string>
+    <string name="chat_video_play">Play</string>
 </resources>

@@ -83,6 +83,8 @@ fun ModelSetupScreen(
     onOpenVoice: (() -> Unit)? = null,
     /** 设置里点「图片模型」卡片去设置页;上手流程不传,卡片就不出现。 */
     onOpenImage: (() -> Unit)? = null,
+    /** 设置里点「视频模型」卡片去设置页;上手流程不传,卡片就不出现。 */
+    onOpenVideo: (() -> Unit)? = null,
     /** 设置里查看 Token 用量;上手流程不传。 */
     onOpenUsage: (() -> Unit)? = null,
     /** 设置里打开统一语音模型目录;上手流程不传。 */
@@ -165,7 +167,7 @@ fun ModelSetupScreen(
         openProviders = { showProviders = true },
         openGroups = { groupsOpen = true },
         next = onDone, openSpeech = onOpenSpeech,
-        openVoice = onOpenVoice, openUsage = onOpenUsage,
+        openVoice = onOpenVoice, openImage = onOpenImage, openVideo = onOpenVideo, openUsage = onOpenUsage,
         openVoiceCatalog = onOpenVoiceCatalog, openCallMode = onOpenCallMode,
         openDecision = { openDecision = true }, openSignIn = { signInSheet = it },
         setReasoningEffort = vm::setReasoningEffort, setModelContext = vm::setModelContext,
@@ -397,6 +399,8 @@ class ModelSetupActions(
     val openVoice: (() -> Unit)? = null,
     /** 打开「图片模型」设置页;为 null 时不显示这张卡(上手流程)。 */
     val openImage: (() -> Unit)? = null,
+    /** 打开「视频模型」设置页;为 null 时不显示这张卡(上手流程)。 */
+    val openVideo: (() -> Unit)? = null,
     /** 打开 Token 用量;为 null 时不显示入口(上手流程)。 */
     val openUsage: (() -> Unit)? = null,
     /** 打开统一语音模型目录;为 null 时不显示入口(上手流程)。 */
@@ -478,6 +482,7 @@ fun ModelSetupContent(
                     if (voiceCatalog != null && hubOpen) {
                         RolesSection(ui, onPick, actions.setReasoningEffort, actions.setModelContext)
                         ImageModelSection(ui, actions.openImage)
+                        VideoModelSection(actions.openVideo)
                         VoiceHubSection(
                             voiceCatalog, ui.providers, readAloudOn,
                             onStt = actions.openSpeech!!, onTts = actions.openVoice!!,
@@ -487,6 +492,7 @@ fun ModelSetupContent(
                         RolesSection(ui, onPick, actions.setReasoningEffort, actions.setModelContext, actions.openVoice, voiceChoice)
                         SpeechSection(ui, actions.openSpeech)
                         ImageModelSection(ui, actions.openImage)
+                        VideoModelSection(actions.openVideo)
                         VoiceCatalogSection(actions.openVoiceCatalog)
                     }
                     GroupCard(Modifier.padding(top = 8.dp)) {

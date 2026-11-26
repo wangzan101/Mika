@@ -134,7 +134,7 @@ internal fun TaskService.cancelQueued(run: TaskRun) {
         TriggerRuntime.actionFailed(this, key, Conversation.CANCELLED_OUTCOME)
     }
     run.end(TaskState.Cancelled)
-    recordTurn(ConversationStore.shared(this), run, TaskState.Cancelled, null, audios = run.audios.value)
+    recordTurn(ConversationStore.shared(this), run, TaskState.Cancelled, null, audios = run.audios.value, videos = run.videos.value)
     run.mcpExternalId = null
     publishRuns()
     center.queued().forEachIndexed { i, q -> q.queue(i + 1) }

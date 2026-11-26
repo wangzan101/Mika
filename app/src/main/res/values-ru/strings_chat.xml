@@ -376,4 +376,6 @@
     <string name="chat_example_share_title">Поделиться Mika с другом</string>
     <string name="chat_example_share_blurb">Посоветуйте тому, кому пригодится</string>
     <string name="chat_example_share">Поделись ссылкой на проект Mika https://github.com/wangzan101/mika с другом и расскажи, что он умеет управлять телефоном.</string>
+    <string name="chat_video">Видео</string>
+    <string name="chat_video_play">Воспроизвести</string>
 </resources>

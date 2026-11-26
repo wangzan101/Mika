@@ -404,4 +404,6 @@
     <string name="chat_example_share_title">شارك Mika مع صديق</string>
     <string name="chat_example_share_blurb">انصح به من سيستفيد منه</string>
     <string name="chat_example_share">شارك رابط مشروع Mika https://github.com/wangzan101/mika مع صديق، وأخبره أنه يستطيع تشغيل الهاتف نيابةً عنه.</string>
+    <string name="chat_video">فيديو</string>
+    <string name="chat_video_play">تشغيل</string>
 </resources>

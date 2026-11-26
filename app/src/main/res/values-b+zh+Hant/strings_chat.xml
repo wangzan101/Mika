@@ -334,4 +334,6 @@
     <string name="chat_example_share_title">把 Mika 分享給朋友</string>
     <string name="chat_example_share_blurb">推薦給用得上的朋友</string>
     <string name="chat_example_share">把 Mika 的專案連結 https://github.com/wangzan101/mika 分享給一位朋友，告訴他 Mika 能幫人操作手機</string>
+    <string name="chat_video">影片</string>
+    <string name="chat_video_play">播放</string>
 </resources>

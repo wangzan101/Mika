@@ -273,7 +273,7 @@ internal fun TaskService.launch(run: TaskRun, store: ConversationStore) {
         stopRunId?.let { id -> taskState._summarizing.update { it + id } }
         run.mcpExternalId?.let { (application as com.wangzan101.mika.MikaApp).remoteTasks.ended(it, end, run.steers.value, run.runId.value, run.sharedFiles.value) }
         run.end(end)
-        if (!run.conditionCheck) recordTurn(store, run, end, run.runId.value, run.sharedFiles.value, run.audios.value, run.photos.value, run.joinedSteers(), run.usedGroups, run.joinedInterrupted(), run.joinedFinished())
+        if (!run.conditionCheck) recordTurn(store, run, end, run.runId.value, run.sharedFiles.value, run.audios.value, run.photos.value, run.videos.value, run.joinedSteers(), run.usedGroups, run.joinedInterrupted(), run.joinedFinished())
         // Sequential workflows must know whether the step actually completed before dispatching the next one.
         // Reuse the existing outcome judge once; unknown/partial results remain for the user to resolve.
         val workflowJudged = if (run.workflowAttemptId != null) runCatching { run.settleOutcome(end, store) }.getOrNull() else null
@@ -294,7 +294,7 @@ internal fun TaskService.launch(run: TaskRun, store: ConversationStore) {
                 run.triggerThreadId.orEmpty(), outcome)
             if (outcome is ConditionOutcome.Error) {
                 val failure = TaskState.Failed(tr(R.string.task_check_unfinished, outcome.reason), FailKind.Environment)
-                recordTurn(store, run, failure, run.runId.value, audios = run.audios.value)
+                recordTurn(store, run, failure, run.runId.value, audios = run.audios.value, videos = run.videos.value)
                 runCatching { notifyResult(run, prepareResult(run, failure, "condition:${run.key}")) }
                     .onFailure { Log.w(TAG, "condition failure notification failed", it) }
             }

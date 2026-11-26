@@ -338,6 +338,11 @@ object ModelsCopy {
 
     fun imageLine(ui: ModelSetupUi): RoleLine = RoleLine(tr(R.string.role_image), tr(R.string.role_image_what), unset = true)
 
+    /** 「视频模型」:生成短视频,同样不在 [ModelRole] 里。 */
+    val VIDEO_ICON: ImageVector get() = MikaIcons.Camera
+
+    fun videoLine(): RoleLine = RoleLine(tr(R.string.role_video), tr(R.string.role_video_what), unset = true)
+
     fun roleIcon(role: ModelRole): ImageVector = when (role) {
         ModelRole.Main -> MikaIcons.Spark
         ModelRole.Vision -> MikaIcons.Eye

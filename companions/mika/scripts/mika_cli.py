@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -26,6 +27,12 @@ import uuid
 VERSION = "0.1.0"
 API = "/api/v1"
 DEFAULT_PACKAGE = "com.wangzan101.mika"
+SCREEN_INSPECT = "com.wangzan101.mika.cap.phone.shell.ScreenInspect"
+SCREEN_ERRORS = {
+    "connect_failed": "Another UI automation session is using the phone. Close it and retry.",
+    "unsupported": "This Android version does not offer a non-suppressing UI automation connection.",
+    "timeout": "The phone did not finish reading the screen in time. Retry.",
+}
 MAX_RESPONSE = 4 * 1024 * 1024
 FILE_CHUNK = 128 * 1024
 MAX_ATTACH_BYTES = 200 * 1024 * 1024
@@ -521,6 +528,47 @@ def save_result(client, task_id, file_id, output):
     return {"file": str(target), "size": item["size"], "task_id": task_id}
 
 
+def inspect_screen(args):
+    if args.url or args.token_file:
+        raise CliError("arguments", "screen reads the screen over ADB; it does not use --url or --token-file.")
+    adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"), getattr(args, "adb_server_port", None))
+    package = getattr(args, "mika_package", DEFAULT_PACKAGE)
+    progress(args, "starting ADB server...")
+    adb.start_server()
+    adb.select()
+    try:
+        paths = adb.run("shell", "pm", "path", package).splitlines()
+    except CliError as exc:
+        if exc.code != "adb":
+            raise
+        paths = []
+    apk = next((line[len("package:"):] for line in paths if line.startswith("package:") and line.endswith("/base.apk")), None)
+    if not apk:
+        raise CliError("screen_unavailable", "Mika (" + package + ") is not installed on the selected phone.")
+    # Runs as the shell user, so only the device's own accessibility API is used; nothing on screen is changed.
+    command = "CLASSPATH=" + shlex.quote(apk) + " app_process /system/bin " + SCREEN_INSPECT
+    progress(args, "reading the screen...")
+    try:
+        raw = adb.run("exec-out", command, timeout=30)
+        if len(raw.encode("utf-8")) > MAX_RESPONSE:
+            raise ValueError("response too large")
+        result = json.loads(raw)
+    except CliError as exc:
+        if exc.code != "adb":
+            raise
+        raise CliError("screen_unavailable", "The installed Mika cannot read the screen over ADB. Update Mika on the phone.") from None
+    except ValueError:
+        raise CliError("screen_unavailable", "The phone returned an unreadable screen.") from None
+    if isinstance(result, dict) and result.get("status") == "error":
+        reason = result.get("code") if result.get("code") in SCREEN_ERRORS else "screen_unavailable"
+        raise CliError("screen_unavailable", SCREEN_ERRORS.get(reason, "The phone could not read the screen."), reason=reason)
+    if (not isinstance(result, dict) or result.get("status") != "ok"
+            or result.get("accessibility_services_suppressed") is not False
+            or not isinstance(result.get("windows"), list)):
+        raise CliError("screen_unavailable", "The phone returned an unexpected screen result.")
+    return {**result, "device": adb.device, "package": package}
+
+
 def execute(args, secrets):
     # Validate inputs before opening a connection or invoking the bootstrap script.
     if args.command == "notification-doctor":
@@ -556,6 +604,8 @@ def execute(args, secrets):
         if hasattr(args, "task_id") and not re.fullmatch(r"[A-Za-z0-9_-]+", args.task_id):
             name = "id" if args.action == "export" else "task_id"
             raise CliError("arguments", name + " must be an ID returned by Mika.")
+    if args.command == "screen":
+        return inspect_screen(args)
     if args.command == "devices":
         if args.url or args.token_file:
             raise CliError("arguments", "devices lists ADB devices; it does not use --url or --token-file.")
@@ -695,6 +745,8 @@ def parser():
     sub.add_parser("connect", help="Enable ADB computer access and verify task API", parents=[connection_options])
     sub.add_parser("doctor", help="Read connection and phone state without starting a task", parents=[connection_options])
     sub.add_parser("devices", help="List ADB devices", parents=[common])
+    sub.add_parser("screen", parents=[connection_options],
+                   help="Read the phone's window and element trees over ADB without pausing Mika's accessibility service")
     diagnostics = sub.add_parser("notification-doctor", parents=[common],
                                 help="Inspect Android notification configuration without opening apps or reading message text")
     diagnostics.add_argument("--package", required=True, help="Android app whose notifications need investigation")
@@ -760,7 +812,7 @@ def main(argv=None):
                 setattr(args, key, default)
         if hasattr(args, "mika_package"):
             if args.command in {"devices", "notification-doctor"}:
-                raise CliError("arguments", "Put the Mika --package option on connect, doctor, task or ui.")
+                raise CliError("arguments", "Put the Mika --package option on connect, doctor, screen, task or ui.")
             if args.url:
                 raise CliError("arguments", "The Mika --package option cannot be used with --url.")
         if args.url and args.adb_server_port is not None:
@@ -779,7 +831,7 @@ def main(argv=None):
                 sys.path.append(str(Path(__file__).resolve().parent))
                 from mika_desk import serve
             return serve(args)
-        args.progress = args.command in {"devices", "connect", "doctor"}
+        args.progress = args.command in {"devices", "connect", "doctor", "screen"}
         result = execute(args, secrets)
         if not isinstance(result, RawExport) and isinstance(result.get("status"), str) and result["status"] in {"failed", "cancelled"}:
             code = 1

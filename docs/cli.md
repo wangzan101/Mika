@@ -65,6 +65,18 @@ mika --url http://PHONE:8765 --token-file /path/to/private-token-file doctor --j
 
 令牌文件只包含访问令牌,由用户按私有文件保存。URL 使用服务器根地址或 `/api/v1`,不要填 `/mcp`;不允许 URL 内嵌凭据。CLI 不跟随 HTTP 重定向、不使用环境中的 HTTP 代理。服务器沿用私有网络限制;局域网 HTTP 的链路本身不加密,可使用 ADB 或可信私有组网。
 
+## 经 ADB 只读读屏
+
+```bash
+mika screen --device SERIAL --json
+# 并排安装的调试版
+mika screen --device SERIAL --package com.wangzan101.mika.dev --json
+```
+
+`screen` 经已授权的 ADB 以 shell 身份运行 Mika APK 里的读屏入口,读出各显示屏(包括 Mika 的虚拟屏)上可访问的窗口和控件树,每个窗口带 `display_id`。它用安卓公开的 `UiAutomation` 能力连接,并带 `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES`,读屏期间 Mika 的无障碍服务照常运行;系统自带的 `adb shell uiautomator dump` 用的是会压制其他无障碍服务的连接,会让 Mika 暂时断开,所以不要用它代替。系统给不出这种连接时直接报错,不退回会压制的方式。
+
+只读:不点击、不输入、不改设置,也不需要手机上的任务服务。密码框(及其子控件)不输出文字和描述,只标 `password: true`;单次最多 2500 个控件、60 层,每段文字最多 1000 个字符,超出时 `truncated` 为真,用结果前先看 `node_count` 和 `truncated`。另一个界面自动化会话正占用时返回 `screen_unavailable`(`reason` 为 `connect_failed`),手机上 15 秒内读不完返回 `timeout`。需要包含此入口的 Mika 版本;旧版本会提示更新。只用局域网连接(`--url`)时没有这个命令。
+
 ## 任务命令
 
 ```bash

@@ -25,7 +25,6 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
     private var pendingStart by session::pendingStart
     private var screenSeen by session::screenSeen
     private var pipClosed by session::pipClosed
-    private val held = session.held
     private val _deleteBatch = session._deleteBatch
     private val scope = vm.scope
     private val actions = vm.actions
@@ -48,6 +47,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
         session.refreshParallel()
         if (!session.parallel()) return openConversation(conversationId)
         if (conversationId == _ui.value.conversationId) return
+        if (_ui.value.conversationId == null) vm.clearUnnumberedMainChoice()
         vm.drafting.cancelPendingSharedDraft()
         session.keepDraft()
         lingerJob?.cancel()
@@ -56,6 +56,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
         liveIndex = -1
         // 没有任务的对话不带别的任务的接管进度;输入内容只恢复目标对话自己的草稿。
         _ui.update { session.restoreDraft(it.rebuildForConversation(conversationId = conversationId, exchanges = past, projectId = session.projectFor(conversationId))) }
+        vm.refreshMainModel()
         session.markCurrent(CurrentChat.Open(conversationId))
         if (conversationId !in activeConversations.value) { vm.live.unpark(conversationId); actions.drainFollowUps(conversationId); return }
         vm.live.follow(conversationId, vm.live.unpark(conversationId))
@@ -64,6 +65,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
     /** 打开个人助手或工作流拥有的对话:只切换展示,不启动另一项工作,并保留用户草稿。 */
     fun openWorkflowConversation(conversationId: String) {
         if (conversationId == _ui.value.conversationId) { vm.live.refresh(); return }
+        if (_ui.value.conversationId == null) vm.clearUnnumberedMainChoice()
         session.refreshParallel()
         vm.drafting.cancelPendingSharedDraft()
         session.keepDraft()
@@ -72,6 +74,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
         val past = session.saved(conversationId)
         liveIndex = -1
         _ui.update { session.restoreDraft(it.rebuildForConversation(conversationId = conversationId, exchanges = past, projectId = session.projectFor(conversationId))) }
+        vm.refreshMainModel()
         session.markCurrent(CurrentChat.Open(conversationId))
         if (conversationId !in activeConversations.value) { vm.live.unpark(conversationId); return }
         vm.live.follow(conversationId, vm.live.unpark(conversationId))
@@ -136,8 +139,11 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
     }
 
     /** 切到某个对话;任务在跑时不切。 */
-    fun openConversation(id: String) {
+    fun openConversation(requested: String) {
+        // Mika 办一件事用的子对话不给用户看(通知、小画面、旧链接都可能指向它):打开它所属的那条聊天
+        val id = store.deskParent(requested) ?: requested
         if (_ui.value.conversationId == id) return
+        if (_ui.value.conversationId == null) vm.clearUnnumberedMainChoice()
         session.refreshParallel()
         if (session.parallel()) return switchTo(id)
         if (session.busy()) return
@@ -148,6 +154,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
         _ui.update {
             session.restoreDraft(it.rebuildForConversation(conversationId = id, exchanges = past, takeoverStage = it.takeoverStage, projectId = session.projectFor(id)))
         }
+        vm.refreshMainModel()
         session.markCurrent(CurrentChat.Open(id))
         // 这个对话的任务是别处开始的(悬浮胶囊、定时任务):打开就接上它
         if (id in activeConversations.value) vm.live.follow(id) else {
@@ -157,6 +164,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
     }
 
     fun newConversation(projectId: String? = null) {
+        if (_ui.value.conversationId == null) vm.clearUnnumberedMainChoice()
         val validProject = projectId?.takeIf { projectStore == null || projectStore.get(it) != null }
         session.refreshParallel()
         if (session.parallel()) {
@@ -169,6 +177,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
             val fresh = store.newConversation()
             workspaceResolver?.setDraftProject(fresh, validProject)
             _ui.update { it.rebuildForConversation(conversationId = fresh, projectId = validProject) }
+            vm.refreshMainModel()
             // 还没说过话:胶囊上是一张新对话卡片(编号等说出来再定,见 begin)
             session.markCurrent(CurrentChat.Fresh)
             return
@@ -178,6 +187,7 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
         session.keepDraft()
         liveIndex = -1
         _ui.update { it.rebuildForConversation(conversationId = null, takeoverStage = it.takeoverStage, projectId = validProject) }
+        vm.refreshMainModel()
         session.markCurrent(CurrentChat.Fresh)
     }
 
@@ -306,13 +316,13 @@ internal class ChatConversationOps(private val vm: ChatViewModel, private val se
         lingerJob?.cancel()
         pendingStart?.cancel()
         pendingStart = null
-        held.clear()
         vm.live.unpark(id)
         liveIndex = -1
         screenSeen = false
         pipClosed = false
         val fresh = if (session.parallel()) store.newConversation() else null
         _ui.update { it.rebuildForConversation(conversationId = fresh) }
+        vm.refreshMainModel()
         // 屏上换成了一个新的空对话:胶囊不再接着删掉的那个
         session.markCurrent(CurrentChat.Fresh)
     }

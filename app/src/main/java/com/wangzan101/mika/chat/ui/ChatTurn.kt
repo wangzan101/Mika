@@ -3,7 +3,6 @@ package com.wangzan101.mika.chat.ui
 import com.wangzan101.mika.core.agent.GoalChecklist
 import com.wangzan101.mika.core.agent.QuoteMessage
 import com.wangzan101.mika.core.agent.AttachedPage
-import com.wangzan101.mika.core.run.record.RunMetrics
 import com.wangzan101.mika.ui.components.DirectionalIcon
 import android.widget.Toast
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -87,7 +86,7 @@ import com.wangzan101.mika.ui.MarkdownText
 
 /** 跳转目标行的短暂高亮:一条全宽淡色底,约 1.8 秒后渐隐。 */
 @Composable
-private fun JumpHighlight(active: Boolean, reduceMotion: Boolean, content: @Composable () -> Unit) {
+internal fun JumpHighlight(active: Boolean, reduceMotion: Boolean, content: @Composable () -> Unit) {
     val c = MikaTheme.colors
     val alpha by animateFloatAsState(if (active) 1f else 0f, if (reduceMotion) snap() else tween(260), label = "jump-highlight")
     Box(
@@ -98,15 +97,22 @@ private fun JumpHighlight(active: Boolean, reduceMotion: Boolean, content: @Comp
 
 internal fun LazyListScope.exchange(
     index: Int, ex: Exchange, conversationId: String?, stage: Takeover.Stage, vm: ChatViewModel, reduceMotion: Boolean, backgroundNote: Boolean,
-    runMetrics: Map<String, RunMetrics>,
-    openRun: (String) -> Unit, loadSource: suspend (String) -> EvidenceSource?, openSource: (String?, String?) -> Unit,
+    openRun: (String) -> Unit,
     kept: KeptPage? = null,
     /** 从搜索或文件库跳过来时要高亮的行 key。 */
     highlightKey: String? = null,
     /** 终态后的两个新运行入口:true 从摘要断点继续,false 按原目标重新开始。 */
     recover: (Boolean) -> Unit = {},
-    openReport: (String) -> Unit = {}, openPlayback: (String) -> Unit = {},
+    /** 前台回的话紧接在上一条前台回话下面(Mika 连发):左上角收小、和上一条靠近。 */
+    joinedAbove: Boolean = false,
+    /** 下一条前台回话紧接在这条下面。 */
+    joinedBelow: Boolean = false,
 ) {
+    // 前台的一轮:用户的话、前台回的话;不走任务那套步骤和状态卡
+    if (ex.deskReply != null) {
+        deskExchange(index, ex, conversationId, reduceMotion, highlightKey, joinedAbove, joinedBelow)
+        return
+    }
     if (ex.goal.isNotEmpty()) item("u$index") {
         JumpHighlight(highlightKey == "u$index", reduceMotion) { UserBubble(ex.goal, conversationId, key = "u$index") }
     }
@@ -130,9 +136,7 @@ internal fun LazyListScope.exchange(
     ex.draft?.takeIf(String::isNotBlank)?.let { draft -> item("d$index") { DraftText(draft, ex.waitingForModel) } }
     item("r$index") {
         JumpHighlight(highlightKey == "r$index", reduceMotion) {
-            StatusCard(ex.status, stage, vm, ex.recordedRun, ex.elapsedMs, ex.recordedRun?.let { runMetrics[it]?.tokens }, loadSource, openSource, openRun, "r$index",
-                conversationId = conversationId,
-                recover = recover, goal = ex.goal, openReport = openReport, openPlayback = openPlayback)
+            StatusCard(ex.status, stage, vm, ex.recordedRun, "r$index", conversationId = conversationId, recover = recover)
         }
     }
     // 这一轮结束后留在后台运行的那一页:还开着是绿色一行(能关),关了是一句原因
@@ -195,9 +199,9 @@ internal fun UserBubble(text: String, conversationId: String?, note: String? = n
             }
             if (attached.hasAttachments && attached.words.isNotEmpty()) Spacer(Modifier.size(6.dp))
             if ((!attached.hasAttachments || attached.words.isNotEmpty()) && (paged.page == null || quoted.words.isNotEmpty())) UserMessage(conversationId, attached.words.takeIf { attached.hasAttachments } ?: quoted.words, ChatThumbWidth) { words ->
-                // 用户气泡是淡蓝底 + 深字:选中的底色用稍浓一点的蓝,把手仍是强调色(画在气泡外面)
+                // 用户气泡是实色淡强调色 + 深字:选中的底色用稍浓一点的强调色,把手仍是强调色(画在气泡外面)
                 val colors = MikaTheme.colors
-                val bubble = colors.accent.copy(alpha = 0.14f)
+                val bubble = colors.userBubble
                 CompositionLocalProvider(LocalTextSelectionColors provides TextSelectionColors(colors.accent, colors.accent.copy(alpha = 0.3f))) {
                     MessageArea(
                         key, QuoteMessage.From.You, words, "selectable-user",
@@ -213,7 +217,7 @@ internal fun UserBubble(text: String, conversationId: String?, note: String? = n
 
 @Composable
 private fun UserBubbleText(words: String) {
-    Text(words, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), style = BubbleText, color = MikaTheme.colors.ink)
+    Text(words, Modifier.padding(horizontal = 13.dp, vertical = 9.dp), style = BubbleText, color = MikaTheme.colors.ink)
 }
 
 /** 长按抬起的那条消息:[color] 底、带阴影;太长时(最高半屏)只露开头,下面裁掉。 */
@@ -233,7 +237,7 @@ private val ChatThumbWidth = 110.dp
 private fun DraftText(text: String, generating: Boolean) {
     MarkdownText(
         text, AnswerText.copy(color = MikaTheme.colors.ink),
-        Modifier.fillMaxWidth().padding(bottom = 12.dp).answerSurface(), streaming = generating,
+        Modifier.padding(bottom = ReplyGap).answerSurface(), streaming = generating,
     )
 }
 
@@ -278,10 +282,32 @@ internal fun AnswerArea(key: String, answer: String, modifier: Modifier, content
     ) { content() }
 }
 
-/** Mika 回答的底:很淡的灰,左下尾角。 */
+/** 同一句话下面几条回复之间的距离。 */
+internal val ReplyGap = 8.dp
+
+/**
+ * Mika 回答的底:浅色下是浅灰实色,深色下是亮一级的实色;不叠透明、不加阴影。左下尾角。
+ * 短的贴着字宽,长的铺满;前台回话、汇报、旧式回答都用这一种。
+ */
 @Composable
-internal fun Modifier.answerSurface(): Modifier =
-    background(MikaTheme.colors.answer, MikaShapes.AnswerBubble).padding(horizontal = 14.dp, vertical = 12.dp)
+internal fun Modifier.answerSurface(joinedAbove: Boolean = false): Modifier =
+    background(MikaTheme.colors.answer, if (joinedAbove) MikaShapes.AnswerBubbleJoined else MikaShapes.AnswerBubble)
+        .padding(horizontal = 13.dp, vertical = 10.dp)
+
+/** Mika 连发时两条回话之间的距离。 */
+internal val JoinedReplyGap = 3.dp
+
+/**
+ * 第 [i] 轮前台回的话是否紧接在上一轮前台回话下面:这一轮没有用户的话,上一轮的回话画出来了,
+ * 中间也没有时间线、通话线隔开。
+ */
+internal fun replyJoinsAbove(exchanges: List<Exchange>, i: Int, calls: CallMarks): Boolean {
+    if (i <= 0 || i > exchanges.lastIndex) return false
+    val ex = exchanges[i]
+    val prev = exchanges[i - 1]
+    if (ex.deskReply == null || ex.goal.isNotEmpty() || !deskReplyShown(ex) || !deskReplyShown(prev)) return false
+    return calls.before(i).isEmpty() && timeMarkAt(exchanges, i, calls) == null
+}
 
 // ---------- 进度 ----------
 
@@ -295,7 +321,6 @@ internal fun WorkBlock(ex: Exchange, steers: List<String>, reduceMotion: Boolean
     val paused = ChatCopy.paused(ex.status)
     val elapsed = rememberElapsed(ex.startedAt)
     Column(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-        TurnMeta(elapsed, tokens = null)
         Row(
             Modifier.fillMaxWidth().heightIn(min = 24.dp),
             verticalAlignment = Alignment.Top,
@@ -306,6 +331,7 @@ internal fun WorkBlock(ex: Exchange, steers: List<String>, reduceMotion: Boolean
                 ChatCopy.progressLine(ex), Modifier.weight(1f), style = NowText, color = c.ink,
                 maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
+            if (elapsed != null) Text(ChatCopy.clock(elapsed), style = ClockText, color = c.ink3)
         }
         ex.goals?.let { GoalChecklistRow(it, ex.runId) }
         if (ex.steps.isNotEmpty() || steers.isNotEmpty()) StepLine(ex.steps, ex.stepActions, steers, live = true, paused = paused)
@@ -328,28 +354,6 @@ internal fun WorkBlock(ex: Exchange, steers: List<String>, reduceMotion: Boolean
                 Icon(MikaIcons.Eye, null, Modifier.size(15.dp), tint = c.ink3)
                 Text(ChatCopy.BACKGROUND_NOTE, style = NoteText, color = c.ink3)
             }
-        }
-    }
-}
-
-/** 回答/干活头部那行:「Mika · 0:42 · 1.2 万 Token」;[elapsed]/[tokens] 为 null 时略去对应段。 */
-@Composable
-internal fun TurnMeta(elapsed: Long?, tokens: Long?) {
-    val c = MikaTheme.colors
-    // 和下面的正文/进展拉开距离:正文行高会把第一行顶到行框上沿,不留空就会贴住这一行
-    Row(
-        Modifier.padding(bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Text(ChatCopy.APP_TITLE, style = TurnNameText, color = c.ink)
-        if (elapsed != null) {
-            Text("·", style = ClockText, color = c.ink3)
-            Text(ChatCopy.clock(elapsed), style = ClockText, color = c.ink3)
-        }
-        if (tokens != null && tokens > 0) {
-            Text("·", style = ClockText, color = c.ink3)
-            Text(ChatTokensCopy.amount(tokens), style = ClockText, color = c.ink3)
         }
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.gestures.scrollBy
 import com.wangzan101.mika.core.agent.QuoteMessage
 import com.wangzan101.mika.ui.components.DirectionalIcon
 import com.wangzan101.mika.ui.components.GlassSurface
+import com.wangzan101.mika.voicecall.ui.CallRecordsSheet
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
@@ -38,6 +39,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -45,7 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -59,6 +61,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wangzan101.mika.MikaApp
 import com.wangzan101.mika.R
+import com.wangzan101.mika.core.frontdesk.DeskTaskPhase
+import com.wangzan101.mika.core.frontdesk.DeskTaskView
 import com.wangzan101.mika.chat.ChecklistSource
 import com.wangzan101.mika.chat.SavedChecklistStore
 import com.wangzan101.mika.settings.FeatureFlags
@@ -110,6 +114,8 @@ fun ChatScreen(
     webOpen: StateFlow<Boolean>,
     /** 小窗直接操作的入口(点/滑/返回注入到虚拟屏);屏没建好或任务结束时为 null。 */
     pipInput: StateFlow<com.wangzan101.mika.cap.phone.display.PipInput?> = MutableStateFlow(null),
+    /** 此刻有虚拟屏(或开着网页)的任务所在的会话:前台派出去的事有画面时小窗跟它。 */
+    screens: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
     /** 小窗目标 App 的声音被用户恢复过:声音按钮显示「静音」,否则「恢复声音」。 */
     pipSoundOn: StateFlow<Boolean> = MutableStateFlow(false),
     /** 用户在设置里开了「允许我在小窗里直接操作」。 */
@@ -119,15 +125,14 @@ fun ChatScreen(
     onOpenDrawer: () -> Unit,
     /** 被拦下的提示里的「去设置」。 */
     openSettings: () -> Unit,
+    /** 用量面板里的「查看 Token 用量」:跳到设置里的 Token 用量页。 */
+    openUsage: () -> Unit = {},
     /** 「＋」面板里的「浏览器」:打开内置浏览器。 */
     onOpenBrowser: () -> Unit = {},
     openRun: (String) -> Unit = {},
     /** 任务要用手机而手机操作没准备好:在那轮问答下面放一行去设置(配不上具体轮次时挂在最后)。 */
     phoneSetupNeed: com.wangzan101.mika.cap.phone.setup.PhoneSetupPrompt.Need? = null,
     openPhoneSetup: () -> Unit = {},
-    /** 按运行记录取依据的来处(「来源」胶囊和点开后的截图);读盘的活由调用方放到后台线程。 */
-    loadSource: suspend (runId: String) -> EvidenceSource? = { null },
-    openSource: (runId: String?, legacyText: String?) -> Unit = { _, _ -> },
     /** 输入栏按住说话从这里开会话;null 时只能打字。 */
     voice: VoiceSource? = null,
     /** 「还不能语音输入」里的「去选」。 */
@@ -138,20 +143,23 @@ fun ChatScreen(
     recommendations: RecommendedTaskStore? = null,
     checklists: SavedChecklistStore? = null,
     workflows: com.wangzan101.mika.workflow.WorkflowRuntime? = null,
-    openReport: (String) -> Unit = {},
-    openPlayback: (String) -> Unit = {},
     /** 人格选择器里的「管理人格」:打开设置里的人格页。 */
     onOpenPersonas: () -> Unit = {},
     /** 输入栏的听筒按钮:进语音通话;为 null 时不显示(正常常驻,不可用时进门禁页引导)。 */
     onVoiceCall: (() -> Unit)? = null,
+    /** 前台派出的一件的「查看详细过程」:打开它这次运行的过程,找不到运行时打开它的对话(阶段决定认哪次运行)。 */
+    openDeskRun: (taskId: String, phase: com.wangzan101.mika.core.frontdesk.DeskTaskPhase) -> Unit = { _, _ -> },
+    /** 右上角 ⋯ 里的「通话设置」。 */
+    openCallSettings: () -> Unit = {},
 ) {
     val checklistStore = checklists ?: (LocalContext.current.applicationContext as? MikaApp)?.savedChecklists
     val workflowRuntime = workflows ?: (LocalContext.current.applicationContext as? MikaApp)?.workflows
     val recommendationStore = recommendations
         ?: (LocalContext.current.applicationContext as? MikaApp)?.recommendedTasks
+    val appContext = LocalContext.current.applicationContext
     val recommendedTasksFlow = remember(recommendationStore) {
         recommendationStore?.also {
-            it.ensureLoaded(seed = { ChatCopy.recommendationSeeds() }, retired = { ChatCopy.retiredRecommendationSeeds() })
+            it.ensureLoaded(seed = { ChatCopy.recommendationSeeds() }, retired = { ChatCopy.retiredRecommendationSeeds(appContext) })
         }?.tasks
             ?: MutableStateFlow<List<RecommendedTask>>(emptyList())
     }
@@ -167,6 +175,8 @@ fun ChatScreen(
         DeviceFileBrowser(vm, id) { deviceBrowserConversation = null }
     }
     val pendingJump by vm.jump.collectAsState()
+    val callLog by remember(ui.conversationId) { vm.calls(ui.conversationId) }.collectAsState(emptyList())
+    val calls = remember(ui.exchanges, callLog) { callMarks(ui.exchanges, callLog) }
     val others by vm.otherRunning.collectAsState()
     val keptAny by vm.keptPage.collectAsState()
     // 只管这个对话留下的那一页
@@ -186,6 +196,23 @@ fun ChatScreen(
     }
     val frame = live ?: lastFrame.takeIf { ui.pip.visible && ui.pip.mode == PipMode.Done }
     val webContent = if (ui.pip.mode == PipMode.Done) lastFrameWasWeb else webLive
+    // 前台接的会话自己没有任务在跑时,小窗跟它派出去的事:在做或要你处理、有画面的几件里,要你处理的优先,再取最近动过的;
+    // 让服务显示它,画面跟着换。放大、关掉记在页面里,按事情分开;不止一件在办时小窗上写是哪件
+    val screenTasks by screens.collectAsState()
+    val deskPip = if (ui.pip.visible) null else ui.deskTasks
+        .filter { (it.state == DeskTaskPhase.Running || it.state == DeskTaskPhase.NeedsYou) && it.taskId in screenTasks }
+        .sortedWith(compareBy<DeskTaskView> { if (it.state == DeskTaskPhase.NeedsYou) 0 else 1 }.thenByDescending { it.updatedAt })
+        .firstOrNull()
+    LaunchedEffect(deskPip?.taskId) { deskPip?.let { vm.showDeskScreen(it.taskId) } }
+    var deskPipExpanded by remember(ui.conversationId) { mutableStateOf<String?>(null) }
+    var deskPipClosed by remember(ui.conversationId) { mutableStateOf(emptySet<String>()) }
+    val pip = deskPip?.let {
+        PipUi(
+            visible = true, mode = if (it.state == DeskTaskPhase.NeedsYou) PipMode.NeedsYou else PipMode.Running,
+            expanded = deskPipExpanded == it.taskId && it.taskId !in deskPipClosed, closed = it.taskId in deskPipClosed,
+        )
+    } ?: ui.pip
+    val pipLabel = deskPip?.title?.takeIf { trayOrder(ui.deskTasks).size > 1 }
     // 注册文字的 Android 状态保存;平时由进程内的 ViewModel 管理完整会话草稿。
     rememberSaveable(vm, saver = androidx.compose.runtime.saveable.listSaver(
         save = { model: ChatViewModel -> model.saveDraftTexts() },
@@ -195,12 +222,15 @@ fun ChatScreen(
     // 推荐任务可以直接填进空输入框;已有内容时先确认,不能因误触把草稿换掉。
     var pendingExample by rememberSaveable(ui.conversationId) { mutableStateOf<String?>(null) }
     var showUsage by rememberSaveable(ui.conversationId) { mutableStateOf(false) }
+    var showRecords by rememberSaveable(ui.conversationId) { mutableStateOf(false) }
+    var showTasks by rememberSaveable(ui.conversationId) { mutableStateOf(false) }
     var showChecklists by remember(ui.conversationId) { mutableStateOf(false) }
     var checklistIncoming by remember(ui.conversationId) { mutableStateOf<ChecklistSource?>(null) }
     var pendingChecklistDraft by remember(ui.conversationId) { mutableStateOf<String?>(null) }
     var showWorkflows by rememberSaveable { mutableStateOf(false) }
     // 面板开着时选照片会把首页的草稿提升成对话(id 从 null 变成新值),所以不跟对话 id 绑;换对话时用户本来就会先关掉
     var showPlus by rememberSaveable { mutableStateOf(false) }
+    var showMainModel by rememberSaveable(ui.conversationId) { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     var saveTaskPrompt by remember(ui.conversationId) { mutableStateOf<String?>(null) }
@@ -214,6 +244,12 @@ fun ChatScreen(
             fillTaskTitle = task.title
             fillTaskPrompt = task.prompt
         } else fillDraft(task.prompt)
+    }
+    // 推广卡点了直接发;输入框里已经有草稿、附件或引用,或者此刻发不出去(还没配好模型、正在学习……)时,退回填进输入框
+    val sendTask: (RecommendedTask) -> Unit = { task ->
+        val now = vm.ui.value
+        val clean = now.input.isEmpty() && now.attachments.isEmpty() && now.quote == null
+        if (!clean || !vm.send(task.prompt, check)) pickTask(task)
     }
     var retryFailures by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceHolding by remember { mutableStateOf(false) }
@@ -230,6 +266,13 @@ fun ChatScreen(
         val active = jumpHighlight ?: return@LaunchedEffect
         delay(JUMP_HIGHLIGHT_MS)
         if (jumpHighlight == active) jumpHighlight = null
+    }
+
+    var cardFlash by remember { mutableStateOf<CardFlash?>(null) }
+    LaunchedEffect(cardFlash) {
+        val active = cardFlash ?: return@LaunchedEffect
+        delay(JUMP_HIGHLIGHT_MS)
+        if (cardFlash == active) cardFlash = null
     }
 
     // 只有原本跟着最新消息时才继续跟随。这个状态与列表位置一起跨页面保存。
@@ -251,19 +294,39 @@ fun ChatScreen(
     // 目标行直接由当前 UI 状态计算:layoutInfo 还是上一帧的测量结果,发送后立即读它会滚到旧的末尾。
     val last = ui.exchanges.lastOrNull()
     val setupRow = phoneSetupRow(phoneSetupNeed, ui.conversationId, ui.exchanges)
-    val rowCount = chatItemCount(ui.exchanges, kept, setupRow, hasBlocked = ui.blocked != null)
+    // 前台派出去、此刻在等你的几件:对话末尾各一张问题卡
+    val needs = ui.deskTasks.filter { it.need != null }.map { it.taskId }
+    val rowCount = chatItemCount(ui.exchanges, kept, setupRow, hasBlocked = ui.blocked != null, calls, needs)
     val canScrollForward by remember { derivedStateOf { listState.canScrollForward } }
     val showScrollToBottom = ui.exchanges.isNotEmpty() && !followingTail && canScrollForward
-    val scrollMarker = "${ui.conversationId}:${ui.exchanges.size}:${last?.steps?.size}:${last?.steers?.size}:${last?.status?.hashCode()}:${ui.blocked?.hashCode()}"
+    val scrollMarker = "${ui.conversationId}:${ui.exchanges.size}:${last?.steps?.size}:${last?.steers?.size}:${last?.status?.hashCode()}:${ui.blocked?.hashCode()}" +
+        ":${callLog.size}:${callLog.lastOrNull()?.endMs}"
     val jump = pendingJump?.takeIf { it.conversationId == ui.conversationId }
     // 目标行的高亮:只在目标还是当前对话时算。
-    val highlightKey = jumpHighlight
+    val highlightKey = cardFlash?.takeIf { it.conversationId == ui.conversationId }?.key ?: jumpHighlight
         ?.takeIf { it.conversationId == ui.conversationId }
         ?.let { chatTargetKey(ui.exchanges, it.target) }
+    val openDeskTask: (String) -> Unit = { id ->
+        val view = ui.deskTasks.firstOrNull { it.taskId == id }
+        openDeskRun(id, view?.state ?: DeskTaskPhase.Done)
+    }
+    // 滚到前台派出的一件任务的问题卡并短暂高亮;它此刻不在等你(没有问题卡)时返回 false
+    val jumpToNeed: (String) -> Boolean = { taskId ->
+        val key = needCardKey(taskId)
+        val index = chatItemKeys(ui.exchanges, kept, setupRow, hasBlocked = ui.blocked != null, calls, needs).indexOf(key)
+        if (index < 0) false
+        else {
+            scrollToBottomJob?.cancel()
+            followingTail = false
+            scope.launch { if (reduceMotion) listState.scrollToItem(index) else listState.animateScrollToItem(index) }
+            cardFlash = CardFlash(ui.conversationId, key, System.nanoTime())
+            true
+        }
+    }
     LaunchedEffect(scrollMarker, jump) {
         // 从搜索或文件库过来:先滚到目标消息,期间不要跟末尾;目标不在了就退回原来的逻辑。
         if (jump != null) {
-            val keys = chatItemKeys(ui.exchanges, kept, setupRow, hasBlocked = ui.blocked != null)
+            val keys = chatItemKeys(ui.exchanges, kept, setupRow, hasBlocked = ui.blocked != null, calls, needs)
             val index = chatTargetKey(ui.exchanges, jump.target)?.let(keys::indexOf) ?: -1
             if (index >= 0) {
                 previousScrollMarker = scrollMarker
@@ -314,9 +377,6 @@ fun ChatScreen(
         if (grown > 0 && followingTail && !listState.isScrollInProgress) listState.scrollBy(grown.toFloat())
     }
 
-    // 已结束各轮的运行小结:每轮结束那一行写这一轮的 token
-    val endedRuns = ui.exchanges.filter { !it.status.isActive() }.mapNotNull { it.recordedRun }
-    val runMetrics = rememberRunMetrics(endedRuns)
     val context = LocalContext.current
 
     val c = MikaTheme.colors
@@ -363,7 +423,7 @@ fun ChatScreen(
     val menuHost = remember(selecting) { MessageMenuHost(selecting) { menu = it } }
     val menuOpen = menu != null
     /** 空对话:只有问候和推荐卡片,左右不套消息列表那圈留白,由卡片自己和输入栏对齐。 */
-    val emptyConversation = ui.exchanges.isEmpty() && ui.blocked == null
+    val emptyConversation = ui.exchanges.isEmpty() && ui.blocked == null && calls.isEmpty()
     PageBackground {
         CompositionLocalProvider(LocalMessageMenu provides menuHost) {
             LazyColumn(
@@ -378,23 +438,28 @@ fun ChatScreen(
             ) {
                 if (emptyConversation) {
                     item("empty") {
-                        EmptyState(ui.conversationId, recommendedTasks, Modifier.fillParentMaxHeight(), onPick = pickTask)
+                        EmptyState(ui.conversationId, Modifier.fillParentMaxHeight(), reduceMotion = reduceMotion, onPick = pickTask, onSend = sendTask)
                     }
                 }
                 ui.exchanges.forEachIndexed { i, ex ->
+                    callMarkRows(calls.before(i), highlightKey, reduceMotion)
+                    timeMarkAt(ui.exchanges, i, calls)?.let { at -> item(timeMarkKey(i)) { TimeMarkLine(at, timeMarkKey(i)) } }
                     val backgroundNote = i == ui.exchanges.lastIndex && ui.operatingPhone && !screenDocked
                     exchange(
-                        i, ex, ui.conversationId, ui.takeoverStage, vm, reduceMotion, backgroundNote, runMetrics, openRun, loadSource, openSource, kept,
+                        i, ex, ui.conversationId, ui.takeoverStage, vm, reduceMotion, backgroundNote, openRun, kept,
                         highlightKey = highlightKey,
+                        joinedAbove = replyJoinsAbove(ui.exchanges, i, calls),
+                        joinedBelow = replyJoinsAbove(ui.exchanges, i + 1, calls),
                         recover = { resume ->
                             val label = if (resume) R.string.chat_resume_request else R.string.chat_restart_request
                             vm.send(context.getString(label, ex.goal), check)
                         },
-                        openReport = openReport, openPlayback = openPlayback,
                     )
                     // 「去设置」挂在发现手机没就绪的那一轮后面;配不上具体轮次时(下面)照旧挂在最后
                     if (setupRow == i) item("ps$i") { PhoneSetupLine(openPhoneSetup) }
                 }
+                callMarkRows(calls.tail, highlightKey, reduceMotion)
+                deskNeedRows(ui.deskTasks, highlightKey, reduceMotion, vm::answerDeskTask, vm::cancelDeskTask, vm)
                 if (setupRow == -1) item("phone-setup") { PhoneSetupLine(openPhoneSetup) }
                 ui.blocked?.let { problems ->
                     item("blocked") {
@@ -410,45 +475,46 @@ fun ChatScreen(
             }
         }
 
-        Column(Modifier.behindMenu(menuOpen) { lift.value }.onSizeChanged { topHeight = it.height }) {
-            // 悬浮玻璃三件套:菜单 / 标题 / 新建,各自一小块磨砂玻璃,不铺一整条
+        // 状态栏和顶栏后面从页面底色淡出到透明:往上滚的内容不和时间、电量叠在一起
+        val topFade = MikaTheme.colors.bg.let { bg -> remember(bg) { Brush.verticalGradient(0f to bg, 0.4f to bg, 1f to bg.copy(alpha = 0f)) } }
+        Column(Modifier.behindMenu(menuOpen) { lift.value }.background(topFade).onSizeChanged { topHeight = it.height }) {
+            // 悬浮玻璃三块:左组(菜单、新对话) / 标题 / 右组(通话、更多),不铺一整条
             Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars)) {
-                Row(
+                // 标题按整行居中,不跟着两边挤
+                Box(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    if (!adaptive.hasNavigation || screenDocked) GlassSurface(modifier = Modifier.size(MikaSize.IconButton), backdrop = backdrop, shape = CircleShape) {
-                        Box(
-                            Modifier.fillMaxSize().clip(CircleShape)
-                                .clickable(onClickLabel = stringResource(R.string.chat_menu), onClick = onOpenDrawer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            DirectionalIcon(MikaIcons.Menu, stringResource(R.string.chat_menu), Modifier.size(MikaSize.Icon), tint = c.ink)
-                            // 别的对话里还有任务在跑(并行时):右上角一个小圆点,侧栏「进行中」里能切过去
-                            if (others.isNotEmpty()) {
-                                Box(
-                                    Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 7.dp).size(8.dp)
-                                        .background(c.bg, CircleShape).padding(1.dp).background(c.accent, CircleShape),
-                                )
+                    // 左右各一块玻璃,组里几个图标共用这一块底:左边菜单 + 新对话,右边通话 + 更多
+                    GlassSurface(backdrop = backdrop, modifier = Modifier.align(Alignment.CenterStart), shape = TopBarShape) {
+                        Row(Modifier.padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // 别的对话里还有任务在跑(并行时):菜单右上角一个小圆点,侧栏「进行中」里能切过去
+                            if (!adaptive.hasNavigation || screenDocked) {
+                                TopBarIcon(MikaIcons.Menu, stringResource(R.string.chat_menu), "chat-menu", badge = others.isNotEmpty(), onClick = onOpenDrawer)
                             }
+                            TopBarIcon(MikaIcons.New, stringResource(R.string.chat_new), "chat-new", enabled = vm.canSwitch()) { vm.newConversation() }
                         }
                     }
-                    GlassSurface(backdrop = backdrop) {
-                        Row(Modifier.clickable(role = Role.Button, onClickLabel = stringResource(R.string.chat_usage_title)) { showUsage = true }
-                            .testTag("chat-usage-title").padding(horizontal = 14.dp, vertical = 8.dp),
+                    GlassSurface(backdrop = backdrop, modifier = Modifier.align(Alignment.Center), shape = TopBarShape) {
+                        Row(Modifier.clip(TopBarShape).clickable(role = Role.Button, onClickLabel = stringResource(R.string.chat_usage_title)) { showUsage = true }
+                            .testTag("chat-usage-title").height(MikaSize.IconButton + 4.dp).padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(ChatCopy.APP_TITLE, style = MikaType.Title.copy(fontWeight = WordmarkWeight), color = c.ink, maxLines = 1)
                         }
                     }
-                    GlassSurface(modifier = Modifier.size(MikaSize.IconButton), backdrop = backdrop, shape = CircleShape) {
-                        Box(
-                            Modifier.fillMaxSize().clip(CircleShape)
-                                .clickable(enabled = vm.canSwitch(), onClickLabel = stringResource(R.string.chat_new), onClick = { vm.newConversation() })
-                                .alpha(if (vm.canSwitch()) 1f else 0.35f),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(MikaIcons.New, stringResource(R.string.chat_new), Modifier.size(MikaSize.Icon), tint = c.ink)
+                    GlassSurface(backdrop = backdrop, modifier = Modifier.align(Alignment.CenterEnd), shape = TopBarShape) {
+                        Row(Modifier.padding(horizontal = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // 语音通话是整段对话的事,入口放顶栏,不挤在输入框里
+                            if (onVoiceCall != null) {
+                                TopBarIcon(MikaIcons.Handset, stringResource(R.string.voicecall_menu), "chat-call", onClick = onVoiceCall)
+                            }
+                            ChatMoreMenu(
+                                backdrop, canSwitch = vm.canSwitch(),
+                                onNew = { vm.newConversation() },
+                                onRecords = { showRecords = true },
+                                onTasks = { showTasks = true },
+                                onCallSettings = openCallSettings,
+                                bare = true,
+                            )
                         }
                     }
                 }
@@ -481,11 +547,9 @@ fun ChatScreen(
             mode = ui.composer,
             hasHistory = ui.exchanges.isNotEmpty(),
             onSend = { vm.send(input, check) },
-            onStop = vm::cancel,
+            onStop = vm::stopAll,
+            working = ui.deskTasks.any { it.inProgress } || ui.exchanges.any { it.deskReply != null && it.status == ExchangeStatus.Working },
             queued = ui.queued,
-            onGuideQueued = { id ->
-                if (!vm.guideQueued(id, check)) Toast.makeText(context, context.getString(R.string.follow_up_already_started), Toast.LENGTH_SHORT).show()
-            },
             onQueueActions = { queueActions = it },
             onCancelQueued = { id ->
                 if (!vm.cancelQueued(id)) Toast.makeText(context, context.getString(R.string.follow_up_already_started), Toast.LENGTH_SHORT).show()
@@ -497,7 +561,8 @@ fun ChatScreen(
                 keyboardController?.hide()
                 showPlus = true
             }) else null,
-            attachBlocked = ui.attachEnabled && !ui.importing && ui.composer != ComposerMode.Idle && ui.followUpMode == FollowUpMode.Steer,
+            // 接了前台时随时能加附件;没接前台时附件跟着一件直接开跑的任务走,这条会话自己在跑任务时加不了(见 [ChatSession.canAttach])
+            attachBlocked = ui.attachEnabled && !ui.importing && vm.deskFor(ui.conversationId) == null && ui.composer != ComposerMode.Idle,
             attachments = ui.attachments,
             importing = ui.importing,
             rejected = ui.rejectedAttachments,
@@ -507,6 +572,8 @@ fun ChatScreen(
             onDismissRejected = vm::dismissRejected,
             quote = ui.quote,
             onRemoveQuote = vm::clearQuote,
+            mainModel = ui.mainModel,
+            onMainModel = { showMainModel = true },
             voice = voice,
             // 说的话接在已有的字后面;任务在跑时先作为补充消息排队
             onVoiceText = { vm.input(HoldToTalk.join(vm.ui.value.input, it)) },
@@ -517,13 +584,15 @@ fun ChatScreen(
                 vm.send(text, check)
             },
             onPickSpeech = openSpeechModel,
-            onVoiceCall = onVoiceCall,
             steerTarget = null,
             onVoiceHolding = { voiceHolding = it },
             editRequest = editRequest,
+            deskTasks = ui.deskTasks,
+            onStopTask = vm::cancelDeskTask,
+            onTaskDetail = openDeskTask,
         )
 
-        val pipOccupiesCorner = !screenDocked && ui.pip.visible && ui.pip.mode != PipMode.Done
+        val pipOccupiesCorner = !screenDocked && pip.visible && pip.mode != PipMode.Done
         val composerBottomDp = with(density) { composerHeight.toDp() }
         ScrollToBottomButton(
             visible = showScrollToBottom,
@@ -553,6 +622,14 @@ fun ChatScreen(
             reduceMotion = reduceMotion,
         )
 
+        if (showMainModel) {
+            MainModelSheet(
+                ui = ui.mainModel,
+                onPick = vm::chooseMainModel,
+                onMore = openSettings,
+                onDismiss = { showMainModel = false },
+            )
+        }
         if (showPlus) {
             ChatPlusSheet(
                 selected = ui.attachments,
@@ -584,7 +661,6 @@ fun ChatScreen(
                 }) else null,
                 onChecklists = { showPlus = false; showChecklists = true },
                 onWorkflows = { showPlus = false; showWorkflows = true },
-                onBrowser = { showPlus = false; onOpenBrowser() },
                 tasks = recommendedTasks,
                 onPickTask = { showPlus = false; pickTask(it) },
                 onPickSkill = { skill ->
@@ -596,10 +672,24 @@ fun ChatScreen(
             )
         }
 
-        if (showUsage) ConversationUsageSheet(ui.conversationId) { showUsage = false }
+        // 面板里的「当前模型」跟着本对话在主模型入口里存的选择走,和这个对话下一次任务用的一致
+        if (showUsage) ConversationUsageSheet(ui.conversationId, onDismiss = { showUsage = false }, onOpenUsage = openUsage,
+            mainOverride = ui.mainModel.override)
+    if (showRecords) {
+        CallRecordsSheet(
+            callLog, current = callLog.lastOrNull { it.endMs == null }?.id.orEmpty(),
+            onPick = { call -> showRecords = false; ui.conversationId?.let { vm.openConversationAt(it, ChatTarget.Call(call)) } },
+            onDismiss = { showRecords = false },
+        )
+    }
+    if (showTasks) {
+        val items = remember(ui.exchanges, ui.deskTasks) { deskTaskItems(ui.exchanges, ui.deskTasks) }
+        val titles by produceState(emptyMap<String, String>(), items) { value = vm.deskTaskTitles(items.map { it.taskId }) }
+        DeskTasksSheet(items, titles, onPick = { showTasks = false; openDeskTask(it.taskId) }, onDismiss = { showTasks = false })
+    }
 
         if (!screenDocked) AgentPip(
-            pip = ui.pip,
+            pip = pip,
             frame = frame,
             webContent = webContent,
             pipInput = pipInputLive,
@@ -608,23 +698,33 @@ fun ChatScreen(
             reduceMotion = reduceMotion,
             topInset = topHeight.toFloat(),
             bottomInset = composerHeight.toFloat(),
-            onExpand = vm::expandPip,
-            onCollapse = vm::collapsePip,
+            onExpand = { if (deskPip != null) deskPipExpanded = deskPip.taskId else vm.expandPip() },
+            onCollapse = { if (deskPip != null) deskPipExpanded = null else vm.collapsePip() },
             // 关掉小画面:这个任务结束前只剩右下角的小按钮;提示一句还能去哪看
             onClose = {
-                vm.closePip()
+                if (deskPip != null) {
+                    deskPipClosed = deskPipClosed + deskPip.taskId
+                    deskPipExpanded = null
+                } else vm.closePip()
                 Toast.makeText(context, context.getString(R.string.pip_closed_hint), Toast.LENGTH_SHORT).show()
             },
-            onReopen = vm::reopenPip,
-            onToggleSound = vm::togglePipSound,
-            // 要你处理时点小窗:收起,滚到要你处理的那张卡片(在最后一问一答里,它后面只可能还有文件卡片和去设置那一行)
+            onReopen = { if (deskPip != null) deskPipClosed = deskPipClosed - deskPip.taskId else vm.reopenPip() },
+            onToggleSound = { if (deskPip != null) vm.togglePipSoundIn(deskPip.taskId) else vm.togglePipSound() },
+            // 要你处理时点小窗:收起,滚到要你处理的那张卡片。Mika 在办的事滚到它的问题卡(没有就打开它的过程记录);
+            // 自己的任务的卡片在最后一问一答里,它后面只可能还有文件卡片和去设置那一行
             onAttention = {
-                vm.attendPip()
-                val count = listState.layoutInfo.totalItemsCount
-                val after = (if (last?.files?.isNotEmpty() == true) 1 else 0) + (if (setupRow == ui.exchanges.lastIndex || setupRow == -1) 1 else 0)
-                val card = count - 1 - after
-                if (card >= 0) scope.launch { if (reduceMotion) listState.scrollToItem(card) else listState.animateScrollToItem(card) }
+                if (deskPip != null) {
+                    deskPipExpanded = null
+                    if (!jumpToNeed(deskPip.taskId)) openDeskTask(deskPip.taskId)
+                } else {
+                    vm.attendPip()
+                    val count = listState.layoutInfo.totalItemsCount
+                    val after = (if (last?.files?.isNotEmpty() == true) 1 else 0) + (if (setupRow == ui.exchanges.lastIndex || setupRow == -1) 1 else 0)
+                    val card = count - 1 - after
+                    if (card >= 0) scope.launch { if (reduceMotion) listState.scrollToItem(card) else listState.animateScrollToItem(card) }
+                }
             },
+            label = pipLabel,
         )
 
         queueActions?.let { item ->
@@ -828,3 +928,6 @@ private fun LazyListState.nearTail(thresholdPx: Int): Boolean {
 }
 
 // ---------- 空对话 ----------
+
+/** 跳到一张任务卡片后的短暂高亮:哪个对话、哪一行;[at] 让连点同一张也重新计时。 */
+private data class CardFlash(val conversationId: String?, val key: String, val at: Long)

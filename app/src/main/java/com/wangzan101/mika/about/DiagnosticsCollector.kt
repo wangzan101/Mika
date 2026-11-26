@@ -118,7 +118,11 @@ object DiagnosticsCollector {
     }.getOrNull()
 
     private fun installer(context: Context): String? = runCatching {
-        context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION") context.packageManager.getInstallerPackageName(context.packageName)
+        }
     }.getOrNull()
 
     private fun language(context: Context): String {

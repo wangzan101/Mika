@@ -3,6 +3,9 @@ package com.wangzan101.mika.voicecall
 import com.wangzan101.mika.voicecall.VoiceCallFeedItem.Said
 import com.wangzan101.mika.voicecall.VoiceCallFeedItem.Speaker
 import com.wangzan101.mika.voicecall.VoiceCallFeedItem.Task
+import com.wangzan101.mika.core.frontdesk.DeskStep
+import com.wangzan101.mika.core.frontdesk.DeskTaskPhase
+import com.wangzan101.mika.core.frontdesk.DeskTaskView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -42,23 +45,81 @@ class VoiceCallFeedTest {
         assertTrue(feed.items.value.isEmpty())
     }
 
-    @Test fun `a task card collects new status lines and closes when the route is idle`() {
+    private fun view(
+        id: String,
+        phase: DeskTaskPhase,
+        line: String?,
+        recent: List<String> = emptyList(),
+        steps: List<String> = emptyList(),
+    ) = DeskTaskView(id, "标题$id", phase, line, null, recent, steps = steps.map { DeskStep(it, 0L) })
+
+    @Test fun `each desk task gets one card that collects its progress`() {
         val feed = VoiceCallFeed()
-        val old = listOf("上次办完了")
-        feed.onTask(busy = false, lines = old)
-        assertTrue("不在办事时不开卡", feed.items.value.isEmpty())
-        feed.onTask(busy = true, lines = old)
-        var task = feed.items.value.single() as Task
+        // 打开通话时已经收尾的是之前派的,不上卡;还在做的照常上卡。
+        feed.onTasks(listOf(view("old", DeskTaskPhase.Done, "上次办完了"), view("t0", DeskTaskPhase.Running, "打开日历")))
+        assertEquals(listOf("t0"), feed.items.value.filterIsInstance<Task>().map { it.taskId })
+        feed.onTasks(
+            listOf(
+                view("old", DeskTaskPhase.Done, "上次办完了"),
+                view("t0", DeskTaskPhase.Running, "读日程", listOf("打开日历", "读日程")),
+                view("t1", DeskTaskPhase.Queued, null),
+            ),
+        )
+        var cards = feed.items.value.filterIsInstance<Task>()
+        assertEquals(listOf("t0", "t1"), cards.map { it.taskId })
+        assertEquals(listOf("打开日历", "读日程"), cards[0].steps)
+        assertTrue(cards[1].running)
+        feed.onTasks(listOf(view("t0", DeskTaskPhase.Done, "办完了", listOf("打开日历", "读日程")), view("t1", DeskTaskPhase.Running, "打开天气")))
+        cards = feed.items.value.filterIsInstance<Task>()
+        assertEquals(listOf("打开日历", "读日程", "办完了"), cards[0].steps)
+        assertFalse(cards[0].running)
+        assertEquals("标题t0", cards[0].title)
+        assertEquals(listOf("打开天气"), cards[1].steps)
+        assertEquals("同一件任务不重复开卡", 2, cards.size)
+    }
+
+    @Test fun `a new call starts empty and a task that ended before it gets no card`() {
+        val feed = VoiceCallFeed()
+        assertTrue(feed.items.value.isEmpty())
+        // 打开通话时任务板上已收尾的是之前派的:不上卡;之后新派的才上卡
+        feed.onTasks(listOf(view("old", DeskTaskPhase.Done, "订好了")))
+        assertTrue(feed.items.value.isEmpty())
+        feed.onTasks(listOf(view("old", DeskTaskPhase.Done, "订好了"), view("t1", DeskTaskPhase.Running, "打开天气")))
+        assertEquals(listOf("t1"), feed.items.value.filterIsInstance<Task>().map { it.taskId })
+    }
+
+    @Test fun `a step that scrolled out of the recent window is still kept from the full history`() {
+        val feed = VoiceCallFeed()
+        feed.onTasks(listOf(view("t0", DeskTaskPhase.Running, "b", recent = listOf("a", "b"), steps = listOf("a", "b"))))
+        // 收集方合并了两批进展:recent 窗口(3 条)已滚过 c,但快照的全程 steps 还带着
+        feed.onTasks(
+            listOf(
+                view(
+                    "t0", DeskTaskPhase.Running, "f",
+                    recent = listOf("d", "e", "f"),
+                    steps = listOf("a", "b", "c", "d", "e", "f"),
+                ),
+            ),
+        )
+        val task = feed.items.value.single() as Task
+        assertEquals(listOf("a", "b", "c", "d", "e", "f"), task.steps)
+    }
+
+    @Test fun `a task first seen mid-run seeds its card with the steps it already has`() {
+        val feed = VoiceCallFeed()
+        feed.onTasks(listOf(view("t0", DeskTaskPhase.Running, "c", recent = listOf("c"), steps = listOf("a", "b", "c"))))
+        val task = feed.items.value.single() as Task
+        assertEquals(listOf("a", "b", "c"), task.steps)
+    }
+
+    @Test fun `a repeated update with no new lines adds no step`() {
+        val feed = VoiceCallFeed()
+        val snapshot = listOf(view("t0", DeskTaskPhase.Running, "打开天气", recent = listOf("打开天气"), steps = listOf("打开天气")))
+        feed.onTasks(snapshot)
+        feed.onTasks(snapshot)
+        val task = feed.items.value.single() as Task
+        assertEquals(listOf("打开天气"), task.steps)
         assertTrue(task.running)
-        assertTrue("上一次留下的行不算这次的步骤", task.steps.isEmpty())
-        feed.onTask(busy = true, lines = old + "打开天气")
-        feed.onTask(busy = true, lines = old + "打开天气" + "读取预报")
-        feed.onTask(busy = false, lines = old + "打开天气" + "读取预报" + "已办完")
-        task = feed.items.value.single() as Task
-        assertEquals(listOf("打开天气", "读取预报", "已办完"), task.steps)
-        assertFalse(task.running)
-        feed.onTask(busy = true, lines = old + "打开天气" + "读取预报" + "已办完")
-        assertEquals("下一次办事另开一张卡", 2, feed.items.value.filterIsInstance<Task>().size)
     }
 
     @Test fun `the feed keeps only the latest items`() {

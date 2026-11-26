@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
+import com.wangzan101.mika.ui.components.MikaTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,8 +61,9 @@ import com.wangzan101.mika.ui.Route
 /** 常用任务共用首页的本地列表；设置入口编辑，聊天入口选取并填入输入框。 */
 @Composable
 fun RecommendedTasksScreen(store: RecommendedTaskStore, onBack: () -> Unit, onPick: ((RecommendedTask) -> Unit)? = null, onOpenChecklists: (() -> Unit)? = null, onOpenWorkflows: (() -> Unit)? = null) {
+    val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
     remember(store) {
-        store.ensureLoaded(seed = { ChatCopy.recommendationSeeds() }, retired = { ChatCopy.retiredRecommendationSeeds() })
+        store.apply { ensureLoaded(seed = { ChatCopy.recommendationSeeds() }, retired = { ChatCopy.retiredRecommendationSeeds(appContext) }) }
     }
     val tasks by store.tasks.collectAsState()
     val unreadable by store.unreadable.collectAsState()
@@ -230,14 +231,14 @@ internal fun RecommendedTaskDialog(store: RecommendedTaskStore, initial: Recomme
         title = { Text(stringResource(if (initial == null) R.string.recommendations_add else R.string.recommendations_edit)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
+                MikaTextField(
                     title, { title = it; error = null },
                     label = { Text(stringResource(R.string.recommendations_title_label)) },
                     singleLine = true,
                     enabled = !saving,
                     modifier = Modifier.fillMaxWidth().testTag("saved-task-title"),
                 )
-                OutlinedTextField(
+                MikaTextField(
                     prompt, { prompt = it; error = null },
                     label = { Text(stringResource(R.string.recommendations_prompt_label)) },
                     minLines = 4,
@@ -265,7 +266,7 @@ internal fun RecommendedTaskDialog(store: RecommendedTaskStore, initial: Recomme
         onDismissRequest = { addingField = false },
         title = { Text(stringResource(R.string.task_field_add)) },
         text = {
-            OutlinedTextField(
+            MikaTextField(
                 fieldName, { fieldName = it }, singleLine = true, enabled = !saving,
                 label = { Text(stringResource(R.string.task_field_name)) },
                 isError = fieldName.isNotEmpty() && !TaskTemplate.validName(fieldName.trim()),

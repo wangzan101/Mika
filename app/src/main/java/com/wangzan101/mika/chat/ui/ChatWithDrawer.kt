@@ -95,6 +95,8 @@ fun ChatWithDrawer(
     onPlans: () -> Unit = {},
     onMemory: () -> Unit = {},
     onBrowser: () -> Unit = {},
+    onTeach: () -> Unit = {},
+    onCalls: () -> Unit = {},
     onScreens: () -> Unit = {},
     onSettings: () -> Unit,
     onAbout: () -> Unit = {},
@@ -111,6 +113,12 @@ fun ChatWithDrawer(
     resetKey: Int = 0,
     content: @Composable (openDrawer: () -> Unit) -> Unit,
 ) {
+    // 聊天页用纯白底,Mika 的回答是靠阴影浮起的白气泡
+    val chatColors = MikaTheme.colors.let { base -> androidx.compose.runtime.remember(base) { base.forChat() } }
+    androidx.compose.runtime.CompositionLocalProvider(
+        com.wangzan101.mika.ui.theme.LocalMikaColors provides chatColors,
+        com.wangzan101.mika.ui.LocalMarkdownLook provides androidx.compose.runtime.remember(chatColors) { chatMarkdownLook(chatColors) },
+    ) {
     val adaptive = LocalAdaptiveLayout.current
     val permanent = adaptive.hasNavigation
     val ui by vm.ui.collectAsState()
@@ -430,6 +438,8 @@ fun ChatWithDrawer(
                     onPlans = { leave(onPlans) },
                     onMemory = { leave(onMemory) },
                     onBrowser = { leave(onBrowser) },
+                    onTeach = { leave(onTeach) },
+                    onCalls = { leave(onCalls) },
                     query = query,
                     onQueryChange = { query = it },
                     search = searchView,
@@ -697,4 +707,5 @@ fun ChatWithDrawer(
     exporting?.let { item ->
         item.id?.let { id -> ExportConversationDialog(id, item.title, onDismiss = { exporting = null }) }
     }
+}
 }

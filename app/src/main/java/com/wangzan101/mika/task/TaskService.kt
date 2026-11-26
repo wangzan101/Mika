@@ -29,6 +29,7 @@ import com.wangzan101.mika.core.run.RunProvenance
 import com.wangzan101.mika.core.run.RunOrigin
 import com.wangzan101.mika.core.run.Attendance
 import com.wangzan101.mika.settings.FeatureFlags
+import com.wangzan101.mika.settings.MikaPause
 import com.wangzan101.mika.takeover.Takeover
 import com.wangzan101.mika.ui.MainActivity
 import com.wangzan101.mika.settings.ui.StatusCopy
@@ -235,6 +236,7 @@ class TaskService : Service() {
             ACTION_CANCEL_MCP -> intent.getStringExtra(EXTRA_MCP_ID)?.let { id -> center.runs().firstOrNull { it.mcpExternalId == id } }
                 ?.let { r -> if (center.cancelIfQueued(r)) cancelQueued(r) else r.cancel() }
             ACTION_CANCEL -> if (run != null && center.cancelIfQueued(run)) cancelQueued(run) else run?.cancel()
+            ACTION_PAUSE_ALL -> stopForPause()
             ACTION_RESUME -> run?.resume()
             ACTION_TAKE_OVER -> run?.takeOver(waitKeyOf(intent))
             ACTION_HAND_BACK -> run?.handBack(waitKeyOf(intent))
@@ -358,6 +360,7 @@ class TaskService : Service() {
         const val ACTION_START_CHANNEL = "com.wangzan101.mika.task.START_CHANNEL"
         const val ACTION_CANCEL_MCP = "com.wangzan101.mika.task.CANCEL_MCP"
         const val ACTION_CANCEL = "com.wangzan101.mika.task.CANCEL"
+        internal const val ACTION_PAUSE_ALL = "com.wangzan101.mika.task.PAUSE_ALL"
         const val ACTION_RESUME = "com.wangzan101.mika.task.RESUME"
         const val ACTION_TAKE_OVER = "com.wangzan101.mika.task.TAKE_OVER"
         const val ACTION_HAND_BACK = "com.wangzan101.mika.task.HAND_BACK"
@@ -463,7 +466,7 @@ class TaskService : Service() {
          */
         fun enqueueFollowUp(context: Context, conversationId: String, messageId: String, text: String,
             source: QueuedSource = QueuedSource.Explicit, startIfIdle: Boolean = true): Boolean {
-            if (text.isBlank() || FeatureFlags.get(context).quitRequested()) return false
+            if (text.isBlank() || FeatureFlags.get(context).quitRequested() || MikaPause.get(context).paused()) return false
             val app = context.applicationContext as? com.wangzan101.mika.MikaApp ?: return false
             val item = QueuedFollowUp(messageId, conversationId, text, System.currentTimeMillis(), source)
             if (!app.followUpQueue.add(item)) return false
@@ -479,7 +482,7 @@ class TaskService : Service() {
 
         /** 打开对话时:这个对话还有排队的下一件、又没有任务在跑,就让服务取一件开始。 */
         fun drainFollowUps(context: Context, conversationId: String) {
-            if (FeatureFlags.get(context).quitRequested()) return
+            if (FeatureFlags.get(context).quitRequested() || MikaPause.get(context).paused()) return
             val app = context.applicationContext as? com.wangzan101.mika.MikaApp ?: return
             if (!app.followUpQueue.contains(conversationId)) return
             runCatching {
@@ -523,6 +526,17 @@ class TaskService : Service() {
             if (state.runs.value.none { it.mcpExternalId == externalId }) return
             context.startService(Intent(context, TaskService::class.java).setAction(ACTION_CANCEL_MCP)
                 .putExtra(EXTRA_MCP_ID, externalId))
+        }
+
+        /**
+         * 用户刚暂停了 Mika(标记已经写好):持久排队清空;服务里还有任务(在跑或排着)就让它全部停下。
+         * 之后服务门口的 [pausedBlocks] 挡住一切新开始。
+         */
+        fun pauseAll(context: Context) {
+            val app = context.applicationContext as? com.wangzan101.mika.MikaApp ?: return
+            app.followUpQueue.clear()
+            if (app.taskState.runs.value.isEmpty()) return
+            runCatching { context.startService(Intent(context, TaskService::class.java).setAction(ACTION_PAUSE_ALL)) }
         }
 
         /** [runKey] 见 [send];应用内的按钮带着屏上那个对话的任务编号,不会落到别的任务上。 */

@@ -116,6 +116,24 @@
 
 微信任务的自动亮屏与解锁另由 `WechatStore.allowUnlock` 授权,默认关闭;授权独立保存在 `unlock.json`,绑定当前 owner 与 bot,缺失、损坏或账号不符都按关闭处理。撤销只删除授权文件,不改消息账本;关闭接收写盘失败时也撤销授权,避免重启恢复可解锁状态。关闭接收时不能解锁,解绑或每次扫码重绑都会撤销授权,同账号重绑仍保留消息账本。`canUnlock` 每次核对当前绑定、微信渠道、主人与线程映射。`taskUnlockAuthorization`(`app/task/TaskUnlockPolicy.kt`)只为定时任务及开跑时已获授权的本人微信任务提供 `TaskGate` 解锁回调;其他来源或未授权任务仍等手动解锁。微信回调在实际解锁时动态复核授权,不会沿用已撤销的权限。此开关不修改 `DeviceAccessSettings.enabled` 或锁屏凭据,仍须满足已有本机设备访问许可,也不改变 `RunOrigin.Channel` 及付款、接管规则。
 
+### 暂停 Mika
+
+用户在设置 › 「暂停 Mika」里亲手让 Mika 整个停下,直到亲手恢复。界面只承诺下面这些,不说别的 App 会怎样。
+
+- **唯一的真相来源**:`MikaPause`(`app/settings/MikaPause.kt`)一个持久标记,先同步写盘(`commit`)再改内存,写不进去就什么都不动、界面照实说。各处只读它(core 里经 `PauseFlag`,`core/run/PauseFlag.kt`),不各自另存;内置助手的 `BuiltinShellStatus.Paused` 只是它的投影(`BuiltinShellEngine.pauseChanged` 只通知引擎重新投影,引擎每次都现读标记)。进程被杀后重启读到的就是最后一次写成的。
+- **暂停做什么**(`MikaPauseControl.pause`,`app/settings/MikaPauseControl.kt`):先写标记;`TaskService.pauseAll` 清空持久排队、停下在跑和排着的任务(排着的记已取消,在跑的走正常取消,收尾时各自了结定时、电脑、工作流和渠道);`WorkflowRuntime.haltForPause` 让在进行的工作流到下一步就停;停下内置助手和配对监听;关掉 Mika 的无障碍服务(服务在跑时 `disableSelf`,否则请用户去系统设置)和无线调试(有修改系统设置的授权时写开关,否则请用户去开发者选项)。配对钥匙、端口缓存和「已配对」标记一律不动。
+- **暂停期间挡住的入口**(都在发起处和异步交接处重读标记):
+  - 任务服务门口:`TaskService.begin/startNew`(`pausedBlocks` → `finishPausedStart`)、排队取下一件(`drainReady`)、`queueFollowUp`/`deferMessage`、`enqueueFollowUp`/`drainFollowUps`。被挡的请求各自了结,不留到恢复后自动跑。
+  - 对话界面发送(`ChatSendOps.send`):提示已暂停,不入队。
+  - 定时(`TriggerEngine.fire`、`TriggerRuntime.checked`):到期的窗口记为跳过(`PauseFlag.REASON`,计划页显示「Mika 暂停期间跳过」),推进到下一次,恢复后不补跑;「立即执行」报错。
+  - 渠道(`ChannelGateway`):新消息不开任务也不留暗队列,经 `Outbox` 回一句「Mika 已暂停,这条没有开始办」(编号 `paused:<渠道>:<消息>`),记下了才确认收到;记不下不确认,渠道稍后重交时再回。暂停期间的确认回复不处理。
+  - 电脑交来的任务(`RemoteTaskHub.launch/startOwned`):报 `UNAVAILABLE` 和一句说明,不开始也不排队。
+  - 工作流(`WorkflowRuntime.start/resume/resolve`):报 `WorkflowProblem.Paused`;派下一步前(`advance`)再查一次。
+  - 内置助手:看门狗、重试、配对发现与配对、Wi-Fi/无线调试变化都不起助手;电脑晚交接来的助手(`HelperHub.offer` 回 `Reject.Paused`,引擎收到时也当场停掉)和 Shizuku 绑定都拒绝;暂停期间不读配对码、不弹配对通知。
+  - 自动修复(`BuiltinShellRecovery`、`RecoveryPermissions`、`AccessibilityRepair`):不重开无障碍、不应用待开的能力、开机不自动恢复;无障碍重启的间隙里用户暂停了就不再加回。
+- **恢复**(`MikaPauseControl.resume`):先清标记;助手配对过且能写开关时打开无线调试,助手按已有配对重连,不用新的配对码。暂停期间跳过的定时、回绝的消息和任务都不补跑;停在「已暂停」的工作流由用户点继续。安卓不允许 App 替自己打开无障碍服务,恢复页把它和其他 App 做不了的步骤列成直达系统设置的按钮(`planResumeSteps`)。
+- 不挡的:来电待命与主动学习不在暂停范围内(暂停只承诺上面这些)。
+
 ### 进程重启后
 
 - `RunRecovery`(`app/task/RunRecovery.kt`)是运行善后的单一入口,对象是「中断了、还没告知过用户」的运行。两个时机:进程重启后,`MikaApp.onCreate` 一起来就调 `recover`(`TaskService.onCreate` 也调,但进程里只有第一次生效,后到的什么都不做);任务服务被销毁而进程还在时,`TaskService.onDestroy` 标中断后当场调 `settleInterrupted`,不等下次启动(善后用 App 级作用域,服务没了也做完;启动时的扫描再接住当场没做完就被杀的)。标记在调用里同步做完(`RunStore.interruptUnfinished()` 把没结束的运行标为 Interrupted,此刻在跑的运行经 `live` 排除),善后在后台做:回复已存但没送达的补送一次(注明是恢复的);送达状态不明的不重发,只提示「上次结果可能已送达」;没有回复的,发「运行中断,可在对话里重新发起」的系统通知,并往对话记一轮失败状态的记录「任务中断了,可以重新发起」(和其他失败结果同一套,界面上显示为未完成的一轮)。**「已告知」不另设字段,看送达账本**:有 `interrupted:<运行>`、`uncertain:<送达>`、`failed:<送达>` 任一条提示记录就不再处理;回复送达了的运行转为 Ended。所以重复调用、两个时机撞上都只告知一次。**从不从中间续跑**:屏幕状态回不去。
@@ -335,6 +353,7 @@ The MCP client passes each connected server's `instructions` to the model as bou
 - **调度**(`app/task/TriggerRuntime.kt`):系统闹钟只是唤醒信号,`FileTriggerStore` 是真源。主计划文件保持旧 schema,新增的观测值、基准、通知方式、冷却和多钟点列表放在旁边的 `.conditions` sidecar;旧版本仍能读主计划（多钟点降级为首个钟点）,sidecar 损坏只丢掉扩展状态,不会清空整份计划。派发前先写好下次时间和这一次的窗口(编号 = 触发器 + 到期时间),同一窗口不会派发两次。这一次的窗口已经记过账的计划不再认领,`rearm` 也不为它排闹钟(判断条件和认领时查账本的条件相同,见 `slotTaken`):按过期的到期时间排就是马上响,响了又认领不了,会一直空转。能用精确闹钟就用,没有权限时第一次会发通知引导用户去系统设置打开,`schedule_task` 的结果也告诉模型「可能不准时」;计划页显示提示。开机、改时间、改时区、精确闹钟权限变化时重新布置(`app/setup/BootRestoreReceiver.kt`),App 启动时也会。设备时区记在 `triggers` 里(`TriggerRuntime.syncTimeZone`):改时区时、App 启动时(关着时改了时区也补上;第一次只记下当前的)和记下的比,变了就把跟随旧设备时区的当地时间计划改到新时区重算(`TriggerEngine.rezone`),明确钉了别的时区的不动。
 - **结果回原对话**:到点的任务就在创建它的对话里运行,结果、提醒和失败说明都写回那个对话,通知点开就是它。
 - **运行时长与连续失败**:设置 › 任务运行里的「定时任务最长运行时间」(`FeatureFlags.triggerRunMinutes`,15 / 30 / 60 / 120 分钟,默认不限制):定时触发的运行(含条件检查)跑过这个时间就停下,结局记 `FailKind.TimeLimit`,和 Token 预算用完一样不算进技能灵不灵。结果通知发出前按这个计划自己的时段记录往前数接连失败了几次(`failureStreakBefore`,送达过或结果不明就停,条件没满足而跳过的不算),连上这次到 3 次及以上时通知标题写明「已连续失败 N 次」,正文末尾提醒可以去定时任务页暂停或修改。
+- **暂停 Mika 时**:到期的窗口一律记为跳过(`PauseFlag.REASON`),照常推进到下一次;`whenIdle` 的也不等恢复;恢复后不补跑(见 §2「暂停 Mika」)。
 - **进程中途被杀**:提醒重新送达(按编号去重);其他已认领的窗口标为结果不明,在原对话里说明并通知「Mika 不会自动重复操作」。
 - **计划页**(`app/task/ui/PlansScreen.kt`):分「进行中」「已停用」两段,每条三行(做什么、重复规则与下次时间或状态、上次结果:跳过的分「条件未满足」「条件未变化」「冷却期内」,那次检查记下了值时一起显示),右边开关即暂停与恢复;点一行升起操作面板:看对话、立即执行、编辑、删除；右上角可以直接新建。编辑器的每天/每周时刻支持逗号分隔，并预览接下来三次。
 

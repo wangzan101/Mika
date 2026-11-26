@@ -368,7 +368,7 @@ class MainActivity : ComponentActivity() {
             Fix.OpenPairingChannel -> openChannelSettings(PairingNotifier.ensureChannel(this).id)
             Fix.AddModel -> Unit // 设置页自己处理
             // 换页由 MikaRoot 处理
-            Fix.OpenPhoneSetup, Fix.OpenPhoneOps, Fix.RepairPhoneHelper, Fix.OpenBankingMode -> Unit
+            Fix.OpenPhoneSetup, Fix.OpenPhoneOps, Fix.RepairPhoneHelper, Fix.OpenPause -> Unit
             Fix.RetryPhoneHelper -> phone.pairing.scope.launch {
                 phone.sharedShell.reconnect()
                 phone.shellControl.retry()
@@ -519,8 +519,8 @@ private fun MikaRoot(
                 openPhoneOps = true
                 nav.push(Route.Settings)
             }
-            // 银行模式住在设置页里:打开设置首页,那一行就在最上面。
-            Fix.OpenBankingMode -> nav.push(Route.Settings)
+            // 「暂停 Mika」住在设置页里:打开设置首页,那一行就在手机操作下面。
+            Fix.OpenPause -> nav.push(Route.Settings)
             else -> activityFix(fix)
         }
     }

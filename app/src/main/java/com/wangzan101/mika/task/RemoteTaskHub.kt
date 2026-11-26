@@ -11,6 +11,7 @@ import com.wangzan101.mika.core.mcp.McpTaskLink
 import com.wangzan101.mika.core.remote.RemoteSteer
 import com.wangzan101.mika.core.remote.RemoteTask
 import com.wangzan101.mika.core.remote.RemoteTaskError
+import com.wangzan101.mika.settings.MikaPause
 import com.wangzan101.mika.core.remote.RemoteTaskFiles
 import com.wangzan101.mika.core.remote.RemoteTaskPage
 import com.wangzan101.mika.core.remote.RemoteTaskService
@@ -74,6 +75,8 @@ class RemoteTaskHub(
 
     private fun startOwned(owner: String?, goal: String, conversation: String?, requestId: String?, attachments: List<String>): StartOutcome = try {
         val id = requestId ?: UUID.randomUUID().toString()
+        // 带附件的要先用掉上传的文件:暂停时在这之前就拒,文件留着,恢复后同一请求还能再发
+        if (attachments.isNotEmpty()) refuseWhilePaused()
         val task = if (attachments.isEmpty()) launch(owner, id, goal, conversation, Attendance.Reachable)
             else startWithFiles(owner, id, goal, conversation, attachments)
         StartOutcome.Started(task)
@@ -105,6 +108,7 @@ class RemoteTaskHub(
         if (owner != null && conversation != null && !receipts.conversationAvailable(conversation, owner))
             throw RemoteTaskError.General(RemoteTaskError.Code.NOT_FOUND, "Conversation not found")
         receipts.find(id, goal, conversation, fileRequest, owner)?.let { return current(it) }
+        refuseWhilePaused()
         val task = RemoteTask(id, target ?: RemoteTaskService.newConversation(), goal, clock(), null, owner = owner)
         receipts.insert(task, newChat = conversation == null, fileRequest = fileRequest)
         try { TaskService.startMcp(context, goal, task.conversation, id, attendance) }
@@ -113,6 +117,11 @@ class RemoteTaskHub(
             throw e
         }
         return task
+    }
+
+    /** 用户在手机上暂停了 Mika:不记回执、不排队,明确拒绝;恢复后要电脑重新发。 */
+    private fun refuseWhilePaused() {
+        if (MikaPause.get(context).paused()) throw RemoteTaskError.General(RemoteTaskError.Code.UNAVAILABLE, PAUSED_MESSAGE)
     }
 
     fun claimStart(id: String): Boolean = try {
@@ -220,8 +229,10 @@ class RemoteTaskHub(
         buses.remove(RunId(id))?.event(RunEvent.State(clock(), "mcp_task_ended", end::class.simpleName.orEmpty()))
     }
 
-    private companion object {
-        const val TAG = "MikaMcp"
+    internal companion object {
+        private const val TAG = "MikaMcp"
+        /** 给电脑看的拒绝原因(和其它 MCP 报错一样用英文)。 */
+        const val PAUSED_MESSAGE = "Mika is paused on the phone, so it did not start or queue this task. Resume Mika on the phone, then send the task again."
         const val LOST_MS = 2 * 60_000L
     }
 }

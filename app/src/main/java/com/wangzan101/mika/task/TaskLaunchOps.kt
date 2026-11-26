@@ -65,6 +65,10 @@ internal fun TaskService.begin(newGoal: String, requestedConversation: String?,
     triggerActionGoal: String? = null, triggerThreadId: String? = null, mcpExternalId: String? = null, messageId: String? = null,
     channelPeer: ChannelPeer? = null, channelMessageId: String? = null, triggerCondition: String? = null, workflowAttemptId: String? = null,
     brief: String? = null) {
+    if (pausedBlocks()) {
+        finishPausedStart(provenance, triggerKey, mcpExternalId, workflowAttemptId, channelPeer, channelMessageId, followUp = null)
+        return
+    }
     if (teachingBlocks()) {
         finishRejectedStart(triggerKey, mcpExternalId)
         if (provenance.origin == RunOrigin.Ui) {
@@ -110,6 +114,10 @@ internal fun TaskService.startNew(newGoal: String, requestedConversation: String
     followUp: QueuedFollowUp? = null, triggerCondition: String? = null,
     channelPeer: ChannelPeer? = null, channelMessageId: String? = null, workflowAttemptId: String? = null,
     brief: String? = null) {
+    if (pausedBlocks()) {
+        finishPausedStart(provenance, triggerKey, mcpExternalId, workflowAttemptId, channelPeer, channelMessageId, followUp)
+        return
+    }
     if (teachingBlocks()) {
         finishRejectedStart(triggerKey, mcpExternalId)
         if (followUp != null) center.followUps.add(followUp)

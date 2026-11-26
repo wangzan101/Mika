@@ -1,5 +1,6 @@
 package com.wangzan101.mika.settings.ui
 
+import android.content.Context
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
@@ -18,7 +19,9 @@ import com.wangzan101.mika.R
 import com.wangzan101.mika.cap.phone.PhoneServices
 import com.wangzan101.mika.cap.phone.a11y.ScreenAccessibility
 import com.wangzan101.mika.core.device.shell.BuiltinShellStatus
-import com.wangzan101.mika.settings.BankingMode
+import com.wangzan101.mika.settings.MikaPause
+import com.wangzan101.mika.settings.MikaPauseControl
+import com.wangzan101.mika.settings.PauseResult
 import com.wangzan101.mika.settings.ResumeStep
 import com.wangzan101.mika.settings.planResumeSteps
 import com.wangzan101.mika.ui.components.GroupCard
@@ -34,33 +37,29 @@ import com.wangzan101.mika.ui.theme.MikaTheme
 import com.wangzan101.mika.ui.theme.MikaType
 
 /**
- * Banking mode: pause Mika so a bank app opens, then resume it.
+ * 「暂停 Mika」页:一键停下 Mika 的全部工作,再一键恢复。
  *
- * Some banking apps refuse to open while either the accessibility service or
- * wireless debugging is on. Pause turns both off and stops the phone helper;
- * the wireless-debugging pairing stays saved, so resume reconnects with it and
- * needs no new pairing code. Android does not let an app turn its own
- * accessibility service back on, so resume lists that step for the user to tap
- * in system settings. State is read fresh from the system every time the helper
- * or the accessibility service changes, never assumed.
+ * 暂停停下任务、挡住新任务和定时、关掉 Mika 的无障碍服务和无线调试、停下内置助手;无线调试的配对留着,
+ * 恢复时直接重连,不用新的配对码。安卓不允许 App 替自己打开无障碍服务,恢复后把它列成一步交给用户。
+ * 每当暂停标记、助手状态或无障碍实例变了都重读系统,界面永远是实测,不是上次记的。
  */
 @Composable
-fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
+fun PauseScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
     val context = LocalContext.current
-    val mode = remember { BankingMode.create(context) }
+    val control = remember { MikaPauseControl.create(context) }
     val phone = remember { PhoneServices.of(context) }
-    // 助手状态或无障碍实例一变就重读系统状态:界面永远是实测,不是上次记的。
+    val paused by MikaPause.get(context).state.collectAsState()
     val shellStatus by phone.shellControl.status.collectAsState()
     val a11yInstance by ScreenAccessibility.instance.collectAsState()
-    var state by remember { mutableStateOf(mode.snapshot()) }
+    var state by remember { mutableStateOf(control.snapshot()) }
     var notice by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(shellStatus, a11yInstance) { state = mode.snapshot() }
+    LaunchedEffect(paused, shellStatus, a11yInstance) { state = control.snapshot() }
 
     val helperText = when (state.helper) {
-        BuiltinShellStatus.Running -> stringResource(R.string.banking_helper_running)
-        BuiltinShellStatus.Paused -> stringResource(R.string.banking_helper_paused)
-        BuiltinShellStatus.Connecting -> stringResource(R.string.banking_helper_connecting)
-        else -> stringResource(R.string.banking_helper_not_running)
+        BuiltinShellStatus.Running -> stringResource(R.string.pause_helper_running)
+        BuiltinShellStatus.Paused -> stringResource(R.string.pause_helper_paused)
+        BuiltinShellStatus.Connecting -> stringResource(R.string.pause_helper_connecting)
+        else -> stringResource(R.string.pause_helper_not_running)
     }
     val helperTone = when (state.helper) {
         BuiltinShellStatus.Running -> ValueTone.Ok
@@ -72,30 +71,30 @@ fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
     // 没暂停时,按真实状态算出恢复后还剩哪些步骤要用户亲手做。
     val resumeSteps = if (state.paused) emptyList() else planResumeSteps(state)
 
-    PageScaffold(stringResource(R.string.banking_title), onBack) {
+    PageScaffold(stringResource(R.string.pause_title), onBack) {
         StateCard(
-            MikaIcons.Shield,
-            stringResource(if (state.paused) R.string.banking_paused_title else R.string.banking_active_title),
-            stringResource(if (state.paused) R.string.banking_paused_body else R.string.banking_active_body),
+            MikaIcons.Power,
+            stringResource(if (state.paused) R.string.pause_paused_title else R.string.pause_active_title),
+            stringResource(if (state.paused) R.string.pause_paused_body else R.string.pause_active_body),
             if (state.paused) TileTone.Ok else TileTone.Warn,
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            stringResource(R.string.banking_explain),
+            stringResource(R.string.pause_explain),
             style = MikaType.Caption, color = MikaTheme.colors.ink2,
         )
         Spacer(Modifier.height(12.dp))
 
-        GroupLabel(stringResource(R.string.banking_title))
+        GroupLabel(stringResource(R.string.pause_status_label))
         GroupCard {
             ListRow(
-                MikaIcons.Shield, stringResource(R.string.banking_a11y_label), null, first = true,
+                MikaIcons.Shield, stringResource(R.string.pause_a11y_label), null, first = true,
             ) { RowValue(a11yText, a11yTone) }
             ListRow(
-                MikaIcons.Wrench, stringResource(R.string.banking_wireless_label), null,
-            ) { RowValue(wirelessText, if (state.wirelessDebugging) ValueTone.Bad else ValueTone.Ok) }
+                MikaIcons.Wrench, stringResource(R.string.pause_wireless_label), null,
+            ) { RowValue(wirelessText, if (state.paused && state.wirelessDebugging) ValueTone.Bad else ValueTone.Plain) }
             ListRow(
-                MikaIcons.Phone, stringResource(R.string.banking_helper_label), null,
+                MikaIcons.Phone, stringResource(R.string.pause_helper_label), null,
             ) { RowValue(helperText, helperTone) }
         }
         Spacer(Modifier.height(12.dp))
@@ -103,41 +102,27 @@ fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
         GroupCard {
             if (state.paused) {
                 ListRow(
-                    MikaIcons.Power, stringResource(R.string.banking_resume),
-                    stringResource(R.string.banking_resume_sub), first = true,
+                    MikaIcons.Power, stringResource(R.string.pause_resume),
+                    stringResource(R.string.pause_resume_sub), first = true,
                     onClick = {
-                        val result = mode.resume()
-                        state = mode.snapshot()
-                        notice = if (result.steps.isEmpty()) {
-                            context.getString(R.string.banking_resumed)
-                        } else {
-                            null
+                        val result = control.resume()
+                        state = control.snapshot()
+                        notice = when {
+                            result == null -> context.getString(R.string.pause_save_failed)
+                            result.steps.isEmpty() -> context.getString(R.string.pause_resumed)
+                            else -> null
                         }
                     },
                 ) { }
             } else {
                 ListRow(
-                    MikaIcons.Power, stringResource(R.string.banking_pause),
-                    stringResource(R.string.banking_pause_sub), first = true,
+                    MikaIcons.Power, stringResource(R.string.pause_action),
+                    stringResource(R.string.pause_action_sub), first = true,
                     onClick = {
-                        val result = mode.pause()
-                        state = mode.snapshot()
-                        notice = buildString {
-                            if (result.tasksStopped) append(context.getString(R.string.banking_task_stopped))
-                            if (result.readyForBanking) {
-                                if (isNotEmpty()) append(" ")
-                                append(context.getString(R.string.banking_paused_body))
-                            } else {
-                                if (result.accessibilityNeedsManual) {
-                                    if (isNotEmpty()) append(" ")
-                                    append(context.getString(R.string.banking_a11y_manual))
-                                }
-                                if (result.wirelessNeedsManual) {
-                                    if (isNotEmpty()) append(" ")
-                                    append(context.getString(R.string.banking_wireless_manual))
-                                }
-                            }
-                        }.takeIf { it.isNotEmpty() }
+                        val result = control.pause()
+                        state = control.snapshot()
+                        notice = result?.let { pauseNotice(context, it) }
+                            ?: context.getString(R.string.pause_save_failed)
                     },
                 ) { }
             }
@@ -147,7 +132,7 @@ fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
         if (!state.paused && resumeSteps.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Text(
-                stringResource(R.string.banking_resume_note),
+                stringResource(R.string.pause_resume_note),
                 style = MikaType.Caption, color = MikaTheme.colors.ink2,
             )
             Spacer(Modifier.height(12.dp))
@@ -155,11 +140,11 @@ fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
                 resumeSteps.forEachIndexed { index, step ->
                     val (icon, label, fix) = when (step) {
                         ResumeStep.OpenAccessibilitySettings ->
-                            Triple(MikaIcons.Shield, stringResource(R.string.banking_step_a11y), Fix.OpenAccessibility)
+                            Triple(MikaIcons.Shield, stringResource(R.string.pause_step_a11y), Fix.OpenAccessibility)
                         ResumeStep.OpenWirelessDebuggingPage ->
-                            Triple(MikaIcons.Wrench, stringResource(R.string.banking_step_wireless), Fix.OpenWirelessDebugging)
+                            Triple(MikaIcons.Wrench, stringResource(R.string.pause_step_wireless), Fix.OpenWirelessDebugging)
                         ResumeStep.RePairHelper ->
-                            Triple(MikaIcons.Phone, stringResource(R.string.banking_step_repair), Fix.OpenPhoneSetup)
+                            Triple(MikaIcons.Phone, stringResource(R.string.pause_step_repair), Fix.OpenPhoneSetup)
                     }
                     ListRow(
                         icon, label, null, first = index == 0,
@@ -176,7 +161,7 @@ fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
             Spacer(Modifier.height(12.dp))
             GroupCard {
                 ListRow(
-                    MikaIcons.Refresh, stringResource(R.string.banking_reconnect), null, first = true,
+                    MikaIcons.Refresh, stringResource(R.string.pause_reconnect), null, first = true,
                     onClick = { onFix(Fix.RetryPhoneHelper) },
                 ) { }
             }
@@ -188,3 +173,11 @@ fun BankingScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
         }
     }
 }
+
+/** 暂停做完后的一句交代:停了任务就先说;没关掉的逐项说要用户去哪里关。 */
+private fun pauseNotice(context: Context, result: PauseResult): String = buildList {
+    if (result.tasksStopped) add(context.getString(R.string.pause_tasks_stopped))
+    if (result.complete) add(context.getString(R.string.pause_done))
+    if (result.accessibilityNeedsManual) add(context.getString(R.string.pause_a11y_manual))
+    if (result.wirelessNeedsManual) add(context.getString(R.string.pause_wireless_manual))
+}.joinToString(" ")

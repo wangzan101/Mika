@@ -162,6 +162,9 @@ class ChatViewModel(
     /** 正在跟用户学习时不另开任务，也不把这句话记成已经开始。 */
     internal val teaching: () -> Boolean = { false },
     internal val onTeachingBlocked: () -> Unit = {},
+    /** 用户暂停了 Mika:这句话不发出去(不进前台、不开任务),提示一声。 */
+    internal val paused: () -> Boolean = { false },
+    internal val onPausedBlocked: () -> Unit = {},
     /** 朗读一条回答;没配置声音模型时不做。 */
     private val speakText: suspend (String) -> Unit = {},
     private val stopVoice: () -> Unit = {},

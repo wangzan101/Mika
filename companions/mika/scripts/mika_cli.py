@@ -27,7 +27,8 @@ import uuid
 VERSION = "0.1.0"
 API = "/api/v1"
 DEFAULT_PACKAGE = "com.wangzan101.mika"
-SCREEN_INSPECT = "com.wangzan101.mika.cap.phone.shell.ScreenInspect"
+# Stable entry point kept in the APK for the CLI; internal classes behind it may move.
+SCREEN_INSPECT = "com.wangzan101.mika.shell.ScreenInspectMain"
 SCREEN_ERRORS = {
     "connect_failed": "Another UI automation session is using the phone. Close it and retry.",
     "unsupported": "This Android version does not offer a non-suppressing UI automation connection.",
@@ -180,6 +181,17 @@ class Adb:
         # server_port None leaves adb's own choice (5037, or ANDROID_ADB_SERVER_PORT) untouched.
         self.executable, self.device, self.server_port = executable, device, server_port
         self.base = [executable] + (["-P", str(server_port)] if server_port is not None else [])
+
+    def run_raw(self, *args, timeout=20):
+        """Run adb and return the completed process without judging its exit code; callers must not echo the output."""
+        prefix = self.base + (["-s", self.device] if self.device else [])
+        try:
+            return subprocess.run(prefix + list(args), stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=timeout)
+        except OSError:
+            raise adb_unavailable() from None
+        except subprocess.TimeoutExpired:
+            raise CliError("adb", "ADB did not complete; check the selected phone's connection.") from None
 
     def run(self, *args, timeout=20):
         prefix = self.base + (["-s", self.device] if self.device else [])
@@ -548,17 +560,31 @@ def inspect_screen(args):
     # Runs as the shell user, so only the device's own accessibility API is used; nothing on screen is changed.
     command = "CLASSPATH=" + shlex.quote(apk) + " app_process /system/bin " + SCREEN_INSPECT
     progress(args, "reading the screen...")
-    try:
-        raw = adb.run("exec-out", command, timeout=30)
-        if len(raw.encode("utf-8")) > MAX_RESPONSE:
-            raise ValueError("response too large")
-        result = json.loads(raw)
-    except CliError as exc:
-        if exc.code != "adb":
-            raise
-        raise CliError("screen_unavailable", "The installed Mika cannot read the screen over ADB. Update Mika on the phone.") from None
-    except ValueError:
-        raise CliError("screen_unavailable", "The phone returned an unreadable screen.") from None
+    # exec-out has no separate stderr or reliable exit status on every adb version: the phone's error text arrives
+    # mixed into stdout. Only a final line holding the entry point's JSON object counts as an answer.
+    process = adb.run_raw("exec-out", command, timeout=30)
+    output = process.stdout or ""
+    if len(output.encode("utf-8", errors="replace")) > MAX_RESPONSE:
+        raise CliError("screen_unavailable", "The phone returned a screen larger than the CLI accepts.", reason="too_large")
+    lines = [line for line in output.splitlines() if line.strip()]
+    result = None
+    if lines and lines[-1].lstrip().startswith("{"):
+        try:
+            result = json.loads(lines[-1])
+        except ValueError:
+            result = None
+    if not isinstance(result, dict):
+        result = None
+    is_error = result is not None and result.get("status") == "error"
+    if result is None or (process.returncode and not is_error):
+        text = (output + "\n" + (process.stderr or "")).lower()
+        if "classnotfoundexception" in text or "could not find class" in text:
+            raise CliError("screen_unavailable", "The installed Mika cannot read the screen over ADB. Update Mika on the phone.",
+                           reason="outdated_app")
+        if process.returncode:
+            raise CliError("screen_unavailable", "ADB could not run the screen reader on the phone (exit code %d). "
+                           "Check the selected device and retry." % process.returncode, reason="adb_failed")
+        raise CliError("screen_unavailable", "The phone returned output that is not a screen result.", reason="unreadable")
     if isinstance(result, dict) and result.get("status") == "error":
         reason = result.get("code") if result.get("code") in SCREEN_ERRORS else "screen_unavailable"
         raise CliError("screen_unavailable", SCREEN_ERRORS.get(reason, "The phone could not read the screen."), reason=reason)

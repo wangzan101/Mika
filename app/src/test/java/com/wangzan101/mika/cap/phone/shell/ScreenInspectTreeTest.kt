@@ -118,4 +118,37 @@ class ScreenInspectTreeTest {
         assertFalse(untouched.truncated)
         assertEquals(JsonNull, ScreenInspectTree.plain(null, untouched))
     }
+
+    @Test
+    fun totalOutputIsCappedAcrossTreesAndNamesTheReason() {
+        // 每个控件 220 + 100 个字符;上限只够 3 个
+        val budget = InspectBudget(maxOutput = 3 * (ScreenInspectTree.NODE_OVERHEAD + 100) + 50)
+        val text = "x".repeat(100)
+        val first = ScreenInspectTree.node(FakeNode(text = text, className = null, kids = List(5) { FakeNode(text = text, className = null) }), budget)!!
+        assertEquals(2, first.children().size)
+        assertEquals(3, budget.nodes)
+        assertEquals(listOf(ScreenInspectTree.CUT_OUTPUT), budget.truncatedBy.toList())
+        assertTrue(budget.output <= budget.maxOutput)
+        // 同一次读屏的下一个窗口也不再读,取过的节点都交还
+        assertNull(ScreenInspectTree.node(FakeNode(text = text), budget))
+        assertEquals(fetched.size + 2, released.size)
+        // 每段文字都在单段上限内,截断原因只有总输出
+        assertFalse(ScreenInspectTree.CUT_TEXT in budget.truncatedBy)
+    }
+
+    @Test
+    fun truncationReasonsAreRecordedInOrder() {
+        val budget = InspectBudget(maxNodes = 1, maxText = 2)
+        ScreenInspectTree.node(FakeNode(text = "long", kids = listOf(FakeNode())), budget)
+        assertEquals(listOf(ScreenInspectTree.CUT_TEXT, ScreenInspectTree.CUT_NODES), budget.truncatedBy.toList())
+    }
+
+    @Test
+    fun focusedThenActiveWindowsAreReadFirstOtherwiseInSystemOrder() {
+        data class W(val name: String, val focused: Boolean = false, val active: Boolean = false)
+        val windows = listOf(W("bar"), W("app", active = true), W("ime"), W("dialog", focused = true), W("nav"))
+        val order = ScreenInspectTree.windowOrder(windows, { it.focused }, { it.active }).map { it.name }
+        assertEquals(listOf("dialog", "app", "bar", "ime", "nav"), order)
+        assertEquals(order, ScreenInspectTree.windowOrder(windows, { it.focused }, { it.active }).map { it.name })
+    }
 }

@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.util.concurrent.TimeoutException
@@ -28,7 +29,8 @@ import kotlin.system.exitProcess
 
 /**
  * 只读读屏的 shell 入口:电脑经已授权的 ADB 运行
- * `CLASSPATH=<Mika base.apk> app_process /system/bin com.wangzan101.mika.cap.phone.shell.ScreenInspect`,
+ * `CLASSPATH=<Mika base.apk> app_process /system/bin com.wangzan101.mika.shell.ScreenInspectMain`
+ * (稳定入口,只转到这里;CLI 只认那个全名),
  * 标准输出打一行 JSON(各显示屏的窗口和控件树,每个窗口带 `display_id`)。
  *
  * 只在 shell 身份(uid 2000)下运行。`UiAutomation` 一律用 [UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES] 连接:
@@ -100,8 +102,10 @@ object ScreenInspect {
             val budget = InspectBudget()
             val displays = windowsByDisplay(automation)
             val windows = buildJsonArray {
-                for ((displayId, list) in displays) {
-                    for (window in list) add(window(displayId, window, budget))
+                // 获得焦点的、活动的窗口先读,总预算不够时截掉的是其余窗口
+                val all = displays.flatMap { (displayId, list) -> list.map { displayId to it } }
+                for ((displayId, window) in ScreenInspectTree.windowOrder(all, { it.second.isFocused }, { it.second.isActive })) {
+                    add(window(displayId, window, budget))
                 }
             }
             return buildJsonObject {
@@ -111,6 +115,7 @@ object ScreenInspect {
                 put("captured_at_uptime_ms", SystemClock.uptimeMillis())
                 put("node_count", budget.nodes)
                 put("truncated", budget.truncated)
+                put("truncated_by", buildJsonArray { for (reason in budget.truncatedBy) add(reason) })
                 put("windows", windows)
             }
         } finally {
@@ -129,16 +134,19 @@ object ScreenInspect {
 
     private fun window(displayId: Int, window: AccessibilityWindowInfo, budget: InspectBudget): JsonObject {
         val rect = Rect().also(window::getBoundsInScreen)
-        val root = window.root
         return buildJsonObject {
             put("display_id", displayId)
             put("id", window.id)
             put("type", window.type)
-            put("title", ScreenInspectTree.plain(window.title, budget))
+            val title = ScreenInspectTree.plain(window.title, budget)
+            put("title", title)
             put("bounds", ScreenInspectTree.bounds(intArrayOf(rect.left, rect.top, rect.right, rect.bottom)))
             put("active", window.isActive)
             put("focused", window.isFocused)
-            put("root", root?.let { ScreenInspectTree.node(A11yInspectNode(it), budget) } ?: JsonNull)
+            // 窗口本身也算进总输出;超了就只留窗口信息,不读控件树
+            val room = budget.charge(ScreenInspectTree.NODE_OVERHEAD + ((title as? JsonPrimitive)?.contentOrNull?.length ?: 0))
+            val tree = if (room) window.root?.let { ScreenInspectTree.node(A11yInspectNode(it), budget) } else null
+            put("root", tree ?: JsonNull)
         }
     }
 

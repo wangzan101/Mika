@@ -15,7 +15,7 @@
     <string name="pause_resume">恢復 Mika</string>
     <string name="pause_resume_sub">用已儲存的配對重新連接手機助手</string>
     <string name="pause_resumed">Mika 已恢復。</string>
-    <string name="pause_resume_note">有幾項 Mika 沒能自己重新開啟，請按下面的步驟完成。不需要新的配對碼：手機助手會用已儲存的配對重新連接。</string>
+    <string name="pause_resume_note">有幾項 Mika 沒能自己重新開啟，請按下面的步驟完成。</string>
     <string name="pause_a11y_restoring">正在重新開啟 Mika 的無障礙…</string>
     <string name="pause_a11y_label">無障礙</string>
     <string name="pause_wireless_label">無線偵錯</string>

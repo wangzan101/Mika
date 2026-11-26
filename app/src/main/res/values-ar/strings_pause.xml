@@ -15,7 +15,7 @@
     <string name="pause_resume">استئناف Mika</string>
     <string name="pause_resume_sub">إعادة توصيل الأداة المساعدة بالإقران المحفوظ</string>
     <string name="pause_resumed">عاد Mika إلى العمل.</string>
-    <string name="pause_resume_note">لم يتمكّن Mika من إعادة تشغيل كل شيء بنفسه. أكمل الخطوات أدناه. لا حاجة إلى رمز إقران جديد: يعيد المساعد الاتصال بالإقران المحفوظ.</string>
+    <string name="pause_resume_note">لم يتمكّن Mika من إعادة تشغيل كل شيء بنفسه. أكمل الخطوات أدناه.</string>
     <string name="pause_a11y_restoring">جارٍ إعادة تشغيل خدمة إمكانية الوصول في Mika…</string>
     <string name="pause_a11y_label">خدمة تسهيل الاستخدام</string>
     <string name="pause_wireless_label">تصحيح الأخطاء اللاسلكي</string>

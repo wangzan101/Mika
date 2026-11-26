@@ -15,7 +15,7 @@
     <string name="pause_resume">Reanudar Mika</string>
     <string name="pause_resume_sub">Reconectar el asistente con la vinculación guardada</string>
     <string name="pause_resumed">Mika vuelve a estar activo.</string>
-    <string name="pause_resume_note">Mika no pudo volver a activarlo todo por sí sola. Completa los pasos de abajo. No necesitas un código de vinculación nuevo: el asistente se reconecta con la vinculación ya guardada.</string>
+    <string name="pause_resume_note">Mika no pudo volver a activarlo todo por sí sola. Completa los pasos de abajo.</string>
     <string name="pause_a11y_restoring">Volviendo a activar el servicio de accesibilidad de Mika…</string>
     <string name="pause_a11y_label">Servicio de accesibilidad</string>
     <string name="pause_wireless_label">Depuración inalámbrica</string>

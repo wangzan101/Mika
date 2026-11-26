@@ -15,7 +15,7 @@
     <string name="pause_resume">Retomar o Mika</string>
     <string name="pause_resume_sub">Reconectar o assistente com o pareamento salvo</string>
     <string name="pause_resumed">O Mika está ativo de novo.</string>
-    <string name="pause_resume_note">O Mika não conseguiu reativar tudo sozinho. Conclua os passos abaixo. Não é preciso um novo código de pareamento: o assistente se reconecta com o pareamento já salvo.</string>
+    <string name="pause_resume_note">O Mika não conseguiu reativar tudo sozinho. Conclua os passos abaixo.</string>
     <string name="pause_a11y_restoring">Reativando o serviço de acessibilidade do Mika…</string>
     <string name="pause_a11y_label">Serviço de acessibilidade</string>
     <string name="pause_wireless_label">Depuração sem fio</string>

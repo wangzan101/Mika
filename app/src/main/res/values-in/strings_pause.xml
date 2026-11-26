@@ -15,7 +15,7 @@
     <string name="pause_resume">Lanjutkan Mika</string>
     <string name="pause_resume_sub">Sambungkan ulang pembantu dengan penyambungan yang tersimpan</string>
     <string name="pause_resumed">Mika aktif kembali.</string>
-    <string name="pause_resume_note">Mika tidak dapat mengaktifkan semuanya kembali sendiri. Selesaikan langkah di bawah. Tidak perlu kode penyambungan baru: helper tersambung kembali dengan penyambungan yang sudah disimpan.</string>
+    <string name="pause_resume_note">Mika tidak dapat mengaktifkan semuanya kembali sendiri. Selesaikan langkah di bawah.</string>
     <string name="pause_a11y_restoring">Mengaktifkan kembali layanan aksesibilitas Mika…</string>
     <string name="pause_a11y_label">Layanan aksesibilitas</string>
     <string name="pause_wireless_label">Proses debug nirkabel</string>

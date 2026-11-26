@@ -15,7 +15,7 @@
     <string name="pause_resume">恢复 Mika</string>
     <string name="pause_resume_sub">用已保存的配对重连手机助手</string>
     <string name="pause_resumed">Mika 已恢复。</string>
-    <string name="pause_resume_note">有几项 Mika 没能自己重新打开，请按下面的步骤完成。不用新的配对码：手机助手会用已保存的配对重连。</string>
+    <string name="pause_resume_note">有几项 Mika 没能自己重新打开，请按下面的步骤完成。</string>
     <string name="pause_a11y_restoring">正在重新打开 Mika 的无障碍…</string>
     <string name="pause_a11y_label">无障碍</string>
     <string name="pause_wireless_label">无线调试</string>

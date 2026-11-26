@@ -34,6 +34,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice): Boolean { received += "confirm:$choice"; active = null; return true }
             override suspend fun stop(runId: RunId) { received += "stop" }
             override suspend fun cancelAsk(threadId: String) { received += "cancelAsk"; active = null }
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
         })
         gateway.start(channel)
         val input = Delivery.Ask("d1", "thread", "a1", Delivery.Ask.Kind.Input, "which?")
@@ -62,6 +63,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice): Boolean { events += "confirm"; return true }
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) = Unit
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
         })
         gateway.start(channel)
         channel.receive(ChannelInput.Confirm(peer, "a", ConfirmChoice.Once))
@@ -79,6 +81,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) { events += "cancelAsk" }
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
         })
         gateway.start(channel)
 
@@ -99,12 +102,58 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) = Unit
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
         })
         gateway.start(channel)
 
         channel.receive(ChannelInput.Text(peer, "m1", "A", replyToAskId = "a1"))
 
         assertEquals(1, answerCalls)
+        assertEquals(emptyList<String>(), channel.acknowledged)
+    }
+
+    @Test fun newMessageWhilePausedGetsPausedReplyAndIsNotQueuedForResume() = runBlocking {
+        val channel = FakeChannel()
+        val outbox = Outbox()
+        var paused = true
+        val events = mutableListOf<String>()
+        val gateway = ChannelGateway(MemoryOwnerIdentity().also { it.bind(peer) }, { null }, object : ChannelGateway.Route {
+            override suspend fun newTask(peer: ChannelPeer, messageId: String, text: String) { events += "new:$text" }
+            override suspend fun answer(threadId: String, askId: String, text: String) = false
+            override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
+            override suspend fun stop(runId: RunId) = Unit
+            override suspend fun cancelAsk(threadId: String) = Unit
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean {
+                events += "paused:$messageId"
+                outbox.deliver(channel, peer, Delivery.Notice("paused:$messageId", peer.threadId, "Mika is paused"))
+                return true
+            }
+        }, paused = PauseFlag { paused })
+        gateway.start(channel)
+
+        channel.receive(ChannelInput.Text(peer, "m1", "order lunch"))
+        // 确认收到:渠道不会把这条留着重交,恢复后也就不会自动开任务
+        assertEquals(listOf("m1"), channel.acknowledged)
+        assertEquals(listOf<Delivery>(Delivery.Notice("paused:m1", "thread", "Mika is paused")), channel.sent)
+
+        paused = false
+        channel.receive(ChannelInput.Text(peer, "m2", "check weather"))
+        assertEquals(listOf("paused:m1", "new:check weather"), events)
+    }
+
+    @Test fun pausedReplyNotRecordedLeavesMessageForRedelivery() = runBlocking {
+        val channel = FakeChannel()
+        val gateway = ChannelGateway(MemoryOwnerIdentity().also { it.bind(peer) }, { null }, object : ChannelGateway.Route {
+            override suspend fun newTask(peer: ChannelPeer, messageId: String, text: String): Unit = error("must not start while paused")
+            override suspend fun answer(threadId: String, askId: String, text: String) = false
+            override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
+            override suspend fun stop(runId: RunId) = Unit
+            override suspend fun cancelAsk(threadId: String) = Unit
+            override suspend fun paused(peer: ChannelPeer, messageId: String) = false
+        }, paused = PauseFlag { true })
+        gateway.start(channel)
+
+        channel.receive(ChannelInput.Text(peer, "m1", "order lunch"))
         assertEquals(emptyList<String>(), channel.acknowledged)
     }
 

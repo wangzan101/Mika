@@ -17,7 +17,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class BuiltinShellEngineBankingTest {
+/**
+ * 暂停 Mika 时内置助手的投影:暂停标记(唯一真相来源)由测试持有,引擎每次都现读它;
+ * [BuiltinShellEngine.pauseChanged] 只是通知它按标记重新投影。
+ */
+class BuiltinShellEnginePauseTest {
     private class StubPlatform(
         val helper: MutableStateFlow<Any?>,
         var pairedFlag: Boolean = false,
@@ -54,7 +58,13 @@ class BuiltinShellEngineBankingTest {
         override fun shizukuState(): ShizukuPlatformState = shizuku
     }
 
-    private fun TestScope.makeEngine(paired: Boolean = false, initialHelper: Any? = null, persistedPaused: () -> Boolean = { false }): Pair<BuiltinShellEngine, StubPlatform> {
+    /** 暂停标记,像真机上的持久开关一样由引擎之外持有。 */
+    private var pausedFlag = false
+
+    private fun BuiltinShellEngine.pause() { pausedFlag = true; pauseChanged() }
+    private fun BuiltinShellEngine.resume() { pausedFlag = false; pauseChanged() }
+
+    private fun TestScope.makeEngine(paired: Boolean = false, initialHelper: Any? = null): Pair<BuiltinShellEngine, StubPlatform> {
         val helper = MutableStateFlow(initialHelper)
         val platform = StubPlatform(helper, pairedFlag = paired)
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -64,7 +74,7 @@ class BuiltinShellEngineBankingTest {
             scope = CoroutineScope(SupervisorJob() + dispatcher),
             io = dispatcher,
             graceMs = 0,
-            persistedPaused = persistedPaused,
+            pausedFlag = { pausedFlag },
         )
         return engine to platform
     }
@@ -188,8 +198,8 @@ class BuiltinShellEngineBankingTest {
 
     @Test
     fun persistedPauseFlagGatesWatchdogFromStartupAndBlocksDiscoveryAndPairing() = runTest {
-        var persisted = true
-        val (e, platform) = makeEngine(paired = true, persistedPaused = { persisted })
+        pausedFlag = true
+        val (e, platform) = makeEngine(paired = true)
         assertEquals(BuiltinShellStatus.Paused, e.status.value)
         assertTrue(e.paused)
 
@@ -208,10 +218,43 @@ class BuiltinShellEngineBankingTest {
         assertEquals(PairingDiscovery.Idle, e.pairingDiscovery.value)
         assertEquals(BuiltinShellStatus.Paused, e.status.value)
 
-        persisted = false
         e.resume()
         advanceUntilIdle()
         assertEquals(1, platform.calls.count { it == "launch" })
         assertEquals(BuiltinShellStatus.Running, e.status.value)
+    }
+
+    @Test
+    fun lateHandoffAfterFlagFlipsIsStoppedEvenBeforeTheEngineIsNotified() = runTest {
+        // 标记已经写成「暂停」,通知引擎之前电脑那边恰好交接来一个助手:引擎现读标记,当场停掉它。
+        val (e, platform) = makeEngine(paired = true)
+        platform.autoAttachOnLaunch = false
+        e.start()
+        advanceUntilIdle()
+
+        pausedFlag = true
+        platform.helper.value = "late-helper"
+        advanceUntilIdle()
+
+        assertNull(platform.helper.value)
+        assertEquals(BuiltinShellStatus.Paused, e.status.value)
+        e.retry()
+        advanceUntilIdle()
+        assertEquals(BuiltinShellStatus.Paused, e.status.value)
+    }
+
+    @Test
+    fun resumeKeepsPairingAndNeverAsksForANewCode() = runTest {
+        val (e, platform) = makeEngine(paired = true, initialHelper = "first")
+        e.start()
+        advanceUntilIdle()
+        e.pause()
+        advanceUntilIdle()
+        assertTrue(e.paired)
+        e.resume()
+        advanceUntilIdle()
+        assertTrue(e.paired)
+        assertTrue(platform.pairedFlag)
+        assertFalse(platform.calls.any { it == "forget" || it.startsWith("pair ") })
     }
 }

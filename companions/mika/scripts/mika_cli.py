@@ -165,15 +165,17 @@ def device_state_error(state):
 
 
 class Adb:
-    # adb executables whose server this process has already started; one start per process is enough.
+    # (adb executable, server port) pairs whose server this process has already started; one start per process is enough.
     _started = set()
     _start_lock = threading.Lock()
 
-    def __init__(self, executable="adb", device=None):
-        self.executable, self.device = executable, device
+    def __init__(self, executable="adb", device=None, server_port=None):
+        # server_port None leaves adb's own choice (5037, or ANDROID_ADB_SERVER_PORT) untouched.
+        self.executable, self.device, self.server_port = executable, device, server_port
+        self.base = [executable] + (["-P", str(server_port)] if server_port is not None else [])
 
     def run(self, *args, timeout=20):
-        prefix = [self.executable] + (["-s", self.device] if self.device else [])
+        prefix = self.base + (["-s", self.device] if self.device else [])
         try:
             result = subprocess.run(prefix + list(args), stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", timeout=timeout)
         except OSError:
@@ -186,17 +188,18 @@ class Adb:
         return result.stdout.strip()
 
     def start_server(self):
-        # Once per process and executable. Output is discarded so a daemon started here never holds the pipes
-        # of a later captured call.
+        # Once per process, executable and server port. Output is discarded so a daemon started here never holds the
+        # pipes of a later captured call.
         with Adb._start_lock:
-            if self.executable in Adb._started:
+            server = (self.executable, self.server_port)
+            if server in Adb._started:
                 return
             self._start_server()
-            Adb._started.add(self.executable)
+            Adb._started.add(server)
 
     def _start_server(self):
         try:
-            result = subprocess.run([self.executable, "start-server"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            result = subprocess.run(self.base + ["start-server"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL, timeout=60)
         except OSError:
             raise adb_unavailable() from None
@@ -272,7 +275,7 @@ def connection(args, secrets):
         return
     if args.token_file:
         raise CliError("arguments", "--token-file requires --url; ADB reads the current token from the phone.")
-    adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"))
+    adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"), getattr(args, "adb_server_port", None))
     package = getattr(args, "mika_package", DEFAULT_PACKAGE)
     phone_files = f"/sdcard/Android/data/{package}/files"
     progress(args, "starting ADB server...")
@@ -532,7 +535,7 @@ def execute(args, secrets):
             validate(args.package, args.dependency, args.listener, args.user)
         except ValueError as error:
             raise CliError("arguments", str(error)) from None
-        adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"))
+        adb = Adb(args.adb, args.device or os.environ.get("ANDROID_SERIAL"), getattr(args, "adb_server_port", None))
         adb.start_server()
         adb.select()
         return inspect_notifications(adb, args.package, args.dependency, args.listener, args.user)
@@ -556,7 +559,7 @@ def execute(args, secrets):
     if args.command == "devices":
         if args.url or args.token_file:
             raise CliError("arguments", "devices lists ADB devices; it does not use --url or --token-file.")
-        adb = Adb(args.adb)
+        adb = Adb(args.adb, server_port=getattr(args, "adb_server_port", None))
         progress(args, "starting ADB server...")
         adb.start_server()
         return {"devices": adb.devices()}
@@ -679,6 +682,8 @@ def parser():
     ]:
         common.add_argument(flag, help=help_text, default=argparse.SUPPRESS)
     common.add_argument("--json", action="store_true", default=argparse.SUPPRESS, help="Compact JSON output, including errors")
+    common.add_argument("--adb-server-port", type=bounded_int(1, 65535), default=argparse.SUPPRESS,
+                        help="Port of the computer's ADB server (default: adb's own, usually 5037)")
     common.add_argument("--request-timeout", type=request_timeout, default=argparse.SUPPRESS, help="HTTP timeout in seconds (default: 15; bounded waits get at least timeout + 5)")
     connection_options = Parser(add_help=False, parents=[common])
     connection_options.add_argument("--package", dest="mika_package", type=application_id, default=argparse.SUPPRESS,
@@ -749,7 +754,8 @@ def main(argv=None):
     compact = json_flag(argv)
     try:
         args = parser().parse_args(argv)
-        for key, default in {"device": None, "url": None, "token_file": None, "adb": "adb", "request_timeout": 15}.items():
+        for key, default in {"device": None, "url": None, "token_file": None, "adb": "adb", "adb_server_port": None,
+                             "request_timeout": 15}.items():
             if not hasattr(args, key):
                 setattr(args, key, default)
         if hasattr(args, "mika_package"):
@@ -757,6 +763,8 @@ def main(argv=None):
                 raise CliError("arguments", "Put the Mika --package option on connect, doctor, task or ui.")
             if args.url:
                 raise CliError("arguments", "The Mika --package option cannot be used with --url.")
+        if args.url and args.adb_server_port is not None:
+            raise CliError("arguments", "--adb-server-port selects the computer's ADB server; it cannot be used with --url.")
         if args.command == "ui":
             if compact:
                 raise CliError("arguments", "The desk is interactive. Use mika ui without --json.")

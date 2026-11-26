@@ -48,6 +48,15 @@ mika doctor --device SERIAL --json
 
 CLI 会处理端口转发，无需照 MCP 步骤手工转发固定端口。拔插后先让同一台手机重新出现在 ADB 中；手机重启或电脑连接开关被关闭后，再运行 `connect`。
 
+电脑上另有程序占着默认的 ADB 服务器端口(通常是 5037)、和米卡用的 ADB 冲突时,可以给米卡单独指定一个服务器端口:
+
+```bash
+mika --adb-server-port 5038 devices --json
+mika --adb-server-port 5038 connect --device SERIAL --json
+```
+
+之后的 `doctor`、`task`、`ui`、`notification-doctor` 都带上同一个选项。这是电脑上 ADB 服务器的端口,与手机上 Mika 的监听端口无关,也不能与 `--url` 同用。不指定时沿用 adb 自己的选择(包括 `ANDROID_ADB_SERVER_PORT` 环境变量)。换了服务器端口后,无线 ADB 设备要在这个服务器上重新 `adb -P 5038 connect`。有的手机拔插 USB 时会重启 `adbd`,由 USB 启动的手机助手会随之退出;在 Mika 里完成无线调试配对后,手机端会自己重新拉起助手。
+
 也可以使用手机设置里显式开启的局域网/私有网络连接:
 
 ```bash

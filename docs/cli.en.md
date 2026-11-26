@@ -48,6 +48,15 @@ If a debug build is installed alongside Mika, connect with `mika connect --packa
 
 The CLI handles forwarding; you do not need the MCP instructions for manually forwarding a fixed port. After reconnecting the cable, make sure the same phone is back in ADB. After a phone reboot or turning off computer access, run `connect` again.
 
+If another program on the computer holds the default ADB server port (usually 5037) and conflicts with the ADB Mika uses, give Mika its own server port:
+
+```bash
+mika --adb-server-port 5038 devices --json
+mika --adb-server-port 5038 connect --device SERIAL --json
+```
+
+Pass the same option to later `doctor`, `task`, `ui` and `notification-doctor` commands. This is the port of the computer's ADB server, unrelated to Mika's listening port on the phone, and it cannot be combined with `--url`. Without it, adb's own choice applies (including the `ANDROID_ADB_SERVER_PORT` environment variable). Wireless ADB devices must be connected again on the new server with `adb -P 5038 connect`. Some phones restart `adbd` when USB is replugged, which ends a helper started over USB; once wireless debugging is paired in Mika, the phone restarts its helper by itself.
+
 For LAN/private-network access explicitly enabled in the phone's settings:
 
 ```bash

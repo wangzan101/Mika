@@ -15,7 +15,8 @@
     <string name="pause_resume">ادامهٔ Mika</string>
     <string name="pause_resume_sub">اتصال دوبارهٔ برنامهٔ کمکی با جفت‌سازی ذخیره‌شده</string>
     <string name="pause_resumed">Mika دوباره روشن شد.</string>
-    <string name="pause_resume_note">Android اجازه نمی‌دهد برنامه‌ای سرویس دسترس‌پذیری خودش را دوباره روشن کند. خودتان Mika را در تنظیمات دسترس‌پذیری دوباره روشن کنید. کد جفت‌سازی تازه لازم نیست: برنامهٔ کمکی با جفت‌سازی ذخیره‌شده دوباره وصل می‌شود.</string>
+    <string name="pause_resume_note">Mika نتوانست همه چیز را خودش دوباره روشن کند. مراحل زیر را کامل کنید. به کد جفت‌سازی جدید نیازی نیست: دستیار با جفت‌سازی ذخیره‌شده دوباره وصل می‌شود.</string>
+    <string name="pause_a11y_restoring">در حال روشن کردن دوبارهٔ سرویس دسترس‌پذیری Mika…</string>
     <string name="pause_a11y_label">سرویس دسترس‌پذیری</string>
     <string name="pause_wireless_label">اشکال‌زدایی بی‌سیم</string>
     <string name="pause_helper_label">برنامهٔ کمکی گوشی</string>

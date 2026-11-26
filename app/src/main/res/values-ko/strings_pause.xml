@@ -15,7 +15,8 @@
     <string name="pause_resume">Mika 다시 시작</string>
     <string name="pause_resume_sub">저장된 페어링으로 도우미를 다시 연결해요</string>
     <string name="pause_resumed">Mika가 다시 켜졌어요.</string>
-    <string name="pause_resume_note">Android에서는 앱이 자기 접근성 서비스를 다시 켤 수 없어요. 접근성 설정에서 직접 Mika를 다시 켜 주세요. 새 페어링 코드는 필요 없어요. 도우미가 저장된 페어링으로 다시 연결돼요.</string>
+    <string name="pause_resume_note">Mika가 스스로 다시 켜지 못한 항목이 있습니다. 아래 단계를 완료하세요. 새 페어링 코드는 필요 없습니다. 도우미는 저장된 페어링으로 다시 연결됩니다.</string>
+    <string name="pause_a11y_restoring">Mika의 접근성 서비스를 다시 켜는 중…</string>
     <string name="pause_a11y_label">접근성 서비스</string>
     <string name="pause_wireless_label">무선 디버깅</string>
     <string name="pause_helper_label">휴대전화 도우미</string>

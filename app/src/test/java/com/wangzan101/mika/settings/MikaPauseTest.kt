@@ -1,6 +1,9 @@
 package com.wangzan101.mika.settings
 
 import com.wangzan101.mika.core.device.shell.BuiltinShellStatus
+import com.wangzan101.mika.task.PauseState
+import com.wangzan101.mika.task.ResumeStep
+import com.wangzan101.mika.task.planResumeSteps
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

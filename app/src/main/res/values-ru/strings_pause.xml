@@ -15,7 +15,8 @@
     <string name="pause_resume">Возобновить Mika</string>
     <string name="pause_resume_sub">Переподключить помощника по сохранённому сопряжению</string>
     <string name="pause_resumed">Mika снова работает.</string>
-    <string name="pause_resume_note">Android не позволяет приложению самому снова включить свою службу специальных возможностей. Включите Mika снова сами в настройках специальных возможностей. Новый код сопряжения не нужен: помощник переподключится по уже сохранённому сопряжению.</string>
+    <string name="pause_resume_note">Mika не удалось самостоятельно включить всё обратно. Выполните шаги ниже. Новый код сопряжения не нужен: помощник переподключится по уже сохранённому сопряжению.</string>
+    <string name="pause_a11y_restoring">Снова включаем службу специальных возможностей Mika…</string>
     <string name="pause_a11y_label">Служба специальных возможностей</string>
     <string name="pause_wireless_label">Отладка по Wi-Fi</string>
     <string name="pause_helper_label">Помощник на телефоне</string>

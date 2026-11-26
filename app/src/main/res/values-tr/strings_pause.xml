@@ -15,7 +15,8 @@
     <string name="pause_resume">Mika’yı sürdür</string>
     <string name="pause_resume_sub">Yardımcıyı kayıtlı eşlemeyle yeniden bağla</string>
     <string name="pause_resumed">Mika yeniden açık.</string>
-    <string name="pause_resume_note">Android, bir uygulamanın kendi erişilebilirlik hizmetini yeniden açmasına izin vermez. Mika’yı Erişilebilirlik ayarlarında kendiniz yeniden açın. Yeni eşleme kodu gerekmez: yardımcı kayıtlı eşlemeyle yeniden bağlanır.</string>
+    <string name="pause_resume_note">Mika her şeyi kendi başına yeniden açamadı. Aşağıdaki adımları tamamlayın. Yeni eşleme koduna gerek yok: yardımcı, kayıtlı eşlemeyle yeniden bağlanır.</string>
+    <string name="pause_a11y_restoring">Mika’nın erişilebilirlik hizmeti yeniden açılıyor…</string>
     <string name="pause_a11y_label">Erişilebilirlik hizmeti</string>
     <string name="pause_wireless_label">Kablosuz hata ayıklama</string>
     <string name="pause_helper_label">Telefon yardımcısı</string>

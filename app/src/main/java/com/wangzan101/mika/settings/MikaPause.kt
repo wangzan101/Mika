@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * 「暂停 Mika」的持久标记,整个进程一份。这是唯一的真相来源:任务服务、定时、渠道、电脑交来的任务、工作流、
  * 内置助手的看门狗与交接、自动修复和配对通知都只读它([paused]),不各自另存;内置助手的 Paused 状态只是它的投影。
  * 改它只经 [set]:先同步写盘,写成了才更新内存里的值,所以进程随时被杀,重启后读到的都是最后一次写成的。
+ * [set] 会等磁盘,别在主线程上调(暂停页经 [com.wangzan101.mika.task.MikaPauseControl] 切到 IO 线程)。
  */
 class MikaPause internal constructor(initial: Boolean, private val persist: (Boolean) -> Boolean) : PauseFlag {
     private val _state = MutableStateFlow(initial)

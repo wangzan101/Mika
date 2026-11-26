@@ -120,18 +120,18 @@
 
 用户在设置 › 「暂停 Mika」里亲手让 Mika 整个停下,直到亲手恢复。界面只承诺下面这些,不说别的 App 会怎样。
 
-- **唯一的真相来源**:`MikaPause`(`app/settings/MikaPause.kt`)一个持久标记,先同步写盘(`commit`)再改内存,写不进去就什么都不动、界面照实说。各处只读它(core 里经 `PauseFlag`,`core/run/PauseFlag.kt`),不各自另存;内置助手的 `BuiltinShellStatus.Paused` 只是它的投影(`BuiltinShellEngine.pauseChanged` 只通知引擎重新投影,引擎每次都现读标记)。进程被杀后重启读到的就是最后一次写成的。
-- **暂停做什么**(`MikaPauseControl.pause`,`app/settings/MikaPauseControl.kt`):先写标记;`TaskService.pauseAll` 清空持久排队、停下在跑和排着的任务(排着的记已取消,在跑的走正常取消,收尾时各自了结定时、电脑、工作流和渠道);`WorkflowRuntime.haltForPause` 让在进行的工作流到下一步就停;停下内置助手和配对监听;关掉 Mika 的无障碍服务(服务在跑时 `disableSelf`,否则请用户去系统设置)和无线调试(有修改系统设置的授权时写开关,否则请用户去开发者选项)。配对钥匙、端口缓存和「已配对」标记一律不动。
+- **唯一的真相来源**:`MikaPause`(`app/settings/MikaPause.kt`)一个持久标记,先同步写盘(`commit`,在 IO 线程上)再改内存,写不进去就什么都不动、界面照实说。各处只读它(core 里经 `PauseFlag`,`core/run/PauseFlag.kt`),不各自另存;内置助手的 `BuiltinShellStatus.Paused` 只是它的投影(`BuiltinShellEngine.pauseChanged` 只通知引擎重新投影,引擎每次都现读标记)。进程被杀后重启读到的就是最后一次写成的。
+- **暂停做什么**(`MikaPauseControl.pause`,`app/task/MikaPauseControl.kt`;开始了就做完,不随界面离开而取消):先写标记;`TaskService.pauseAll` 清空持久排队、停下在跑和排着的任务(排着的记已取消,在跑的走正常取消,收尾时各自了结定时、电脑、工作流和渠道);`WorkflowRuntime.haltForPause` 让在进行的工作流到下一步就停;停下内置助手和配对监听;关掉 Mika 的无障碍服务(服务在跑时 `disableSelf`,否则请用户去系统设置)和无线调试(有修改系统设置的授权时写开关,否则请用户去开发者选项)。配对钥匙、端口缓存和「已配对」标记一律不动。
 - **暂停期间挡住的入口**(都在发起处和异步交接处重读标记):
   - 任务服务门口:`TaskService.begin/startNew`(`pausedBlocks` → `finishPausedStart`)、排队取下一件(`drainReady`)、`queueFollowUp`/`deferMessage`、`enqueueFollowUp`/`drainFollowUps`。被挡的请求各自了结,不留到恢复后自动跑。
-  - 对话界面发送(`ChatSendOps.send`):提示已暂停,不入队。
+  - 对话界面与悬浮胶囊发送(`ChatSendOps.send`、`CapsuleController.send`):提示已暂停,不入队,输入框里的话留着不清。
   - 定时(`TriggerEngine.fire`、`TriggerRuntime.checked`):到期的窗口记为跳过(`PauseFlag.REASON`,计划页显示「Mika 暂停期间跳过」),推进到下一次,恢复后不补跑;「立即执行」报错。
-  - 渠道(`ChannelGateway`):新消息不开任务也不留暗队列,经 `Outbox` 回一句「Mika 已暂停,这条没有开始办」(编号 `paused:<渠道>:<消息>`),记下了才确认收到;记不下不确认,渠道稍后重交时再回。暂停期间的确认回复不处理。
-  - 电脑交来的任务(`RemoteTaskHub.launch/startOwned`):报 `UNAVAILABLE` 和一句说明,不开始也不排队。
+  - 渠道(`ChannelGateway`):新消息不开任务也不留暗队列,先确认收到,再经 `Outbox` 尽力回一句「Mika 已暂停,这条没有开始办」(编号 `paused:<渠道>:<消息>`);回复发不出去也不影响确认,渠道不重交。服务门口才挡下的渠道消息(`finishPausedStart`)同样先确认再回。暂停期间的确认回复不处理。
+  - 电脑交来的任务(`RemoteTaskHub.launch/startOwned`):报 `UNAVAILABLE` 和一句说明(`PauseFlag.REMOTE_MESSAGE`),不开始也不排队。电脑那边别的会动手机的请求走同一个守卫 `PauseFlag.refuseRemote()`(`core/remote/RemoteTaskService.kt`,暂停开关经 `RemoteEndpoints` 注入):回答、追加要求(`RemoteTaskService.answer/steer`),MCP 的拨号、接听、亮屏、解锁(`McpTaskTools`);读状态、挂断、交还听筒照常。
   - 工作流(`WorkflowRuntime.start/resume/resolve`):报 `WorkflowProblem.Paused`;派下一步前(`advance`)再查一次。
-  - 内置助手:看门狗、重试、配对发现与配对、Wi-Fi/无线调试变化都不起助手;电脑晚交接来的助手(`HelperHub.offer` 回 `Reject.Paused`,引擎收到时也当场停掉)和 Shizuku 绑定都拒绝;暂停期间不读配对码、不弹配对通知。
+  - 内置助手:看门狗、重试、配对发现与配对、Wi-Fi/无线调试变化都不起助手;正在启动时暂停会取消这次启动(每次连接前也复查),这次启动自己打开的无线调试关回去;电脑晚交接来的助手(`HelperHub.offer` 回 `Reject.Paused`,引擎收到时也当场停掉)和 Shizuku 绑定都拒绝;暂停期间不读配对码、不弹配对通知。
   - 自动修复(`BuiltinShellRecovery`、`RecoveryPermissions`、`AccessibilityRepair`):不重开无障碍、不应用待开的能力、开机不自动恢复;无障碍重启的间隙里用户暂停了就不再加回。
-- **恢复**(`MikaPauseControl.resume`):先清标记;助手配对过且能写开关时打开无线调试,助手按已有配对重连,不用新的配对码。暂停期间跳过的定时、回绝的消息和任务都不补跑;停在「已暂停」的工作流由用户点继续。安卓不允许 App 替自己打开无障碍服务,恢复页把它和其他 App 做不了的步骤列成直达系统设置的按钮(`planResumeSteps`)。
+- **恢复**(`MikaPauseControl.resume`):先清标记;助手配对过且能写开关时打开无线调试,助手按已有配对重连,不用新的配对码;定时重新排闹钟(`TriggerRuntime.rearm`)。暂停期间跳过的定时、回绝的消息和任务都不补跑;停在「已暂停」的工作流由用户点继续。无障碍服务由自动修复(`AccessibilityRepair`,App 能写系统设置或助手连上时)打开;恢复页先等它有结果(`awaitAccessibilityRepair`),修不成才把它和其他 App 做不成的步骤列成直达系统设置的按钮(`planResumeSteps`)。
 - 不挡的:来电待命与主动学习不在暂停范围内(暂停只承诺上面这些)。
 
 ### 进程重启后

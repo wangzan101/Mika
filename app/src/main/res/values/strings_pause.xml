@@ -16,7 +16,8 @@
     <string name="pause_resume">Resume Mika</string>
     <string name="pause_resume_sub">Reconnect the helper using the saved pairing</string>
     <string name="pause_resumed">Mika is back on.</string>
-    <string name="pause_resume_note">Android does not let an app turn its own accessibility service back on. Turn Mika back on in Accessibility settings yourself. No new pairing code is needed: the helper reconnects with the pairing that is already saved.</string>
+    <string name="pause_resume_note">Mika could not turn everything back on by itself. Finish the steps below. No new pairing code is needed: the helper reconnects with the pairing that is already saved.</string>
+    <string name="pause_a11y_restoring">Turning Mika’s accessibility service back on…</string>
     <string name="pause_a11y_label">Accessibility service</string>
     <string name="pause_wireless_label">Wireless debugging</string>
     <string name="pause_helper_label">Phone helper</string>

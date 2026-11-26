@@ -137,13 +137,22 @@ fun SettingsScreen(
     onOpenPersonas: (() -> Unit)? = null,
     openPhoneOps: Boolean = false,
     onPhoneOpsOpened: () -> Unit = {},
+    /** 别处的「去暂停页」(如助手已暂停的提示)直接打开「暂停 Mika」页。 */
+    openPause: Boolean = false,
+    onPauseOpened: () -> Unit = {},
 ) {
     val configs by store.configs.collectAsState()
     val roles by store.roles.collectAsState()
     val groups by store.groups.collectAsState()
     // 开发者选项里的「看图定位已验证」跟着看图模型(看图用主模型时是主模型那条配置)
     val visionConfig = remember(configs, roles) { store.configFor(ModelRole.Vision) }
-    var page by rememberSaveable { mutableStateOf(if (openPhoneOps) SettingsPage.PhoneOps else SettingsPage.Home) }
+    var page by rememberSaveable { mutableStateOf(
+        when {
+            openPhoneOps -> SettingsPage.PhoneOps
+            openPause -> SettingsPage.Pause
+            else -> SettingsPage.Home
+        },
+    ) }
     // 进子页时当前页离开组合,它自己记的滚动位置随之丢掉;有子页可进的几页在这里记,回来接着刚才的位置
     val pageScrolls = rememberSaveable(saver = PageScrolls.Saver) { PageScrolls() }
     var explaining by remember { mutableStateOf<Problem?>(null) }
@@ -156,10 +165,17 @@ fun SettingsScreen(
             onPhoneOpsOpened()
         }
     }
+    LaunchedEffect(openPause) {
+        if (openPause) {
+            page = SettingsPage.Pause
+            onPauseOpened()
+        }
+    }
 
     fun fix(f: Fix) = when (f) {
         Fix.AddModel -> onOpenModels()
         Fix.OpenPhoneOps -> page = SettingsPage.PhoneOps
+        Fix.OpenPause -> page = SettingsPage.Pause
         else -> onFix(f)
     }
     val onProblem: (Problem) -> Unit = { p -> StatusCopy.directFix(p)?.let(::fix) ?: run { explaining = p } }
@@ -504,7 +520,7 @@ fun SettingsContent(
     onOpenLanguage: () -> Unit = {},
     onOpenMemory: (() -> Unit)? = null,
     onOpenBackup: (() -> Unit)? = null,
-    /** 银行模式(暂停 Mika 让银行 App 打开)的入口;暂停着时首页这一行写「已暂停」。 */
+    /** 「暂停 Mika」页的入口;暂停着时首页这一行写「已暂停」。 */
     onOpenPause: (() -> Unit)? = null,
     mikaPaused: Boolean = false,
     onOpenRecommendations: () -> Unit = {},

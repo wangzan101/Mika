@@ -28,7 +28,7 @@ internal fun TaskService.pausedBlocks(): Boolean = MikaPause.get(this).paused()
 /**
  * 暂停时被挡在门口的开始请求:把它的来源一一了结,不留到恢复后自动跑。
  * 定时的这一次记成「因暂停跳过」;电脑交来的报失败;工作流这一步记失败(停在待确认,恢复后由用户决定);
- * 排队项从持久队列里拿掉;渠道消息回一句「已暂停」再确认收到;界面上发起的提示一声。
+ * 排队项从持久队列里拿掉;渠道消息先确认收到,再尽力回一句「已暂停」;界面上发起的提示一声。
  */
 internal fun TaskService.finishPausedStart(
     provenance: RunProvenance,
@@ -51,13 +51,19 @@ internal fun TaskService.finishPausedStart(
     if (peer != null && messageId != null) {
         val channel = runCatching { channelFor(peer) }.getOrNull()
         if (channel != null) scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            if (replyPaused(outbox, channel, peer, messageId)) channel.acknowledge(messageId)
+            channel.acknowledge(messageId)
+            replyPaused(outbox, channel, peer, messageId)
         }
     }
     if (provenance.origin == RunOrigin.Ui && followUp == null) {
         Toast.makeText(this, tr(R.string.pause_blocked_task), Toast.LENGTH_LONG).show()
     }
-    keepForeground()
+    // 前台启动的约定要兑现;没有任务在前台时马上撤下,不让「准备中」通知闪一下又消失
+    if (foreground != null || taskState._busy.value) keepForeground()
+    else {
+        startInForeground(null, preparingNotification())
+        stopForeground(android.app.Service.STOP_FOREGROUND_REMOVE)
+    }
 }
 
 /**
@@ -72,14 +78,14 @@ internal fun TaskService.stopForPause() {
 }
 
 /**
- * 暂停期间渠道来的新消息:回一句「Mika 已暂停,这条没有开始办」。先记进可靠送达账本再发,
- * 记下了就返回 true,调用方据此确认收到(渠道不再重交);记不下返回 false,留给渠道稍后重交。
+ * 暂停期间渠道来的新消息(调用方已确认收到):尽力回一句「Mika 已暂停,这条没有开始办」。经可靠送达账本发,
+ * 同一条消息只回一次;发不出去就算了,不让它挡住确认、也不让渠道重交。
  */
-internal suspend fun replyPaused(outbox: Outbox, channel: Channel, peer: ChannelPeer, messageId: String): Boolean = try {
-    outbox.deliver(channel, peer, Delivery.Notice("paused:${peer.channelId}:$messageId", peer.threadId, tr(R.string.pause_channel_reply)))
-    true
-} catch (e: CancellationException) {
-    throw e
-} catch (_: Exception) {
-    false
+internal suspend fun replyPaused(outbox: Outbox, channel: Channel, peer: ChannelPeer, messageId: String) {
+    try {
+        outbox.deliver(channel, peer, Delivery.Notice("paused:${peer.channelId}:$messageId", peer.threadId, tr(R.string.pause_channel_reply)))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+    }
 }

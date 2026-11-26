@@ -508,6 +508,7 @@ private fun MikaRoot(
     // 首次上手正在走哪一步;为空时不在上手流程里。配置模型页从哪儿来就回哪儿去
     var onboarding by rememberSaveable { mutableStateOf<OnboardingStep?>(null) }
     var openPhoneOps by rememberSaveable { mutableStateOf(false) }
+    var openPause by rememberSaveable { mutableStateOf(false) }
     val onFix: (Fix) -> Unit = { fix ->
         when (fix) {
             Fix.AddModel -> nav.push(Route.Models)
@@ -519,8 +520,11 @@ private fun MikaRoot(
                 openPhoneOps = true
                 nav.push(Route.Settings)
             }
-            // 「暂停 Mika」住在设置页里:打开设置首页,那一行就在手机操作下面。
-            Fix.OpenPause -> nav.push(Route.Settings)
+            // 「暂停 Mika」是设置里的一页:直接打开它。
+            Fix.OpenPause -> {
+                openPause = true
+                nav.push(Route.Settings)
+            }
             else -> activityFix(fix)
         }
     }
@@ -819,7 +823,8 @@ private fun MikaRoot(
                 updateVersion = updateState.update?.version, onOpenAbout = { nav.push(Route.About) },
                 onOpenVoiceCatalog = { nav.push(Route.VoiceServices) },
                 mcpServers = app.mcpServers,
-                openPhoneOps = openPhoneOps, onPhoneOpsOpened = { openPhoneOps = false }) }
+                openPhoneOps = openPhoneOps, onPhoneOpsOpened = { openPhoneOps = false },
+                openPause = openPause, onPauseOpened = { openPause = false }) }
         }
         // 设置里点进去的独立页面同样用简约列表样式
         Route.Models -> com.wangzan101.mika.ui.components.PlainListTheme { ModelsScreen(store, onBack = back, onOpenSpeech = { nav.push(Route.SpeechModel) }, onOpenVoice = { nav.push(Route.VoiceModel) }, onOpenImage = { nav.push(Route.ImageModel) }, onOpenUsage = { nav.push(Route.Usage) }, onOpenVoiceCatalog = { nav.push(Route.VoiceServices) }, onOpenCallMode = { nav.push(Route.CallMode) }) }

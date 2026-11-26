@@ -34,7 +34,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice): Boolean { received += "confirm:$choice"; active = null; return true }
             override suspend fun stop(runId: RunId) { received += "stop" }
             override suspend fun cancelAsk(threadId: String) { received += "cancelAsk"; active = null }
-            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Unit = error("not paused")
         })
         gateway.start(channel)
         val input = Delivery.Ask("d1", "thread", "a1", Delivery.Ask.Kind.Input, "which?")
@@ -63,7 +63,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice): Boolean { events += "confirm"; return true }
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) = Unit
-            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Unit = error("not paused")
         })
         gateway.start(channel)
         channel.receive(ChannelInput.Confirm(peer, "a", ConfirmChoice.Once))
@@ -81,7 +81,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) { events += "cancelAsk" }
-            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Unit = error("not paused")
         })
         gateway.start(channel)
 
@@ -102,7 +102,7 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) = Unit
-            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean = error("not paused")
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Unit = error("not paused")
         })
         gateway.start(channel)
 
@@ -123,10 +123,9 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) = Unit
-            override suspend fun paused(peer: ChannelPeer, messageId: String): Boolean {
+            override suspend fun paused(peer: ChannelPeer, messageId: String) {
                 events += "paused:$messageId"
                 outbox.deliver(channel, peer, Delivery.Notice("paused:$messageId", peer.threadId, "Mika is paused"))
-                return true
             }
         }, paused = PauseFlag { paused })
         gateway.start(channel)
@@ -141,7 +140,7 @@ class ChannelOutboxTest {
         assertEquals(listOf("paused:m1", "new:check weather"), events)
     }
 
-    @Test fun pausedReplyNotRecordedLeavesMessageForRedelivery() = runBlocking {
+    @Test fun pausedMessageIsAcknowledgedEvenWhenThePausedReplyFails() = runBlocking {
         val channel = FakeChannel()
         val gateway = ChannelGateway(MemoryOwnerIdentity().also { it.bind(peer) }, { null }, object : ChannelGateway.Route {
             override suspend fun newTask(peer: ChannelPeer, messageId: String, text: String): Unit = error("must not start while paused")
@@ -149,12 +148,13 @@ class ChannelOutboxTest {
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = Unit
             override suspend fun cancelAsk(threadId: String) = Unit
-            override suspend fun paused(peer: ChannelPeer, messageId: String) = false
+            override suspend fun paused(peer: ChannelPeer, messageId: String): Unit = error("reply could not be recorded")
         }, paused = PauseFlag { true })
         gateway.start(channel)
 
+        // 回复只是尽力而为:发不出去也照样确认收到,渠道不重交,恢复后也不会自己跑起来
         channel.receive(ChannelInput.Text(peer, "m1", "order lunch"))
-        assertEquals(emptyList<String>(), channel.acknowledged)
+        assertEquals(listOf("m1"), channel.acknowledged)
     }
 
     @Test fun uncertainSendIsNeverBlindlyRetried() = runBlocking {

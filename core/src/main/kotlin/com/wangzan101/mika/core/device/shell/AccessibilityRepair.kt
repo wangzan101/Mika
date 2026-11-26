@@ -106,7 +106,7 @@ class AccessibilityRepair(
 
     private fun eligible(s: A11yObservation, h: BuiltinShellStatus, unlocked: Boolean) =
         // 暂停时绝不自动把无障碍打开:暂停本身就关掉了它,自动修好等于把暂停取消了。
-        // 恢复时由用户自己在系统设置里打开。
+        // 恢复后照常修;修不成时恢复页再请用户去系统设置里打开。
         allowed() && !paused() && s.stuck && unlocked && h != BuiltinShellStatus.Paused &&
             (direct() || h == BuiltinShellStatus.Running) && consent().wants(RecoveryCapability.Accessibility)
 

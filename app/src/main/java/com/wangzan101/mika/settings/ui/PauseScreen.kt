@@ -10,6 +10,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -20,10 +21,11 @@ import com.wangzan101.mika.cap.phone.PhoneServices
 import com.wangzan101.mika.cap.phone.a11y.ScreenAccessibility
 import com.wangzan101.mika.core.device.shell.BuiltinShellStatus
 import com.wangzan101.mika.settings.MikaPause
-import com.wangzan101.mika.settings.MikaPauseControl
-import com.wangzan101.mika.settings.PauseResult
-import com.wangzan101.mika.settings.ResumeStep
-import com.wangzan101.mika.settings.planResumeSteps
+import com.wangzan101.mika.task.MikaPauseControl
+import com.wangzan101.mika.task.PauseResult
+import com.wangzan101.mika.task.ResumeStep
+import com.wangzan101.mika.task.planResumeSteps
+import kotlinx.coroutines.launch
 import com.wangzan101.mika.ui.components.GroupCard
 import com.wangzan101.mika.ui.components.GroupLabel
 import com.wangzan101.mika.ui.components.ListRow
@@ -40,7 +42,7 @@ import com.wangzan101.mika.ui.theme.MikaType
  * 「暂停 Mika」页:一键停下 Mika 的全部工作,再一键恢复。
  *
  * 暂停停下任务、挡住新任务和定时、关掉 Mika 的无障碍服务和无线调试、停下内置助手;无线调试的配对留着,
- * 恢复时直接重连,不用新的配对码。安卓不允许 App 替自己打开无障碍服务,恢复后把它列成一步交给用户。
+ * 恢复时直接重连,不用新的配对码。无障碍服务能自动修复时先等它修完;修不成才把它列成一步交给用户。
  * 每当暂停标记、助手状态或无障碍实例变了都重读系统,界面永远是实测,不是上次记的。
  */
 @Composable
@@ -53,6 +55,10 @@ fun PauseScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
     val a11yInstance by ScreenAccessibility.instance.collectAsState()
     var state by remember { mutableStateOf(control.snapshot()) }
     var notice by remember { mutableStateOf<String?>(null) }
+    // 点了恢复、无障碍还在等自动修复的结果:这期间不把「去系统设置打开」列成一步
+    var a11yRestoring by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(paused, shellStatus, a11yInstance) { state = control.snapshot() }
 
     val helperText = when (state.helper) {
@@ -69,7 +75,9 @@ fun PauseScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
     val wirelessText = stringResource(if (state.wirelessDebugging) R.string.state_on else R.string.state_off)
     val (a11yText, a11yTone) = StatusCopy.accessibilityValue(state.accessibility)
     // 没暂停时,按真实状态算出恢复后还剩哪些步骤要用户亲手做。
-    val resumeSteps = if (state.paused) emptyList() else planResumeSteps(state)
+    val resumeSteps = if (state.paused) emptyList() else planResumeSteps(state).let { steps ->
+        if (a11yRestoring) steps - ResumeStep.OpenAccessibilitySettings else steps
+    }
 
     PageScaffold(stringResource(R.string.pause_title), onBack) {
         StateCard(
@@ -104,13 +112,27 @@ fun PauseScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
                 ListRow(
                     MikaIcons.Power, stringResource(R.string.pause_resume),
                     stringResource(R.string.pause_resume_sub), first = true,
-                    onClick = {
-                        val result = control.resume()
-                        state = control.snapshot()
-                        notice = when {
-                            result == null -> context.getString(R.string.pause_save_failed)
-                            result.steps.isEmpty() -> context.getString(R.string.pause_resumed)
-                            else -> null
+                    onClick = click@{
+                        if (busy) return@click
+                        busy = true
+                        scope.launch {
+                            try {
+                                val result = control.resume()
+                                state = control.snapshot()
+                                if (result == null) {
+                                    notice = context.getString(R.string.pause_save_failed)
+                                    return@launch
+                                }
+                                notice = null
+                                if (ResumeStep.OpenAccessibilitySettings in result.steps) {
+                                    a11yRestoring = true
+                                    try { control.awaitAccessibilityRepair() } finally { a11yRestoring = false }
+                                    state = control.snapshot()
+                                }
+                                if (planResumeSteps(state).isEmpty()) notice = context.getString(R.string.pause_resumed)
+                            } finally {
+                                busy = false
+                            }
                         }
                     },
                 ) { }
@@ -118,17 +140,33 @@ fun PauseScreen(onBack: () -> Unit, onFix: (Fix) -> Unit) {
                 ListRow(
                     MikaIcons.Power, stringResource(R.string.pause_action),
                     stringResource(R.string.pause_action_sub), first = true,
-                    onClick = {
-                        val result = control.pause()
-                        state = control.snapshot()
-                        notice = result?.let { pauseNotice(context, it) }
-                            ?: context.getString(R.string.pause_save_failed)
+                    onClick = click@{
+                        if (busy) return@click
+                        busy = true
+                        scope.launch {
+                            try {
+                                val result = control.pause()
+                                state = control.snapshot()
+                                notice = result?.let { pauseNotice(context, it) }
+                                    ?: context.getString(R.string.pause_save_failed)
+                            } finally {
+                                busy = false
+                            }
+                        }
                     },
                 ) { }
             }
         }
 
-        // 恢复后还剩的、App 自己做不了的步骤:每一步都是一个直达系统设置的按钮。
+        if (!state.paused && a11yRestoring) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(R.string.pause_a11y_restoring),
+                style = MikaType.Caption, color = MikaTheme.colors.ink2,
+            )
+        }
+
+        // 恢复后还剩的、App 自己做不成的步骤:每一步都是一个直达系统设置的按钮。
         if (!state.paused && resumeSteps.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
             Text(

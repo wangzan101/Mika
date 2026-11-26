@@ -15,7 +15,8 @@
     <string name="pause_resume">Mika を再開</string>
     <string name="pause_resume_sub">保存済みのペア設定でヘルパーに再接続します</string>
     <string name="pause_resumed">Mika を再開しました。</string>
-    <string name="pause_resume_note">Android では、アプリが自分のユーザー補助を再びオンにすることはできません。ユーザー補助の設定でご自身で Mika をオンに戻してください。新しいペア設定コードは不要です。ヘルパーは保存済みのペア設定で再接続します。</string>
+    <string name="pause_resume_note">Mika が自分でオンに戻せなかった項目があります。下の手順を完了してください。新しいペア設定コードは不要です。ヘルパーは保存済みのペア設定で再接続します。</string>
+    <string name="pause_a11y_restoring">Mika のユーザー補助をオンに戻しています…</string>
     <string name="pause_a11y_label">ユーザー補助</string>
     <string name="pause_wireless_label">無線デバッグ</string>
     <string name="pause_helper_label">スマホのヘルパー</string>

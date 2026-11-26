@@ -15,7 +15,8 @@
     <string name="pause_resume">Tiếp tục Mika</string>
     <string name="pause_resume_sub">Kết nối lại trình trợ giúp bằng ghép nối đã lưu</string>
     <string name="pause_resumed">Mika đã bật lại.</string>
-    <string name="pause_resume_note">Android không cho ứng dụng tự bật lại dịch vụ hỗ trợ tiếp cận của chính nó. Hãy tự bật lại Mika trong cài đặt Hỗ trợ tiếp cận. Không cần mã ghép nối mới: trình trợ giúp sẽ kết nối lại bằng ghép nối đã lưu.</string>
+    <string name="pause_resume_note">Mika không tự bật lại được mọi thứ. Hãy hoàn tất các bước bên dưới. Không cần mã ghép nối mới: trình trợ giúp sẽ kết nối lại bằng lần ghép nối đã lưu.</string>
+    <string name="pause_a11y_restoring">Đang bật lại dịch vụ hỗ trợ tiếp cận của Mika…</string>
     <string name="pause_a11y_label">Dịch vụ hỗ trợ tiếp cận</string>
     <string name="pause_wireless_label">Gỡ lỗi không dây</string>
     <string name="pause_helper_label">Trình trợ giúp điện thoại</string>

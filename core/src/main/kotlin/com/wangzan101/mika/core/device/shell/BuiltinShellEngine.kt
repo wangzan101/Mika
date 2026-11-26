@@ -8,6 +8,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -124,6 +126,10 @@ class BuiltinShellEngine(
         private set
 
     private val launchLock = Mutex()
+    /** 正在起助手的那次(持着 [launchLock]);暂停时取消。 */
+    @Volatile private var launchJob: Job? = null
+    /** 这次起助手替用户打开过无线调试;只在持着 [launchLock] 时读写。 */
+    private var turnedOnThisLaunch = false
     private var failures = 0
     private var retryJob: Job? = null
     private var discoveryJob: Job? = null
@@ -147,6 +153,8 @@ class BuiltinShellEngine(
                 discoveryJob?.cancel()
                 discoveryJob = null
             }
+            // 正在起的那次也取消:它可能正等着无线调试打开或交接,收尾时自己把替用户打开的无线调试关回去
+            launchJob?.cancel()
             _discovery.value = PairingDiscovery.Idle
             runCatching { platform.stopHelper() }
             _status.value = BuiltinShellStatus.Paused
@@ -375,6 +383,8 @@ class BuiltinShellEngine(
         when (val g = auto.gate(platform.wifiConnected())) {
             AutoOnGate.Act -> {
                 _status.value = BuiltinShellStatus.Connecting
+                // 写之前就记下:等系统处理的那几秒里被暂停取消,收尾也要关回去
+                turnedOnThisLaunch = true
                 if (withContext(io) { auto.turnOn() }) return true
             }
             // 离上一次写太近:到时候再来一次
@@ -404,52 +414,75 @@ class BuiltinShellEngine(
         }
     }
 
+    /**
+     * 起一次助手。整段持着 [launchLock];正在起的这次记在 [launchJob],用户暂停时 [pauseChanged] 取消它。
+     * 每一步连接(Shizuku、root、已配对的连接)之前都重读暂停标记;这次为了连接替用户打开过无线调试、
+     * 却因暂停没连成时,收尾把无线调试关回去(暂停本来就要它关着)。
+     */
     private suspend fun launchOnce(): Unit = launchLock.withLock {
-        synchronized(this) { pendingImmediate = false }
-        if (pausedFlag()) {
-            _status.value = BuiltinShellStatus.Paused
-            return@withLock
+        turnedOnThisLaunch = false
+        // 在自己的子协程里起:暂停只取消这一次,不连带取消调用方
+        coroutineScope {
+            val job = launch {
+                try {
+                    launchSteps()
+                } finally {
+                    if (turnedOnThisLaunch && pausedFlag()) withContext(NonCancellable + io) { runCatching { autoOn?.turnOff() } }
+                    turnedOnThisLaunch = false
+                    if (pausedFlag()) _status.value = BuiltinShellStatus.Paused
+                }
+            }
+            launchJob = job
+            job.join()
+            launchJob = null
         }
-        if (helper.value != null) return@withLock
+    }
+
+    /** 暂停了就停在 Paused 返回 true;起到一半的助手一并停掉。 */
+    private fun stoppedByPause(): Boolean {
+        if (!pausedFlag()) return false
+        if (helper.value != null) runCatching { platform.stopHelper() }
+        _status.value = BuiltinShellStatus.Paused
+        return true
+    }
+
+    private suspend fun launchSteps() {
+        synchronized(this) { pendingImmediate = false }
+        if (stoppedByPause()) return
+        if (helper.value != null) return
         when (platform.transport()) {
             ShellTransport.Shizuku -> {
                 val shizuku = platform.shizukuState()
                 if (!shizuku.ready) {
                     failed(shizuku.failure())
-                    return@withLock
+                    return
                 }
+                if (stoppedByPause()) return
                 _status.value = BuiltinShellStatus.Connecting
                 val failure = attemptShizuku()
-                if (pausedFlag()) {
-                    runCatching { platform.stopHelper() }
-                    _status.value = BuiltinShellStatus.Paused
-                    return@withLock
-                }
+                if (stoppedByPause()) return
                 if (failure == null) {
                     lastError = null
                     _status.value = BuiltinShellStatus.Running
                 } else {
                     failed(failure)
                 }
-                return@withLock
+                return
             }
             ShellTransport.Auto -> {
                 if (platform.shizukuState().ready) {
+                    if (stoppedByPause()) return
                     _status.value = BuiltinShellStatus.Connecting
                     val failure = attemptShizuku()
-                    if (pausedFlag()) {
-                        runCatching { platform.stopHelper() }
-                        _status.value = BuiltinShellStatus.Paused
-                        return@withLock
-                    }
+                    if (stoppedByPause()) return
                     if (failure == null) {
                         lastError = null
                         _status.value = BuiltinShellStatus.Running
-                        return@withLock
+                        return
                     }
                     if (!rootStart && !platform.paired()) {
                         failed(failure)
-                        return@withLock
+                        return
                     }
                 }
             }
@@ -457,39 +490,35 @@ class BuiltinShellEngine(
         }
         // 先走 root:不用配对、不用 Wi-Fi;不行时配过对就接着走无线调试
         if (rootStart) {
+            if (stoppedByPause()) return
             _status.value = BuiltinShellStatus.Connecting
             val failure = attemptRoot()
-            if (pausedFlag()) {
-                runCatching { platform.stopHelper() }
-                _status.value = BuiltinShellStatus.Paused
-                return@withLock
-            }
+            if (stoppedByPause()) return
             if (failure == null) {
                 lastError = null
                 _status.value = BuiltinShellStatus.Running
-                return@withLock
+                return
             }
             if (!platform.paired()) {
                 failed(failure)
-                return@withLock
+                return
             }
         }
         if (!platform.paired()) {
             _status.value = idleStatus()
-            return@withLock
+            return
         }
-        if (platform.wirelessDebugging() == false && !turnOnWirelessDebugging()) return@withLock
+        if (stoppedByPause()) return
+        if (platform.wirelessDebugging() == false && !turnOnWirelessDebugging()) return
+        // 打开无线调试要等系统处理几秒:这期间用户暂停了就不再连
+        if (stoppedByPause()) return
         _status.value = BuiltinShellStatus.Connecting
         val failure = attempt()
-        if (pausedFlag()) {
-            runCatching { platform.stopHelper() }
-            _status.value = BuiltinShellStatus.Paused
-            return@withLock
-        }
+        if (stoppedByPause()) return
         if (failure == null) {
             lastError = null
             _status.value = BuiltinShellStatus.Running
-            return@withLock
+            return
         }
         failed(failure)
     }

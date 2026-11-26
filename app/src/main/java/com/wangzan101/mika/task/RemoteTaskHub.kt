@@ -12,6 +12,8 @@ import com.wangzan101.mika.core.remote.RemoteSteer
 import com.wangzan101.mika.core.remote.RemoteTask
 import com.wangzan101.mika.core.remote.RemoteTaskError
 import com.wangzan101.mika.settings.MikaPause
+import com.wangzan101.mika.core.run.PauseFlag
+import com.wangzan101.mika.core.remote.refuseRemote
 import com.wangzan101.mika.core.remote.RemoteTaskFiles
 import com.wangzan101.mika.core.remote.RemoteTaskPage
 import com.wangzan101.mika.core.remote.RemoteTaskService
@@ -33,6 +35,8 @@ class RemoteTaskHub(
     private val context: Context,
     private val runs: () -> List<TaskRun> = { (context.applicationContext as com.wangzan101.mika.MikaApp).taskState.runs.value },
     private val clock: () -> Long = System::currentTimeMillis,
+    /** 用户暂停了 Mika:查过重发之后、记回执之前拒([refuseRemote])。 */
+    private val pause: PauseFlag = MikaPause.get(context),
 ) : McpTaskHost, RemoteTasks, RemoteRunIndex {
     private val receipts by lazy { RemoteTaskReceipts(context) }
     internal fun migrateUsbOwner(previousOwner: String) = receipts.migrateUsbOwner(previousOwner)
@@ -120,9 +124,7 @@ class RemoteTaskHub(
     }
 
     /** 用户在手机上暂停了 Mika:不记回执、不排队,明确拒绝;恢复后要电脑重新发。 */
-    private fun refuseWhilePaused() {
-        if (MikaPause.get(context).paused()) throw RemoteTaskError.General(RemoteTaskError.Code.UNAVAILABLE, PAUSED_MESSAGE)
-    }
+    private fun refuseWhilePaused() = pause.refuseRemote()
 
     fun claimStart(id: String): Boolean = try {
         receipts.claimStart(id)
@@ -231,8 +233,6 @@ class RemoteTaskHub(
 
     internal companion object {
         private const val TAG = "MikaMcp"
-        /** 给电脑看的拒绝原因(和其它 MCP 报错一样用英文)。 */
-        const val PAUSED_MESSAGE = "Mika is paused on the phone, so it did not start or queue this task. Resume Mika on the phone, then send the task again."
         const val LOST_MS = 2 * 60_000L
     }
 }

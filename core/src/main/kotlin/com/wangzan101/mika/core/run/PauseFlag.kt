@@ -14,5 +14,7 @@ fun interface PauseFlag {
 
         /** 暂停期间被拦下的工作记下的机器码:触发时段的跳过原因、工作流尝试的失败原因、电脑任务的拒绝原因。 */
         const val REASON = "mika_paused"
+        /** 电脑(MCP、CLI 接口)在暂停时收到的说明:不开始、不排队,恢复后要重新发。 */
+        const val REMOTE_MESSAGE = "Mika is paused on the phone, so it did not start or queue this request. Resume Mika on the phone, then send it again."
     }
 }

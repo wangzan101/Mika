@@ -42,7 +42,7 @@ internal fun TaskService.finishPausedStart(
     val app = application as MikaApp
     triggerKey?.let { TriggerRuntime.skippedPaused(this, it) }
     mcpExternalId?.let {
-        app.remoteTasks.ended(it, TaskState.Failed(RemoteTaskHub.PAUSED_MESSAGE, FailKind.Environment), emptyList())
+        app.remoteTasks.ended(it, TaskState.Failed(com.wangzan101.mika.core.run.PauseFlag.REMOTE_MESSAGE, FailKind.Environment), emptyList())
     }
     workflowAttemptId?.let(app::workflowPaused)
     followUp?.let { center.followUps.remove(it.id) }

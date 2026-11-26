@@ -7,6 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -35,7 +36,8 @@ class BuiltinShellEnginePauseTest {
 
         override fun paired(): Boolean = pairedFlag
         override fun setPaired(paired: Boolean) { pairedFlag = paired }
-        override fun wirelessDebugging(): Boolean = true
+        var wireless = true
+        override fun wirelessDebugging(): Boolean = wireless
         override fun wifiConnected(): Boolean = true
         override suspend fun findPairingPort(timeoutMs: Long): Int? = null
         override fun pair(port: Int, code: String) { calls += "pair $code" }
@@ -64,7 +66,7 @@ class BuiltinShellEnginePauseTest {
     private fun BuiltinShellEngine.pause() { pausedFlag = true; pauseChanged() }
     private fun BuiltinShellEngine.resume() { pausedFlag = false; pauseChanged() }
 
-    private fun TestScope.makeEngine(paired: Boolean = false, initialHelper: Any? = null): Pair<BuiltinShellEngine, StubPlatform> {
+    private fun TestScope.makeEngine(paired: Boolean = false, initialHelper: Any? = null, autoOn: ((StubPlatform) -> WirelessDebuggingAutoOn)? = null): Pair<BuiltinShellEngine, StubPlatform> {
         val helper = MutableStateFlow(initialHelper)
         val platform = StubPlatform(helper, pairedFlag = paired)
         val dispatcher = StandardTestDispatcher(testScheduler)
@@ -75,6 +77,7 @@ class BuiltinShellEnginePauseTest {
             io = dispatcher,
             graceMs = 0,
             pausedFlag = { pausedFlag },
+            autoOn = autoOn?.invoke(platform),
         )
         return engine to platform
     }
@@ -256,5 +259,71 @@ class BuiltinShellEnginePauseTest {
         assertTrue(e.paired)
         assertTrue(platform.pairedFlag)
         assertFalse(platform.calls.any { it == "forget" || it.startsWith("pair ") })
+    }
+
+    private var switchOffWrites = 0
+
+    /** 替用户打开无线调试:写的是假平台的开关。 */
+    private fun TestScope.autoOn(platform: StubPlatform) = WirelessDebuggingAutoOn(
+        wants = { true }, canWrite = { true },
+        read = { platform.wireless },
+        write = { platform.wireless = true; true },
+        writeOff = { switchOffWrites++; platform.wireless = false; true },
+        now = { testScheduler.currentTime },
+    )
+
+    @Test
+    fun pauseWhileWaitingForWirelessDebuggingAbortsAndTurnsItBackOff() = runTest {
+        val (e, platform) = makeEngine(paired = true, autoOn = { autoOn(it) })
+        platform.wireless = false
+        e.start()
+        runCurrent()
+        // 无线调试已写成打开,正等系统处理(还没去连)
+        assertTrue(platform.wireless)
+        assertEquals(0, platform.calls.count { it == "launch" })
+
+        e.pause()
+        advanceUntilIdle()
+
+        assertEquals(0, platform.calls.count { it == "launch" })
+        assertFalse(platform.wireless)
+        assertEquals(1, switchOffWrites)
+        assertEquals(BuiltinShellStatus.Paused, e.status.value)
+        assertTrue(e.paired)
+    }
+
+    @Test
+    fun pauseMidConnectAfterTurningWirelessOnStopsAndTurnsItBackOff() = runTest {
+        val (e, platform) = makeEngine(paired = true, autoOn = { autoOn(it) })
+        platform.wireless = false
+        val gate = CompletableDeferred<Unit>()
+        platform.launchGate = gate
+        e.start()
+        advanceTimeBy(WirelessDebuggingAutoOn.SETTLE_MS + 1_000)
+        runCurrent()
+        assertEquals(1, platform.calls.count { it == "launch" })
+
+        e.pause()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(platform.helper.value)
+        assertFalse(platform.wireless)
+        assertEquals(BuiltinShellStatus.Paused, e.status.value)
+    }
+
+    @Test
+    fun pauseWithoutTurningWirelessOnLeavesTheSwitchAlone() = runTest {
+        // 无线调试本来就开着:暂停中断连接时不去动它(关它是暂停页的事)。
+        val (e, platform) = makeEngine(paired = true, autoOn = { autoOn(it) })
+        val gate = CompletableDeferred<Unit>()
+        platform.launchGate = gate
+        e.start()
+        runCurrent()
+        e.pause()
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(0, switchOffWrites)
+        assertEquals(BuiltinShellStatus.Paused, e.status.value)
     }
 }

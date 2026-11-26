@@ -109,6 +109,7 @@ class BuiltinShellManager(context: Context, private val hub: HelperHub, private 
             canWrite = { app.checkSelfPermission(PermissionCommands.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED },
             read = platform::wirelessDebugging,
             write = { DeveloperSettings.turnOnWirelessDebugging(app.contentResolver) },
+            writeOff = { DeveloperSettings.turnOffWirelessDebugging(app.contentResolver) },
         )
     }
 

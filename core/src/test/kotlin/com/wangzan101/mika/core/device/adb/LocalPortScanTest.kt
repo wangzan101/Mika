@@ -102,6 +102,23 @@ class LocalPortScanTest {
         assertTrue(now <= 10_000)
     }
 
+    /** 一段里核对出 adbd 就停:不扫后面的段,也不扫下一个地址。 */
+    @Test
+    fun scanningStopsAfterTheBatchThatFindsAdbd() = runTest {
+        val swept = mutableListOf<IntRange>()
+        val scanner = object : LocalPortScanner {
+            override suspend fun openPorts(host: String, ports: IntRange, skip: Set<Int>, budgetMs: Long): List<Int> {
+                swept += ports
+                return listOf(40500, 41500, 50000).filter { it in ports }
+            }
+            override fun speaksAdbTls(host: String, port: Int, timeoutMs: Int) = port != 50000
+        }
+        val r = LocalPortScan(scanner, { listOf("127.0.0.1", "192.0.2.10") }, range = { 40000..60000 }).scan(emptySet())
+        assertEquals(listOf(40000..41023), swept)
+        assertEquals(listOf(AdbEndpoint("127.0.0.1", 40500)), r.endpoints)
+        assertEquals(ScanResult(listOf(AdbEndpoint("127.0.0.1", 40500)), open = 1, adb = 1), r)
+    }
+
     /** 端口一直扫不完也有界:预算用完就停,不再开新的一段。 */
     @Test
     fun batchesStopWhenTheBudgetRunsOut() = runTest {

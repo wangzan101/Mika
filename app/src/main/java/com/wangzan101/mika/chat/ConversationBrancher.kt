@@ -41,7 +41,7 @@ interface BranchWorkspace {
     suspend fun copyInbox(
         sourceId: String,
         targetId: String,
-        maxBytes: Long = 200L * 1024 * 1024,
+        maxBytes: Long = DEFAULT_MAX_BYTES,
     ): BranchCopyResult?
 
     /** 复制一次 inbox，按输入顺序返回每个沙箱路径的结果；只有本次实际提交的文件才是 COPIED。 */
@@ -49,12 +49,17 @@ interface BranchWorkspace {
         sourceId: String,
         targetId: String,
         paths: List<String>,
-        maxBytes: Long = 200L * 1024 * 1024,
+        maxBytes: Long = DEFAULT_MAX_BYTES,
     ): List<RetryAttachmentResult> = paths.map { RetryAttachmentResult(it, RetryAttachmentStatus.FAILED) }
 
     /** 发送前检查目标工作区中的文件是否仍可安全读取。COPIED 表示当前可读。 */
     suspend fun checkInboxAttachments(targetId: String, paths: List<String>): List<RetryAttachmentResult> =
         paths.map { RetryAttachmentResult(it, RetryAttachmentStatus.FAILED) }
+
+    companion object {
+        /** 分支(每个目录各算一份)和重新问(一次复制的总量)默认的字节上限。 */
+        const val DEFAULT_MAX_BYTES = 200L * 1024 * 1024
+    }
 }
 
 /** 手机上的实现:两个工作区都在 files/sandbox/ 里,复制时拿同一把树锁,和重置、任务共用工作区互斥。 */

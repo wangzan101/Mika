@@ -578,6 +578,17 @@ class ConversationStore(
         return (saved + pending).toSet()
     }
 
+    /**
+     * 这个对话下一次任务开局用的主模型。自己单独选过就用自己的;前台派出的子对话没选过时跟着所属前台对话,
+     * 选择还没写进旁文件时先认那一份(和前台取模型时一样)。都没有时为 null,跟随全局。
+     * 不往子对话写旁文件:子对话藏在前台对话下,写了的话这些配置会被 [referencedModelConfigIds] 一直算作在用。
+     */
+    fun runMainChoice(conversationId: String): ModelChoice? {
+        settings(conversationId).main?.let { return it }
+        val parent = deskParent(conversationId)?.takeIf { it != safe(conversationId) } ?: return null
+        return if (hasPendingMainChoice(parent)) pendingMainChoice(parent) else settings(parent).main
+    }
+
     /** 这个对话自己的运行设置；没有旁文件或读不懂时全部跟随全局。 */
     @Synchronized
     fun settings(conversationId: String): ConversationSettings = runCatching {

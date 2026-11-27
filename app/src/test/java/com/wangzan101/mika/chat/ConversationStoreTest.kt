@@ -1,6 +1,7 @@
 package com.wangzan101.mika.chat
 
 import com.wangzan101.mika.core.model.Usage
+import com.wangzan101.mika.settings.ModelChoice
 import com.wangzan101.mika.core.run.record.RunMetrics
 import com.wangzan101.mika.core.run.record.RunMetricsStore
 import com.wangzan101.mika.core.model.usage.ConversationUsage
@@ -915,5 +916,39 @@ class ConversationStoreTest {
 
         ConversationStore(dir).meter("c1").record(Usage(10, 2), 1)
         assertFalse(File(dir, "p.json.usage").exists())
+    }
+
+    // 前台派出的子对话自己没选主模型:开局跟着前台对话的选择(模型或模型组),前台改选后排队中的任务也跟着走
+    @Test fun deskChildRunsOnTheParentsMainChoice() {
+        val store = ConversationStore(tmp.newFolder())
+        store.setDeskParent("c1", "p")
+        assertNull(store.runMainChoice("c1"))
+        store.setSettings("p", ConversationSettings(ModelChoice.Group("group-1")))
+        assertEquals(ModelChoice.Group("group-1"), store.runMainChoice("c1"))
+        store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
+        assertEquals(ModelChoice.Model("cfg-x"), store.runMainChoice("c1"))
+        // 子对话没写旁文件,配置清理不会因为它把这份配置一直留着
+        assertEquals(ConversationSettings(), store.settings("c1"))
+    }
+
+    // 前台对话的选择还没写进旁文件(通话里派活不经对话页发送):先认那一份,「跟随设置」也压过旧的旁文件
+    @Test fun deskChildPrefersTheParentsUnsavedChoice() {
+        val store = ConversationStore(tmp.newFolder())
+        store.setDeskParent("c1", "p")
+        store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-old")))
+        store.setPendingMainChoice("p", ModelChoice.Model("cfg-x"))
+        assertEquals(ModelChoice.Model("cfg-x"), store.runMainChoice("c1"))
+        store.setPendingMainChoice("p", null)
+        assertNull(store.runMainChoice("c1"))
+    }
+
+    // 自己单独选过的对话照用自己的;不是前台派出的对话不看别人
+    @Test fun ownMainChoiceWinsAndPlainChatsIgnoreOthers() {
+        val store = ConversationStore(tmp.newFolder())
+        store.setDeskParent("c1", "p")
+        store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
+        store.setSettings("c1", ConversationSettings(ModelChoice.Model("cfg-own")))
+        assertEquals(ModelChoice.Model("cfg-own"), store.runMainChoice("c1"))
+        assertNull(store.runMainChoice("plain"))
     }
 }

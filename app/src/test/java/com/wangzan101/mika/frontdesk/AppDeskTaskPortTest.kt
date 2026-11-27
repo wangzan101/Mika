@@ -1,14 +1,11 @@
 package com.wangzan101.mika.frontdesk
 
-import com.wangzan101.mika.chat.ConversationSettings
 import com.wangzan101.mika.chat.ConversationStore
 import com.wangzan101.mika.core.agent.FailKind
 import com.wangzan101.mika.core.agent.GateReason
 import com.wangzan101.mika.core.agent.TaskState
 import com.wangzan101.mika.core.agent.Turn
 import com.wangzan101.mika.core.frontdesk.DispatchOutcome
-import com.wangzan101.mika.settings.ModelChoice
-import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,8 +39,7 @@ class AppDeskTaskPortTest {
     private data class Start(val words: String, val conversationId: String, val brief: String?)
 
     private inner class Rig(scope: TestScope, limit: Int = 2, timeoutMs: Long = 60_000) {
-        val dir = tmp.newFolder()
-        val store = ConversationStore(dir)
+        val store = ConversationStore(tmp.newFolder())
         val runs = MutableStateFlow<List<DeskRun>>(emptyList())
         val starts = mutableListOf<Start>()
         val port = AppDeskTaskPort(store, runs, { runs.value }, { w, c, b -> starts += Start(w, c, b) }, { limit },
@@ -246,82 +242,4 @@ class AppDeskTaskPortTest {
         assertEquals(DispatchOutcome.Failed("disk full"), thrown)
         assertTrue(rig.starts.isEmpty())
     }
-
-    // 前台会话单独选了主模型:派出的任务在子会话里跑,开局读的是子会话的设置,所以这个选择要跟到子会话上
-    @Test fun dispatchGivesTheChildTheParentsModelChoice() = runTest {
-        val rig = Rig(this)
-        rig.store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
-        val child = (rig.port.dispatch("查天气", "", "p") as DispatchOutcome.Started).taskId
-        assertEquals(ModelChoice.Model("cfg-x"), rig.store.settings(child).main)
-    }
-
-    // 带文件派也一样;文件还没放好时子会话上就已经有这个选择
-    @Test fun dispatchWithFilesGivesTheChildTheParentsModelChoice() = runTest {
-        val rig = Rig(this)
-        rig.store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
-        var duringPrepare: ModelChoice? = null
-        val outcome = rig.port.dispatchWithFiles("p") { child ->
-            duringPrepare = rig.store.settings(child).main
-            "看合同\n附件:/workspace/inbox/a.pdf(1 B)"
-        }
-        val child = (outcome as DispatchOutcome.Started).taskId
-        assertEquals(ModelChoice.Model("cfg-x"), duringPrepare)
-        assertEquals(ModelChoice.Model("cfg-x"), rig.store.settings(child).main)
-    }
-
-    // 选的是模型组也跟过去;按派出那一刻的选择,之后前台会话改选不动已经派出的
-    @Test fun dispatchGivesTheChildTheModelGroupChosenAtThatMoment() = runTest {
-        val rig = Rig(this)
-        rig.store.setSettings("p", ConversationSettings(ModelChoice.Group("group-1")))
-        val first = (rig.port.dispatch("查天气", "", "p") as DispatchOutcome.Started).taskId
-        assertEquals(ModelChoice.Group("group-1"), rig.store.settings(first).main)
-        rig.store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
-        val second = (rig.port.dispatch("订票", "", "p") as DispatchOutcome.Started).taskId
-        assertEquals(ModelChoice.Model("cfg-x"), rig.store.settings(second).main)
-        assertEquals(ModelChoice.Group("group-1"), rig.store.settings(first).main)
-    }
-
-    // 选择还没写进设置文件(对话页刚选、还没在这里发过话,通话里就派了活):和前台取模型时一样,先认这一份
-    @Test fun dispatchGivesTheChildAChoiceNotYetSavedForTheParent() = runTest {
-        val rig = Rig(this)
-        rig.store.setPendingMainChoice("p", ModelChoice.Model("cfg-x"))
-        val child = (rig.port.dispatch("查天气", "", "p") as DispatchOutcome.Started).taskId
-        assertEquals(ModelChoice.Model("cfg-x"), rig.store.settings(child).main)
-        // 没写进去的那份是「跟随设置」时,也压过设置文件里旧的选择
-        rig.store.setSettings("q", ConversationSettings(ModelChoice.Model("cfg-old")))
-        rig.store.setPendingMainChoice("q", null)
-        val second = (rig.port.dispatch("订票", "", "q") as DispatchOutcome.Started).taskId
-        assertEquals(ConversationSettings(), rig.store.settings(second))
-    }
-
-    // 前台会话跟随全局设置:子会话也跟随,不写设置文件
-    @Test fun dispatchWithoutAParentModelChoiceWritesNoChildSettings() = runTest {
-        val rig = Rig(this)
-        val child = (rig.port.dispatch("查天气", "", "p") as DispatchOutcome.Started).taskId
-        val withFiles = (rig.port.dispatchWithFiles("p") { "看合同" } as DispatchOutcome.Started).taskId
-        assertEquals(ConversationSettings(), rig.store.settings(child))
-        assertEquals(ConversationSettings(), rig.store.settings(withFiles))
-        assertEquals(emptyList<String>(), settingsFiles(rig.dir))
-    }
-
-    // 没派成(文件没放好、服务没收下):子会话删掉,跟过去的设置文件不留下
-    @Test fun failedDispatchLeavesNoChildSettings() = runTest {
-        val rig = Rig(this)
-        rig.store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
-        assertTrue(rig.port.dispatchWithFiles("p") { null } is DispatchOutcome.Failed)
-        assertTrue(rig.port.dispatchWithFiles("p") { error("disk full") } is DispatchOutcome.Failed)
-        assertEquals(listOf("p.settings.json"), settingsFiles(rig.dir))
-
-        val dir = tmp.newFolder()
-        val store = ConversationStore(dir)
-        store.setSettings("p", ConversationSettings(ModelChoice.Model("cfg-x")))
-        val port = AppDeskTaskPort(store, MutableStateFlow(emptyList()), { emptyList() }, { _, _, _ -> error("blocked") }, { 2 },
-            backgroundScope, { "没开始" }, { "中断了" })
-        assertEquals(DispatchOutcome.Failed("blocked"), port.dispatch("查天气", "", "p"))
-        assertEquals(listOf("p.settings.json"), settingsFiles(dir))
-    }
-
-    /** 对话目录里的设置文件(含写到一半的临时文件)。 */
-    private fun settingsFiles(dir: File): List<String> =
-        dir.list().orEmpty().filter { ".settings.json" in it }.sorted()
 }

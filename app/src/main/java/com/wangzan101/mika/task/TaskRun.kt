@@ -695,9 +695,9 @@ class TaskRun(
     }
 
     suspend fun execute(priorTurns: List<Turn>): TaskState {
-        // 每次启动（UI、定时、渠道都一样）重读所属对话；此后整次运行只用这一份不可变路由。
+        // 每次启动（UI、定时、渠道都一样）重读所属对话（前台派出的子对话跟着前台对话）；此后整次运行只用这一份不可变路由。
         val choice = withContext(Dispatchers.IO) {
-            runCatching { ConversationStore.shared(service).settings(conversationId).main }.getOrNull()
+            runCatching { ConversationStore.shared(service).runMainChoice(conversationId) }.getOrNull()
         }
         val snapshot = env.modelSnapshot(service, session, choice).also { modelSnapshot = it }
         noticeTainted = NoticeTurn.tainted(priorTurns)

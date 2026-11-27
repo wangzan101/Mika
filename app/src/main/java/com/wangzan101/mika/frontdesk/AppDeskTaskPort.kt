@@ -1,6 +1,5 @@
 package com.wangzan101.mika.frontdesk
 
-import com.wangzan101.mika.chat.ConversationSettings
 import com.wangzan101.mika.chat.ConversationStore
 import com.wangzan101.mika.core.agent.FailKind
 import com.wangzan101.mika.core.agent.TaskState
@@ -98,18 +97,9 @@ class AppDeskTaskPort(
         return startIn(child, words, "")
     }
 
-    /**
-     * 开一个新的子会话,挂在前台会话 [parentConversation] 下。
-     * 前台会话单独选的主模型(或模型组)此刻复制给子会话:任务在子会话里跑,开局读的是子会话的设置。
-     * 选择还没写进设置文件时(通话里派活不经对话页的发送)先认那一份,和前台取模型时一样。
-     */
+    /** 开一个新的子会话,挂在前台会话 [parentConversation] 下。 */
     private fun openChild(parentConversation: String): String =
-        conversations.newConversation().also { child ->
-            conversations.setDeskParent(child, parentConversation)
-            val main = if (conversations.hasPendingMainChoice(parentConversation)) conversations.pendingMainChoice(parentConversation)
-            else conversations.settings(parentConversation).main
-            main?.let { conversations.setSettings(child, ConversationSettings(it)) }
-        }
+        conversations.newConversation().also { conversations.setDeskParent(it, parentConversation) }
 
     /** 在子会话 [child] 里开始(或排上队)这件活;没交给任务服务时删掉子会话。 */
     @Synchronized

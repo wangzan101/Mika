@@ -31,6 +31,7 @@ Requires JDK 17 and the Android SDK (`sdk.dir` in `local.properties`, or the `AN
 python3 -m unittest discover -s tools/i18n -v              # translation tool tests (no JDK/Android SDK)
 python3 tools/i18n/translations.py check                  # lightweight translation resource checks
 python3 -m unittest discover -s tools -p 'test_pull_logs.py' -v   # log export tool tests (adb is mocked; no phone needed)
+python3 -m unittest discover -s tools/voice-models -v      # voice pack tool tests
 ./gradlew updateReadme                        # regenerate the built-in knowledge and provider lists in the READMEs
 ```
 
@@ -48,7 +49,7 @@ The debug build is not precompiled and its UI is several times slower; use the p
 Pull requests and pushes to `main` run on GitHub Actions ([`ci.yml`](workflows/ci.yml)); no secrets are required:
 
 - `core (JVM)`: `./gradlew :core:test`
-- `cli (Python)`: `./gradlew :core:cliTest`, plus `tools/i18n` unit tests, translation resource checks and unit tests for the log export tool `tools/pull-logs.py` (Python 3.10+; CI uses 3.12)
+- `cli (Python)`: `./gradlew :core:cliTest`, plus `tools/i18n` unit tests, translation resource checks and unit tests for the log export tool `tools/pull-logs.py` and the voice pack tools in `tools/voice-models` (Python 3.10+; CI uses 3.12)
 - `app (Android)`: `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin` (device tests are compiled, not run)
 - `relay (Go)`: `go test ./...` in `companions/relay`, then `./gradlew :core:relayTest`
 - `maintainer edits allowed` ([`pr-maintainer-edits.yml`](workflows/pr-maintainer-edits.yml)): PRs from a fork fail until "Allow edits by maintainers" is checked; ticking it doesn't start a new run, so push a commit or ask a maintainer to re-run it. Organization-owned forks, where GitHub doesn't offer the option, only get a warning.

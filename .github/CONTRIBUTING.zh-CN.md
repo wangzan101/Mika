@@ -31,6 +31,7 @@
 python3 -m unittest discover -s tools/i18n -v              # 翻译工具测试（不需要 JDK/Android SDK）
 python3 tools/i18n/translations.py check                  # 轻量翻译资源检查
 python3 -m unittest discover -s tools -p 'test_pull_logs.py' -v   # 日志导出工具测试（用模拟的 adb，不需要手机）
+python3 -m unittest discover -s tools/voice-models -v      # 语音包工具测试
 ./gradlew updateReadme                        # 重新生成 README 里的内置知识、服务商清单
 ```
 
@@ -48,7 +49,7 @@ python3 -m unittest discover -s tools -p 'test_pull_logs.py' -v   # 日志导出
 PR 和合入 `main` 的提交会在 GitHub Actions 上跑（[`ci.yml`](workflows/ci.yml)），不需要配置任何密钥：
 
 - `core (JVM)`：`./gradlew :core:test`
-- `cli (Python)`：`./gradlew :core:cliTest`，另跑 `tools/i18n` 单元测试、翻译资源检查和日志导出工具 `tools/pull-logs.py` 的单元测试（Python 3.10+；CI 使用 3.12）
+- `cli (Python)`：`./gradlew :core:cliTest`，另跑 `tools/i18n` 单元测试、翻译资源检查和日志导出工具 `tools/pull-logs.py` 和语音包工具 `tools/voice-models` 的单元测试（Python 3.10+；CI 使用 3.12）
 - `app (Android)`：`./gradlew :app:testDebugUnitTest :app:assembleDebug :app:compileDebugAndroidTestKotlin`（设备测试只编译、不运行）
 - `relay (Go)`：先在 `companions/relay` 下跑 `go test ./...`，再跑 `./gradlew :core:relayTest`
 - `maintainer edits allowed`（[`pr-maintainer-edits.yml`](workflows/pr-maintainer-edits.yml)）：从 fork 提的 PR 没勾选「Allow edits by maintainers」时失败；勾选本身不会触发重跑，勾上后推一个提交或请维护者重新运行。组织名下的 fork 没有这个选项，只给警告。

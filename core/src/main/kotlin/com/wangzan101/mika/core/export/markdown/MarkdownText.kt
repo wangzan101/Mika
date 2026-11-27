@@ -4,13 +4,64 @@ import java.net.URLEncoder
 
 /** 导出 Markdown 时的转义:普通文字当纯文本,链接目的地单独处理。 */
 internal object MarkdownText {
-    private val SPECIAL = setOf('\\', '`', '*', '_', '[', ']', '<', '>', '|', '#', '!')
+    private val SPECIAL = setOf('\\', '`', '*', '_', '[', ']', '<', '>', '|', '#', '!', '~')
 
-    /** 用户原话、标题、说明这类纯文本:转义会被 Markdown 解释成结构或 HTML 的字符。 */
+    /**
+     * 用户原话、标题、说明这类纯文本:转义会被 Markdown 解释成结构或 HTML 的字符。
+     * 成对的 ~~ 会被解释成删除线,整字符集转义。行首另有整行结构:
+     * -/+ 开列表、连续 =/- 把上一行抬成 setext 标题、数字+.或)开有序列表,都要转义行首字符。
+     */
     fun plain(text: String): String = buildString(text.length) {
-        for (ch in text) {
+        var lineStart = true
+        var i = 0
+        while (i < text.length) {
+            val ch = text[i]
+            if (ch == '\n' || ch == '\r') {
+                append(ch)
+                i++
+                lineStart = true
+                continue
+            }
+            if (lineStart) {
+                lineStart = false
+                // CommonMark still opens a list/setext block with up to three
+                // leading spaces; four spaces are an indented code block, where
+                // escaping the marker would change the literal code text.
+                var marker = i
+                while (marker < text.length && marker - i < 4 && text[marker] == ' ') marker++
+                if (marker - i <= 3) {
+                    while (i < marker) { append(' '); i++ }
+                    if (i < text.length) {
+                        val markerChar = text[i]
+                        if (markerChar == '-' || markerChar == '+' || markerChar == '=') {
+                            append('\\')
+                            append(markerChar)
+                            i++
+                            continue
+                        }
+                        if (markerChar in '0'..'9') {
+                            var j = i
+                            while (j < text.length && text[j] in '0'..'9') j++
+                            if (j < text.length && (text[j] == '.' || text[j] == ')')) {
+                                append(text, i, j)
+                                append('\\')
+                                append(text[j])
+                                i = j + 1
+                                continue
+                            }
+                        }
+                        if (markerChar in SPECIAL) append('\\')
+                        append(markerChar)
+                        i++
+                        if (markerChar == '\n' || markerChar == '\r') lineStart = true
+                        continue
+                    }
+                    continue
+                }
+            }
             if (ch in SPECIAL) append('\\')
             append(ch)
+            i++
         }
     }
 

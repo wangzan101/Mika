@@ -230,9 +230,11 @@ internal fun NavEntry(
 @Composable
 internal fun NewConversationButton(enabled: Boolean, onClick: () -> Unit) {
     val c = MikaTheme.colors
+    val busyHint = rememberBusyHint()
     Box(
         Modifier.size(38.dp).clip(CircleShape).background(c.fill)
-            .clickable(enabled = enabled, role = Role.Button, onClickLabel = stringResource(R.string.chat_new), onClick = onClick)
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.chat_new),
+                onClick = { if (enabled) onClick() else busyHint() })
             .alpha(if (enabled) 1f else 0.4f),
         contentAlignment = Alignment.Center,
     ) {

@@ -88,12 +88,15 @@ internal fun TopBarIcon(
     tag: String,
     enabled: Boolean = true,
     badge: Boolean = false,
+    /** 灰掉时点下去的回应(说明为什么现在不能用);不给就照旧不响应。 */
+    onDisabledClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val c = MikaTheme.colors
     Box(
         Modifier.size(width = 44.dp, height = MikaSize.IconButton + 4.dp).clip(TopBarShape)
-            .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClickLabel = label, onClick = onClick)
+            .clickable(enabled = enabled || onDisabledClick != null, role = androidx.compose.ui.semantics.Role.Button, onClickLabel = label,
+                onClick = { if (enabled) onClick() else onDisabledClick?.invoke() })
             .testTag(tag),
         contentAlignment = Alignment.Center,
     ) {

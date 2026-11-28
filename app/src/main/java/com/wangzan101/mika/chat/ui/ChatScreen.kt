@@ -382,6 +382,7 @@ fun ChatScreen(
     val context = LocalContext.current
 
     val c = MikaTheme.colors
+    val busyHint = rememberBusyHint()
     val backdrop = rememberGlassBackdrop()
     /** 长按了的那条消息;菜单开着(收起的动画放完才清掉)。 */
     var menu by remember { mutableStateOf<MessageTarget?>(null) }
@@ -493,7 +494,8 @@ fun ChatScreen(
                             if (!adaptive.hasNavigation || screenDocked) {
                                 TopBarIcon(MikaIcons.Menu, stringResource(R.string.chat_menu), "chat-menu", badge = others.isNotEmpty(), onClick = onOpenDrawer)
                             }
-                            TopBarIcon(MikaIcons.New, stringResource(R.string.chat_new), "chat-new", enabled = vm.canSwitch()) { vm.newConversation() }
+                            TopBarIcon(MikaIcons.New, stringResource(R.string.chat_new), "chat-new", enabled = vm.canSwitch(),
+                                onDisabledClick = busyHint) { vm.newConversation() }
                         }
                     }
                     GlassSurface(backdrop = backdrop, modifier = Modifier.align(Alignment.Center), shape = TopBarShape) {

@@ -85,6 +85,8 @@ class AndroidSelfCheck(context: Context, private val status: () -> SystemStatus)
     /** 开跑时主屏最上面的任务;之后每到一个节点再看一次,变了的节点记下来。 */
     private var mainBefore: Int? = null
     private val mainChanged = mutableListOf<String>()
+    /** 虚拟屏没有自己的焦点:主屏被动到时按已知限制报部分支持。 */
+    @Volatile private var focusShared = false
 
     private class Web(val host: WebHost, val pool: WebTabPool, val screen: WebScreen) {
         fun close() {
@@ -388,6 +390,7 @@ class AndroidSelfCheck(context: Context, private val status: () -> SystemStatus)
         val flags = runCatching { app.getSystemService(DisplayManager::class.java).getDisplay(d.displayId)?.flags }.getOrNull()
         val own = flags?.let { it and ownFocusFlag() != 0 }
         val detail = "created ${d.width}x${d.height}, own focus " + when (own) { true -> "yes"; false -> "no"; null -> "unknown" }
+        focusShared = Build.VERSION.SDK_INT < DeviceFacts.OWN_FOCUS_SDK || own == false
         return when {
             Build.VERSION.SDK_INT < DeviceFacts.OWN_FOCUS_SDK -> CheckOutcome.partial("$detail (own focus needs Android 14)", Advice.FocusShared)
             own == false -> CheckOutcome.partial(detail, Advice.FocusShared)
@@ -584,8 +587,7 @@ class AndroidSelfCheck(context: Context, private val status: () -> SystemStatus)
         val before = mainBefore ?: return CheckOutcome.fail("main screen was not readable at the start", Advice.Error)
         sampleMain(sh, "end")
         val who = if (withContext(Dispatchers.IO) { runCatching { sh.packageOfTask(before) }.getOrNull() } == app.packageName) "Mika" else "another app"
-        return if (mainChanged.isEmpty()) CheckOutcome.pass("top task unchanged ($who stayed on top)")
-        else CheckOutcome.fail("top task changed during: ${mainChanged.joinToString()}", Advice.MainScreenChanged)
+        return MainScreenOutcome.of(mainChanged.toList(), focusShared, who)
     }
 
     // ---------- 10 内置浏览器 ----------

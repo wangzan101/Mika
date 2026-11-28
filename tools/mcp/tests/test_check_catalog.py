@@ -197,6 +197,18 @@ class RequireOnlineTest(unittest.TestCase):
         self.stub_probe("network_error")
         self.assertEqual(1, self.run_main([self.catalog_file([preset()]), "--online", "--require-online"]))
 
+    def test_stdioPresetIsTheOneExemption(self):
+        # A stdio preset runs locally, so the probe cannot judge it; it must not fail the gate.
+        self.stub_probe("mcp_ok")
+        local = preset("local", transport="stdio")
+        self.assertEqual(0, self.run_main([self.catalog_file([local]), "--online", "--require-online"]))
+
+    def test_unsupportedRemotePresetIsNotExempt(self):
+        # The exemption is stdio only: "unsupported" alone must still fail, or the gate stops meaning
+        # anything for a server that answered but is not MCP.
+        self.stub_probe("not_mcp")
+        self.assertEqual(1, self.run_main([self.catalog_file([preset()]), "--online", "--require-online"]))
+
 
 if __name__ == "__main__":
     unittest.main()

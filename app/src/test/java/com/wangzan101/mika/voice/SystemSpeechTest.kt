@@ -18,6 +18,29 @@ class SystemSpeechTest {
         assertEquals(SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemFailed), SystemSpeech.failureOf(SpeechRecognizer.ERROR_CLIENT))
     }
 
+    /** 服务已经登记、按下后才报的错,不能说成「这台手机没有自带识别」(#795)。 */
+    @Test
+    fun runtimeServiceErrorsAreFailuresNotMissingRecognition() {
+        val failed = SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemFailed)
+        assertEquals(failed, SystemSpeech.failureOf(12))
+        assertEquals(failed, SystemSpeech.failureOf(13))
+        assertEquals(failed, SystemSpeech.failureOf(14))
+        assertEquals(failed, SystemSpeech.failureOf(15))
+        assertEquals(failed, SystemSpeech.failureOf(999))
+    }
+
+    /** 本机识别一开口就出错、什么都没听到:换联网识别再试一次;网络、权限、麦克风这类换了也没用的不换。 */
+    @Test
+    fun onDeviceServiceFailureFallsBackOnline() {
+        assertEquals(true, SystemSpeech.onDeviceFallsBack(SpeechRecognizer.ERROR_CLIENT))
+        assertEquals(true, SystemSpeech.onDeviceFallsBack(14))
+        assertEquals(true, SystemSpeech.onDeviceFallsBack(999))
+        assertEquals(false, SystemSpeech.onDeviceFallsBack(SpeechRecognizer.ERROR_NETWORK))
+        assertEquals(false, SystemSpeech.onDeviceFallsBack(SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS))
+        assertEquals(false, SystemSpeech.onDeviceFallsBack(SpeechRecognizer.ERROR_AUDIO))
+        assertEquals(false, SystemSpeech.onDeviceFallsBack(SpeechRecognizer.ERROR_NO_MATCH))
+    }
+
     @Test
     fun silenceFromAServiceThatNeverAnsweredIsNoResponse() {
         assertEquals(

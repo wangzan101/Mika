@@ -35,7 +35,9 @@ object SystemSpeech {
 
     /**
      * 识别服务的错误码归到哪种失败;null 表示「这一段没听到话」(没匹配上、没开口),按着时重开、松开后照已有的给结果。
-     * 列表外的码(服务端错误、语言不支持等)按服务出了问题处理。
+     * 列表外的码(服务端错误、语言不支持、各家自定的码等)按服务出了问题处理。
+     * 这些错都是服务已经登记、开始识别后才报的,不能说成「这台手机没有自带识别」:
+     * 那是能力检测([capability])的结论,设置页同时会显示可用,两边对不上(#795)。
      */
     fun failureOf(code: Int): SpeechFailure? = when (code) {
         SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> null
@@ -45,8 +47,14 @@ object SystemSpeech {
         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> SpeechFailure.NoPermission
         SpeechRecognizer.ERROR_AUDIO -> SpeechFailure.AudioError
         SpeechRecognizer.ERROR_CLIENT -> SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemFailed)
-        else -> SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemGone)
+        else -> SpeechFailure.Unavailable(SpeechEngineSpec.Why.SystemFailed)
     }
+
+    /**
+     * 本机识别报了这个码、还什么都没听到时,要不要换联网识别再试一次:服务本身出错的换(本机模型没准备好、
+     * 不认这个请求等);网络、忙、权限、麦克风这类换了服务也一样的不换,没听到话的照常重开。
+     */
+    fun onDeviceFallsBack(code: Int): Boolean = failureOf(code) is SpeechFailure.Unavailable
 
     /** 一个错误码到了之后怎么办:重开、按已听到的收尾、报失败。 */
     sealed interface Outcome {
@@ -400,6 +408,12 @@ class SystemSpeechSession(
             if (!retag()) toOnline()
             return
         }
+        if (usingOnDevice && holding && segments.full().isEmpty() && SystemSpeech.onDeviceFallsBack(error)) {
+            android.util.Log.i(TAG, "on-device recognition failed with code $error; trying online recognition")
+            heard(remember = false)
+            toOnline()
+            return
+        }
         val outcome = SystemSpeech.afterError(error, holding, heard = segments.full().isNotEmpty(),
             canTryNext = compatibility && attempt + 1 < attempts.size)
         if (outcome == SystemSpeech.Outcome.NextService) {
@@ -605,6 +619,8 @@ class SystemSpeechSession(
     }
 
     companion object {
+        private const val TAG = "MikaSystemSpeech"
+
         /** 松开后等最终结果的上限。 */
         const val FINAL_WAIT_MS = 2_000L
 

@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">Mika 在手机上已暂停，这个任务没有开始办。恢复 Mika 之后请再发一次。</string>
     <string name="plans_skipped_paused">Mika 暂停期间跳过</string>
     <string name="workflow_stopped_paused">因 Mika 暂停而停下</string>
+    <string name="channel_stop_reply">已停止这个对话里的 %1$d 个任务。</string>
+    <string name="channel_stop_none">这个对话里没有正在办或排队的任务。</string>
 </resources>

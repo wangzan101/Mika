@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">Mika trên điện thoại đang tạm dừng nên chưa bắt đầu tác vụ này. Hãy gửi lại sau khi Mika được tiếp tục.</string>
     <string name="plans_skipped_paused">Bỏ qua khi Mika đang tạm dừng</string>
     <string name="workflow_stopped_paused">Đã dừng vì Mika tạm dừng</string>
+    <string name="channel_stop_reply">Đã dừng %1$d tác vụ trong cuộc trò chuyện này.</string>
+    <string name="channel_stop_none">Không có tác vụ nào đang chạy hoặc đang chờ trong cuộc trò chuyện này.</string>
 </resources>

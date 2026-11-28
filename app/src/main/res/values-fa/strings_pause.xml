@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">Mika روی گوشی متوقف شده است، پس این کار را شروع نکرد. بعد از ادامهٔ Mika دوباره بفرستید.</string>
     <string name="plans_skipped_paused">در زمان توقف Mika رد شد</string>
     <string name="workflow_stopped_paused">به‌خاطر توقف Mika متوقف شد</string>
+    <string name="channel_stop_reply">%1$d کار در این گفتگو متوقف شد.</string>
+    <string name="channel_stop_none">در این گفتگو هیچ کاری در حال اجرا یا در صف نیست.</string>
 </resources>

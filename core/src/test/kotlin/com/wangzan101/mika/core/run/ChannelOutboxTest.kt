@@ -157,6 +157,61 @@ class ChannelOutboxTest {
         assertEquals(listOf("m1"), channel.acknowledged)
     }
 
+    /** #861:前面的任务卡在等人到手机上处理时,主人发「停止」要能停掉这个对话的任务,而不是又排一个新任务。 */
+    @Test fun stopCommandStopsThreadInsteadOfQueueingANewTask() = runBlocking {
+        val channel = FakeChannel()
+        val events = mutableListOf<String>()
+        var ask: Delivery.Ask? = Delivery.Ask("ask-1", "thread", "a1", Delivery.Ask.Kind.Input, "Which account?")
+        val gateway = ChannelGateway(MemoryOwnerIdentity().also { it.bind(peer) }, { ask }, object : ChannelGateway.Route {
+            override suspend fun newTask(peer: ChannelPeer, messageId: String, text: String) { events += "new:$text" }
+            override suspend fun answer(threadId: String, askId: String, text: String) = true.also { events += "answer:$text" }
+            override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
+            override suspend fun stop(runId: RunId) = Unit
+            override suspend fun cancelAsk(threadId: String) { events += "cancelAsk" }
+            override suspend fun paused(peer: ChannelPeer, messageId: String) = Unit
+            override suspend fun stopThread(peer: ChannelPeer, messageId: String, text: String) { events += "stop:${peer.threadId}" }
+        })
+        gateway.start(channel)
+
+        channel.receive(ChannelInput.Text(peer, "m1", " 停止 "))
+        channel.receive(ChannelInput.Text(peer, "m2", "/STOP"))
+        assertEquals(listOf("stop:thread", "stop:thread"), events)
+        assertEquals(listOf("m1", "m2"), channel.acknowledged)
+
+        // 明确回复 Mika 的提问时仍是回答;句子里带「停止」的普通消息照常开任务
+        events.clear()
+        channel.receive(ChannelInput.Text(peer, "m3", "停止", replyToAskId = "a1"))
+        ask = null
+        channel.receive(ChannelInput.Text(peer, "m4", "停止播放音乐"))
+        assertEquals(listOf("answer:停止", "new:停止播放音乐"), events)
+    }
+
+    @Test fun stopCommandFromSomeoneElseIsIgnored() = runBlocking {
+        val channel = FakeChannel()
+        val events = mutableListOf<String>()
+        val gateway = ChannelGateway(MemoryOwnerIdentity().also { it.bind(peer) }, { null }, object : ChannelGateway.Route {
+            override suspend fun newTask(peer: ChannelPeer, messageId: String, text: String) { events += "new" }
+            override suspend fun answer(threadId: String, askId: String, text: String) = false
+            override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
+            override suspend fun stop(runId: RunId) = Unit
+            override suspend fun cancelAsk(threadId: String) = Unit
+            override suspend fun paused(peer: ChannelPeer, messageId: String) = Unit
+            override suspend fun stopThread(peer: ChannelPeer, messageId: String, text: String) { events += "stop" }
+        })
+        gateway.start(channel)
+        channel.receive(ChannelInput.Text(ChannelPeer("fake", "stranger", "thread"), "m1", "停止"))
+        assertEquals(emptyList<String>(), events)
+    }
+
+    @Test fun stopWordsAreExactCommandsOnly() {
+        listOf("停止", "停止任务", "取消任务", "全部停止", "stop", "/stop", "/停止", "Stop ").forEach {
+            assertEquals(it, true, ChannelCommands.isStop(it))
+        }
+        listOf("取消", "停", "停止播放", "please stop the music", "").forEach {
+            assertEquals(it, false, ChannelCommands.isStop(it))
+        }
+    }
+
     @Test fun uncertainSendIsNeverBlindlyRetried() = runBlocking {
         val channel = FakeChannel().apply { outcome = SendOutcome.Uncertain }
         val outbox = Outbox()

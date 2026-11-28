@@ -74,6 +74,9 @@ class WechatRuntime(
 
             override suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice) = false
             override suspend fun stop(runId: RunId) = TaskService.cancel(context, runId.value)
+            override suspend fun stopThread(peer: ChannelPeer, messageId: String, text: String) =
+                com.wangzan101.mika.task.replyStopped(app.outbox, channel, peer, messageId,
+                    TaskService.stopChannelThread(context, peer))
             override suspend fun cancelAsk(threadId: String) {
                 val run = app.taskState.run(threadId) ?: return
                 run.activeAsk?.askId?.let(run::cancelAsk)

@@ -78,6 +78,36 @@ internal fun TaskService.stopForPause() {
 }
 
 /**
+ * 渠道主人发了停止指令(#861):停下这个渠道对话里在跑和排着的任务。只看同一渠道、同一对话的任务,
+ * 手机上、电脑交来的和别的对话的任务都不碰;等人到手机上处理的任务也照常走取消收尾。
+ */
+internal fun TaskService.stopChannelThread(channelId: String, threadId: String) {
+    for (run in center.runs()) {
+        val peer = run.channelPeer ?: continue
+        if (peer.channelId != channelId || peer.threadId != threadId) continue
+        if (center.cancelIfQueued(run)) cancelQueued(run) else run.cancel()
+    }
+    // 卡住的任务后面排着的同一对话消息也撤掉,不然停下后它们接着跑起来
+    for (item in center.followUps.pendingFor(threadId)) {
+        if (item.channelPeer?.channelId == channelId) center.followUps.cancel(item.id)
+    }
+}
+
+internal fun ChannelPeer?.sameThread(peer: ChannelPeer) =
+    this != null && channelId == peer.channelId && threadId == peer.threadId
+
+/** 停止指令的回复:停下了几个就说停下了,一个都没有就照实说。经可靠送达账本发,同一条指令只回一次,发不出去就算了。 */
+internal suspend fun replyStopped(outbox: Outbox, channel: Channel, peer: ChannelPeer, messageId: String, stopped: Int) {
+    val text = if (stopped > 0) tr(R.string.channel_stop_reply, stopped) else tr(R.string.channel_stop_none)
+    try {
+        outbox.deliver(channel, peer, Delivery.Notice("stopped:${peer.channelId}:$messageId", peer.threadId, text))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+    }
+}
+
+/**
  * 暂停期间渠道来的新消息(调用方已确认收到):尽力回一句「Mika 已暂停,这条没有开始办」。经可靠送达账本发,
  * 同一条消息只回一次;发不出去就算了,不让它挡住确认、也不让渠道重交。
  */

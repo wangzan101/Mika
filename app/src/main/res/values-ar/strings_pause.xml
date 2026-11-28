@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">Mika متوقف مؤقتًا على الهاتف، لذا لم يبدأ هذه المهمة. أرسلها مرة أخرى بعد استئناف Mika.</string>
     <string name="plans_skipped_paused">تم التخطي أثناء إيقاف Mika مؤقتًا</string>
     <string name="workflow_stopped_paused">توقف بسبب إيقاف Mika مؤقتًا</string>
+    <string name="channel_stop_reply">تم إيقاف %1$d من المهام في هذه المحادثة.</string>
+    <string name="channel_stop_none">لا توجد مهام قيد التنفيذ أو في الانتظار في هذه المحادثة.</string>
 </resources>

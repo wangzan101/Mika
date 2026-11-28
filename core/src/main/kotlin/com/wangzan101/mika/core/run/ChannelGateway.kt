@@ -3,7 +3,7 @@ package com.wangzan101.mika.core.run
 import com.wangzan101.mika.core.action.ConfirmChoice
 
 /**
- * 渠道入站在这里验主人、问题编号与确认权限；普通新消息始终新开任务。
+ * 渠道入站在这里验主人、问题编号与确认权限；普通新消息始终新开任务,停止指令([ChannelCommands])除外。
  * 用户暂停了 Mika([paused])时新消息不开任务、也不留着等恢复:先确认收到,再尽力回一句「已暂停」([Route.paused]);
  * 回复发不出去也不影响确认,渠道不会把这条重交、恢复后也不会自动跑起来;要办的事恢复后重新发。
  */
@@ -21,6 +21,11 @@ class ChannelGateway(
         suspend fun confirm(threadId: String, askId: String, choice: ConfirmChoice): Boolean
         suspend fun stop(runId: RunId)
         suspend fun cancelAsk(threadId: String)
+        /**
+         * 主人发了停止指令([ChannelCommands.isStop]):停掉这个对话里正在跑和排着的任务,并尽力回一句。
+         * 不支持的渠道照旧当新任务。
+         */
+        suspend fun stopThread(peer: ChannelPeer, messageId: String, text: String) = newTask(peer, messageId, text)
     }
 
     fun start(channel: Channel): AutoCloseable = channel.start(ChannelInputSink { input ->
@@ -33,6 +38,12 @@ class ChannelGateway(
                     try { route.paused(input.peer, input.messageId) }
                     catch (e: kotlinx.coroutines.CancellationException) { throw e }
                     catch (_: Exception) { }
+                    return@ChannelInputSink
+                }
+                // 停止指令不排在卡住的任务后面(#861);明确回复 Mika 提问的仍按回答处理
+                if (input.replyToAskId == null && ChannelCommands.isStop(input.text)) {
+                    route.stopThread(input.peer, input.messageId, input.text)
+                    channel.acknowledge(input.messageId)
                     return@ChannelInputSink
                 }
                 val ask = activeAsk(input.peer.threadId)

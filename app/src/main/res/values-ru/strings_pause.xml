@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">Mika на телефоне на паузе, поэтому эта задача не запущена. Отправьте её снова после возобновления Mika.</string>
     <string name="plans_skipped_paused">Пропущено, пока Mika был на паузе</string>
     <string name="workflow_stopped_paused">Остановлено из-за паузы Mika</string>
+    <string name="channel_stop_reply">Остановлено задач в этом чате: %1$d.</string>
+    <string name="channel_stop_none">В этом чате нет выполняемых или ожидающих задач.</string>
 </resources>

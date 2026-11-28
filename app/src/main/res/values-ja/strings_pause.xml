@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">スマホの Mika は一時停止中のため、このタスクは開始されませんでした。Mika の再開後にもう一度送ってください。</string>
     <string name="plans_skipped_paused">Mika の一時停止中にスキップ</string>
     <string name="workflow_stopped_paused">Mika の一時停止により停止</string>
+    <string name="channel_stop_reply">このチャットのタスクを %1$d 件停止しました。</string>
+    <string name="channel_stop_none">このチャットで実行中または待機中のタスクはありません。</string>
 </resources>

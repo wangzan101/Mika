@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">휴대전화의 Mika가 일시 중지되어 이 작업을 시작하지 않았어요. Mika를 다시 시작한 뒤 다시 보내 주세요.</string>
     <string name="plans_skipped_paused">Mika 일시 중지 중 건너뜀</string>
     <string name="workflow_stopped_paused">Mika 일시 중지로 멈춤</string>
+    <string name="channel_stop_reply">이 대화의 작업 %1$d개를 중지했습니다.</string>
+    <string name="channel_stop_none">이 대화에서 실행 중이거나 대기 중인 작업이 없습니다.</string>
 </resources>

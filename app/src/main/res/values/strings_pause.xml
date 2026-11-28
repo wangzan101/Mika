@@ -40,4 +40,6 @@
     <string name="pause_channel_reply">Mika is paused on the phone, so it did not start this task. Send it again after Mika is resumed.</string>
     <string name="plans_skipped_paused">Skipped while Mika was paused</string>
     <string name="workflow_stopped_paused">Stopped because Mika was paused</string>
+    <string name="channel_stop_reply">Stopped %1$d task(s) in this chat.</string>
+    <string name="channel_stop_none">No task is running or queued in this chat.</string>
 </resources>

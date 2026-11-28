@@ -39,4 +39,6 @@
     <string name="pause_channel_reply">Mika está en pausa en el teléfono, así que no empezó esta tarea. Envíala de nuevo cuando Mika se reanude.</string>
     <string name="plans_skipped_paused">Omitido mientras Mika estaba en pausa</string>
     <string name="workflow_stopped_paused">Detenido porque Mika se pausó</string>
+    <string name="channel_stop_reply">Se detuvieron %1$d tareas de este chat.</string>
+    <string name="channel_stop_none">No hay tareas en curso ni en cola en este chat.</string>
 </resources>

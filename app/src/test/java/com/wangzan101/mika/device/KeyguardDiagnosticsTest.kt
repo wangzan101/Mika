@@ -39,6 +39,20 @@ class KeyguardDiagnosticsTest {
         )
     }
 
+    @Test fun sourceSummaryTellsWhichWindowListWasEmpty() {
+        assertEquals(
+            "keyguard_source[source=active_root,display_ids=none,legacy_windows=0,active_root=com.android.systemui]",
+            KeyguardDiagnostics.source("active_root", emptyList(), 0, "com.android.systemui"),
+        )
+        assertEquals(
+            "keyguard_source[source=none,display_ids=0/2,legacy_windows=3,active_root=none]",
+            KeyguardDiagnostics.source("none", listOf(0, 2), 3, null),
+        )
+        val redacted = KeyguardDiagnostics.source("none", emptyList(), 0, "密码 user\nnext")
+        assertFalse('\n' in redacted)
+        assertFalse("密码" in redacted)
+    }
+
     @Test fun windowInventoryContainsOnlyTechnicalProperties() {
         assertEquals(
             "window_info[index=0,type=2032,package=com.android.systemui,focused=true,active=true]",

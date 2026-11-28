@@ -18,6 +18,11 @@ internal object KeyguardDiagnostics {
     ): String = "window[index=$index,focused=$focused,password_nodes=$passwordNodes,digits=$digits," +
         "pad_keys=$padKeys,pin_layout=$pinLayout]"
 
+    /** 凭据页取自哪份列表,以及各份列表的大小:分辨「整份窗口列表为空」「屏号不对」「活动窗口不是 SystemUI」。 */
+    fun source(source: String, displayIds: List<Int>, legacyWindows: Int, activeRootPackage: CharSequence?): String =
+        "keyguard_source[source=$source,display_ids=${displayIds.joinToString("/").ifEmpty { "none" }}," +
+            "legacy_windows=$legacyWindows,active_root=${activeRootPackage?.let(::name) ?: "none"}]"
+
     fun windowInfo(
         index: Int,
         type: Int,

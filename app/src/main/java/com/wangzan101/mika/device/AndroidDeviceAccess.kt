@@ -54,10 +54,9 @@ internal class AndroidDeviceAccessPort(context: Context, private val helper: () 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@withContext false
         if (!power.isInteractive || !keyguard.isKeyguardLocked || !keyguard.isDeviceLocked) return@withContext false
         val service = ScreenAccessibility.instance.value ?: return@withContext false
-        for (window in service.windowsOn(Display.DEFAULT_DISPLAY)) {
-            val root = window.root ?: continue
-            if (root.packageName?.toString() != SYSTEM_UI) continue
-            val windowBounds = Rect().also(window::getBoundsInScreen)
+        for (keyguardRoot in keyguardRoots(service).roots) {
+            val root = keyguardRoot.root
+            val windowBounds = keyguardRoot.bounds
             val candidates = mutableListOf<KeyguardReveal.Candidate>()
             fun visit(n: AccessibilityNodeInfo, depth: Int) {
                 if (depth > 40) return
@@ -97,9 +96,9 @@ internal class AndroidDeviceAccessPort(context: Context, private val helper: () 
             Log.i(TAG, "keyguard: ${fields.size} matching field(s) for $kind")
         }
         val (field, window) = target
-        val ready = if (field == null) window.isFocused else field.isFocused ||
+        val ready = if (field == null) window.focused else field.isFocused ||
             field.performAction(AccessibilityNodeInfo.ACTION_FOCUS) ||
-            field.performAction(AccessibilityNodeInfo.ACTION_CLICK) || window.isFocused
+            field.performAction(AccessibilityNodeInfo.ACTION_CLICK) || window.focused
         if (!ready) Log.i(TAG, "keyguard: target found but its SystemUI window is not focused")
         ready
     }
@@ -114,7 +113,46 @@ internal class AndroidDeviceAccessPort(context: Context, private val helper: () 
         scanCredentialFields().diagnostics.also { Log.i(TAG, "keyguard diagnostics: ${it.joinToString()}") }
     }
 
-    private data class CredentialTarget(val node: AccessibilityNodeInfo?, val window: AccessibilityWindowInfo, val kind: CredentialKind)
+    private data class CredentialTarget(val node: AccessibilityNodeInfo?, val window: KeyguardRoot, val kind: CredentialKind)
+
+    /** 一份可读的 SystemUI 锁屏内容。退到活动窗口根节点时可能拿不到窗口对象,范围和焦点就按根节点算。 */
+    private class KeyguardRoot(val window: AccessibilityWindowInfo?, val root: AccessibilityNodeInfo) {
+        val bounds: Rect = Rect().also { if (window != null) window.getBoundsInScreen(it) else root.getBoundsInScreen(it) }
+        val focused: Boolean get() = window?.isFocused ?: false
+    }
+
+    private class KeyguardRootScan(val roots: List<KeyguardRoot>, val displayWindows: List<AccessibilityWindowInfo>,
+        val diagnostic: String)
+
+    /** 见 [KeyguardRoots]:主屏窗口列表里没有 SystemUI 时,依次试旧版窗口列表和活动窗口的根节点。 */
+    private fun keyguardRoots(service: ScreenAccessibility): KeyguardRootScan {
+        val displayWindows = service.windowsOn(Display.DEFAULT_DISPLAY)
+        val displayIds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching { service.windowsOnAllDisplays.let { all -> (0 until all.size()).map(all::keyAt) } }.getOrDefault(emptyList())
+        } else listOf(Display.DEFAULT_DISPLAY)
+        var legacyCount = 0
+        var activePackage: CharSequence? = null
+        fun rootsOf(windows: List<AccessibilityWindowInfo>) = windows.mapNotNull { w -> w.root?.let { KeyguardRoot(w, it) } }
+        val pick = KeyguardRoots.pick(
+            display = rootsOf(displayWindows),
+            legacy = {
+                @Suppress("DEPRECATION")
+                val legacy = runCatching { service.windows.orEmpty() }.getOrDefault(emptyList())
+                legacyCount = legacy.size
+                rootsOf(legacy)
+            },
+            activeRoot = {
+                runCatching { service.rootInActiveWindow }.getOrNull()?.let { root ->
+                    activePackage = root.packageName
+                    KeyguardRoot(runCatching { root.window }.getOrNull(), root)
+                }
+            },
+            systemUi = { it.root.packageName?.toString() == SYSTEM_UI },
+        )
+        val diagnostic = KeyguardDiagnostics.source(pick.source.tag, displayIds, legacyCount, activePackage)
+        if (pick.source != KeyguardRoots.Source.Display) Log.i(TAG, "keyguard: $diagnostic")
+        return KeyguardRootScan(pick.roots, displayWindows, diagnostic)
+    }
     private data class CredentialScan(val targets: List<CredentialTarget>, val diagnostics: List<String>)
 
     private fun credentialFields(): List<CredentialTarget> = scanCredentialFields().targets
@@ -134,18 +172,18 @@ internal class AndroidDeviceAccessPort(context: Context, private val helper: () 
         val pinPads = mutableListOf<CredentialTarget>()
         val diagnostics = mutableListOf<String>()
         var passwordNodes = 0
-        val windows = service.windowsOn(Display.DEFAULT_DISPLAY)
+        val scan = keyguardRoots(service)
+        val windows = scan.displayWindows
         diagnostics += "display_windows=${windows.size}"
         windows.take(MAX_WINDOW_DIAGNOSTICS).forEachIndexed { index, window ->
             diagnostics += KeyguardDiagnostics.windowInfo(index, window.type, window.root?.packageName,
                 window.isFocused, window.isActive)
         }
-        val systemUi = windows.mapNotNull { w ->
-            w.root?.takeIf { it.packageName?.toString() == SYSTEM_UI }?.let { w to it }
-        }
+        val systemUi = scan.roots
         diagnostics += "systemui_windows=${systemUi.size}"
-        for ((windowIndex, pair) in systemUi.withIndex()) {
-            val (window, root) = pair
+        diagnostics += scan.diagnostic
+        for ((windowIndex, window) in systemUi.withIndex()) {
+            val root = window.root
             val digits = mutableSetOf<Char>()
             val candidates = mutableListOf<AccessibilityNodeInfo>()
             val padKeys = mutableListOf<KeyguardPinPad.DigitKey>()
@@ -169,10 +207,10 @@ internal class AndroidDeviceAccessPort(context: Context, private val helper: () 
             visit(root, 0)
             passwordNodes += candidates.size
             val pad = KeyguardFields.isDigitPad(digits)
-            val bounds = Rect().also(window::getBoundsInScreen)
+            val bounds = window.bounds
             val pinLayout = KeyguardPinPad.matches(padKeys,
                 KeyguardPinPad.Bounds(bounds.left, bounds.top, bounds.right, bounds.bottom))
-            diagnostics += KeyguardDiagnostics.window(windowIndex, window.isFocused, candidates.size,
+            diagnostics += KeyguardDiagnostics.window(windowIndex, window.focused, candidates.size,
                 digits.size, padKeys.size, pinLayout)
             for (n in candidates) {
                 val cls = n.inputType and InputType.TYPE_MASK_CLASS

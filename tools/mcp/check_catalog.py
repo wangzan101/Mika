@@ -21,9 +21,10 @@ was not actually observed.
 Usage:
   check_catalog.py CATALOG.json [--online [--require-online]] [--timeout SECONDS] [--output REPORT.json]
 
---require-online exits 1 unless every remote preset is "verified" or "auth_required". It judges the
-online probe, so it needs --online: an offline run carries no per-preset status at all, and the gate
-would otherwise pass having verified nothing.
+--require-online exits 1 unless every preset that can be probed is "verified" or "auth_required".
+stdio presets are the one exemption: they run locally, so the report marks them "unsupported" and
+probing says nothing about them. The gate judges the online probe, so it needs --online: an offline
+run carries no per-preset status at all, and the gate would otherwise pass having verified nothing.
 """
 
 import argparse
@@ -366,6 +367,20 @@ def probe_http(endpoint, timeout, transport="streamable-http"):
     return "not_mcp", "not an MCP response"
 
 
+# A stdio preset runs on this machine, so the network probe cannot say anything about it: run() reports
+# it "unsupported" with this reason, and it is the one case that does not fail --require-online. The
+# producer and the gate share the constant so a reword cannot silently turn every catalog that carries a
+# stdio preset into exit 1.
+STDIO_UNPROBED = "stdio runs locally"
+
+
+def fails_require_online(entry):
+    """True when a probed preset is neither verified, auth_required, nor the stdio exemption."""
+    if entry.get("status") in ("verified", "auth_required"):
+        return False
+    return not (entry.get("status") == "unsupported" and entry.get("reason") == STDIO_UNPROBED)
+
+
 def run(catalog_text, online=False, timeout=10):
     try:
         catalog = json.loads(catalog_text)
@@ -380,7 +395,7 @@ def run(catalog_text, online=False, timeout=10):
     def one(p):
         pid = p.get("id")
         if p.get("transport") == "stdio":
-            return {"id": pid, "status": "unsupported", "reason": "stdio runs locally"}
+            return {"id": pid, "status": "unsupported", "reason": STDIO_UNPROBED}
         kind, detail = probe_http(p.get("endpoint", ""), timeout, p.get("transport", "streamable-http"))
         return {"id": pid, "status": classify_probe(kind, detail, p.get("auth")), "reason": detail}
 
@@ -399,7 +414,8 @@ def main(argv=None):
     ap.add_argument("catalog")
     ap.add_argument("--online", action="store_true", help="also perform a secret-free MCP handshake per remote preset")
     ap.add_argument("--require-online", action="store_true",
-                    help="exit 1 unless every remote preset is verified or auth_required (needs --online)")
+                    help="exit 1 unless every probed preset is verified or auth_required, stdio excepted"
+                         " (needs --online)")
     ap.add_argument("--timeout", type=float, default=10)
     ap.add_argument("--output", help="write the report to this path instead of stdout")
     a = ap.parse_args(argv)
@@ -420,9 +436,7 @@ def main(argv=None):
     report = json.loads(out)
     if not report.get("ok", False):
         return 1
-    if a.require_online and any(r["status"] not in ("verified", "auth_required", "unsupported")
-                                or (r["status"] == "unsupported" and r.get("reason") != "stdio runs locally")
-                                for r in report.get("online", [])):
+    if a.require_online and any(fails_require_online(r) for r in report.get("online", [])):
         return 1
     return 0
 

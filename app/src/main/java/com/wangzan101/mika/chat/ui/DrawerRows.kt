@@ -87,6 +87,7 @@ internal fun ConversationEntry(
     val deletable = item.id != null
     val selectable = selecting && deletable
     val haptic = LocalHapticFeedback.current
+    val busyHint = rememberBusyHint()
     // 这一行在窗口里的位置和大小(不裁掉滚出列表的部分),菜单照它摆出抬起的那一行;只在回调里读,不引起重组
     val bounds = remember { mutableStateOf(Rect.Zero) }
     val row: @Composable () -> Unit = {
@@ -108,9 +109,9 @@ internal fun ConversationEntry(
                             onLongClickLabel = stringResource(R.string.drawer_actions),
                             // 和系统里长按一样振一下
                             onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onActions(item, bounds.value) },
-                            onClick = { if (item.enabled) onOpen(item) },
+                            onClick = { if (item.enabled) onOpen(item) else busyHint() },
                         )
-                        else -> Modifier.clickable(enabled = item.enabled, onClick = { onOpen(item) })
+                        else -> Modifier.clickable(onClick = { if (item.enabled) onOpen(item) else busyHint() })
                     },
                 )
                 .testTag("conversation-row")
